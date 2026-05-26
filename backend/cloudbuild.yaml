@@ -1,0 +1,32 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/ecommerce-backend:$SHORT_SHA
+      - ./backend
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/ecommerce-backend:$SHORT_SHA
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ecommerce-backend
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/ecommerce-backend:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --add-cloudsql-instances=${_CLOUDSQL_INSTANCE}
+      - --set-env-vars=DB_ENGINE=postgres,DB_HOST=/cloudsql/${_CLOUDSQL_INSTANCE}
+      - --set-secrets=SECRET_KEY=django-secret:latest,DB_PASSWORD=db-password:latest
+
+substitutions:
+  _REGION: us-central1
+  _REPO: ecommerce
+  _CLOUDSQL_INSTANCE: PROJECT:REGION:INSTANCE
+
+options:
+  logging: CLOUD_LOGGING_ONLY
