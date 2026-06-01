@@ -13,6 +13,24 @@ export type Product = {
   category: Category;
 };
 
+export type OrderItem = {
+  id: number;
+  product: number;
+  product_name: string;
+  quantity: number;
+  unit_price: string;
+  subtotal: string;
+};
+
+export type Order = {
+  id: number;
+  status: "pending" | "paid" | "shipped" | "delivered" | "cancelled";
+  shipping_address: string;
+  total: string;
+  items: OrderItem[];
+  created_at: string;
+};
+
 type Paginated<T> = { count: number; next: string | null; previous: string | null; results: T[] };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -52,6 +70,10 @@ export const api = {
   payOrder: (token: string, orderId: number) =>
     request<unknown>(`/orders/${orderId}/pay/`, {
       method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  listOrders: (token: string) =>
+    request<Paginated<Order>>(`/orders/`, {
       headers: { Authorization: `Bearer ${token}` },
     }),
 };

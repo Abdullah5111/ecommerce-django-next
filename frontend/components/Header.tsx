@@ -14,6 +14,7 @@ export default function Header() {
         </Link>
         <nav className="flex items-center gap-6 text-sm">
           <Link href="/" className="hover:underline">Products</Link>
+          <Link href="/orders" className="hover:underline">Orders</Link>
           <Link href="/cart" className="hover:underline">
             Cart {count > 0 && <span className="ml-1 bg-black text-white rounded-full px-2 text-xs">{count}</span>}
           </Link>
