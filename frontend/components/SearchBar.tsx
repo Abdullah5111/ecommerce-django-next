@@ -11,7 +11,11 @@ export default function SearchBar() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const q = value.trim();
-    router.push(q ? `/?search=${encodeURIComponent(q)}` : "/");
+    const next = new URLSearchParams(params.toString());
+    if (q) next.set("search", q);
+    else next.delete("search");
+    const qs = next.toString();
+    router.push(qs ? `/?${qs}` : "/");
   };
 
   return (

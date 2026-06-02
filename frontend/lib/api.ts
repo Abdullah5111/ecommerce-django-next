@@ -47,8 +47,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  listProducts: (q?: string) =>
-    request<Paginated<Product>>(`/products/${q ? `?search=${encodeURIComponent(q)}` : ""}`),
+  listProducts: (opts: { search?: string; category?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.search) qs.set("search", opts.search);
+    if (opts.category) qs.set("category__slug", opts.category);
+    const suffix = qs.toString();
+    return request<Paginated<Product>>(`/products/${suffix ? `?${suffix}` : ""}`);
+  },
   getProduct: (slug: string) => request<Product>(`/products/${slug}/`),
   listCategories: () => request<Paginated<Category>>(`/categories/`),
   login: (username: string, password: string) =>
