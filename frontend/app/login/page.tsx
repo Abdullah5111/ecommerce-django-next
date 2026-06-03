@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
+import { useAuth } from "@/lib/useAuth";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -13,13 +14,15 @@ export default function LoginPage() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/";
+  const { refresh } = useAuth();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     try {
-      const { access } = await api.login(username, password);
-      auth.set(access);
+      const { access, refresh: refreshToken } = await api.login(username, password);
+      auth.set(access, refreshToken);
+      await refresh();
       router.push(next);
     } catch (e) {
       setError("Invalid credentials");

@@ -81,4 +81,19 @@ export const api = {
     request<Paginated<Order>>(`/orders/`, {
       headers: { Authorization: `Bearer ${token}` },
     }),
+  me: (token: string) =>
+    request<{
+      id: number;
+      username: string;
+      email: string;
+      first_name: string;
+      last_name: string;
+    }>(`/auth/me/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  logout: (refresh: string) =>
+    request<unknown>(`/auth/logout/`, {
+      method: "POST",
+      body: JSON.stringify({ refresh }),
+    }),
 };

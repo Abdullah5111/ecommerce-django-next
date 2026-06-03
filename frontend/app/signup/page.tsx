@@ -4,19 +4,22 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
+import { useAuth } from "@/lib/useAuth";
 
 export default function SignupPage() {
   const [form, setForm] = useState({ username: "", email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { refresh } = useAuth();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     try {
       await api.register(form);
-      const { access } = await api.login(form.username, form.password);
-      auth.set(access);
+      const { access, refresh: refreshToken } = await api.login(form.username, form.password);
+      auth.set(access, refreshToken);
+      await refresh();
       router.push("/");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Signup failed");
