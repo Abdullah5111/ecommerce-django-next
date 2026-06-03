@@ -30,7 +30,7 @@ export default function Header() {
           </Link>
           {loading ? null : user ? (
             <div className="flex items-center gap-3">
-              <span className="text-zinc-600">Hi, {user.username}</span>
+              <Link href="/account" className="text-zinc-600 hover:underline">Hi, {user.username}</Link>
               <button
                 onClick={handleLogout}
                 className="hover:underline text-zinc-600"

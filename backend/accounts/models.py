@@ -6,6 +6,7 @@ class User(AbstractUser):
     email = models.EmailField(unique=True)
     address = models.TextField(blank=True)
     phone = models.CharField(max_length=20, blank=True)
+    email_verified = models.BooleanField(default=False)
 
     REQUIRED_FIELDS = ["email"]
 

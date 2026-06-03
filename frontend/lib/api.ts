@@ -1,3 +1,5 @@
+import { auth } from "./auth";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
 export type Category = { id: number; name: string; slug: string };
@@ -33,12 +35,56 @@ export type Order = {
 
 type Paginated<T> = { count: number; next: string | null; previous: string | null; results: T[] };
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, _retry = false): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init.headers || {}) },
     cache: "no-store",
   });
+
+  if (res.status === 401 && !_retry && typeof window !== "undefined") {
+    const refreshToken = auth.getRefresh();
+    const originalError = new Error(`API 401: ${await res.clone().text()}`);
+
+    if (refreshToken) {
+      try {
+        const refreshRes = await fetch(`${API_URL}/auth/token/refresh/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh: refreshToken }),
+          cache: "no-store",
+        });
+        if (refreshRes.ok) {
+          const data = (await refreshRes.json()) as { access: string; refresh?: string };
+          auth.set(data.access, data.refresh);
+
+          // Swap Authorization header on retry if the original call had one
+          const originalHeaders = (init.headers || {}) as Record<string, string>;
+          const hadAuth = Object.keys(originalHeaders).some(
+            (k) => k.toLowerCase() === "authorization"
+          );
+          let retryInit = init;
+          if (hadAuth) {
+            const newHeaders: Record<string, string> = {};
+            for (const [k, v] of Object.entries(originalHeaders)) {
+              if (k.toLowerCase() !== "authorization") newHeaders[k] = v;
+            }
+            newHeaders["Authorization"] = `Bearer ${data.access}`;
+            retryInit = { ...init, headers: newHeaders };
+          }
+          return request<T>(path, retryInit, true);
+        }
+      } catch {
+        // fall through to clear + redirect
+      }
+    }
+
+    auth.clear();
+    window.location.href =
+      "/login?next=" + encodeURIComponent(window.location.pathname + window.location.search);
+    throw originalError;
+  }
+
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API ${res.status}: ${body}`);
@@ -88,12 +134,48 @@ export const api = {
       email: string;
       first_name: string;
       last_name: string;
+      address: string;
+      phone: string;
+      email_verified: boolean;
     }>(`/auth/me/`, {
       headers: { Authorization: `Bearer ${token}` },
+    }),
+  updateMe: (
+    token: string,
+    payload: { first_name?: string; last_name?: string; address?: string; phone?: string }
+  ) =>
+    request<{
+      id: number;
+      username: string;
+      email: string;
+      first_name: string;
+      last_name: string;
+      address: string;
+      phone: string;
+      email_verified: boolean;
+    }>(`/auth/me/`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
     }),
   logout: (refresh: string) =>
     request<unknown>(`/auth/logout/`, {
       method: "POST",
       body: JSON.stringify({ refresh }),
+    }),
+  forgotPassword: (email: string) =>
+    request<{ detail: string }>(`/auth/forgot-password/`, {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  resetPassword: (uid: string, token: string, new_password: string) =>
+    request<{ detail: string }>(`/auth/reset-password/`, {
+      method: "POST",
+      body: JSON.stringify({ uid, token, new_password }),
+    }),
+  verifyEmail: (uid: string, token: string) =>
+    request<{ detail: string }>(`/auth/verify-email/`, {
+      method: "POST",
+      body: JSON.stringify({ uid, token }),
     }),
 };

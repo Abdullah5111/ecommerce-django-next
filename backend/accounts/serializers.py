@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 User = get_user_model()
 
@@ -7,8 +8,29 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ("id", "username", "email", "first_name", "last_name", "address", "phone")
-        read_only_fields = ("id",)
+        fields = (
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "address",
+            "phone",
+            "email_verified",
+        )
+        read_only_fields = ("id", "email_verified")
+
+
+class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        identifier = attrs.get(self.username_field, "")
+        if identifier and "@" in identifier:
+            try:
+                user = User.objects.get(email__iexact=identifier)
+                attrs[self.username_field] = user.get_username()
+            except User.DoesNotExist:
+                pass
+        return super().validate(attrs)
 
 
 class RegisterSerializer(serializers.ModelSerializer):

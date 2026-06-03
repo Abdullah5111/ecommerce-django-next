@@ -33,12 +33,15 @@ export default function LoginPage() {
     <div className="max-w-sm mx-auto">
       <h1 className="text-2xl font-bold mb-6">Login</h1>
       <form onSubmit={submit} className="space-y-4">
-        <input className="w-full border rounded p-3" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
+        <input className="w-full border rounded p-3" placeholder="Username or email" value={username} onChange={(e) => setUsername(e.target.value)} />
         <input className="w-full border rounded p-3" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
         <button className="w-full bg-black text-white py-3 rounded font-medium">Sign in</button>
       </form>
       {error && <p className="text-red-600 mt-4">{error}</p>}
-      <p className="mt-6 text-sm">
+      <p className="mt-4 text-sm">
+        <Link href="/forgot-password" className="underline text-zinc-600">Forgot password?</Link>
+      </p>
+      <p className="mt-2 text-sm">
         No account? <Link href="/signup" className="underline">Sign up</Link>
       </p>
     </div>

@@ -8,6 +8,7 @@ export type AuthUser = {
   id: number;
   username: string;
   email: string;
+  email_verified: boolean;
 };
 
 type AuthContextValue = {
@@ -32,7 +33,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       const me = await api.me(token);
-      setUser({ id: me.id, username: me.username, email: me.email });
+      setUser({
+        id: me.id,
+        username: me.username,
+        email: me.email,
+        email_verified: me.email_verified,
+      });
     } catch {
       auth.clear();
       setUser(null);
