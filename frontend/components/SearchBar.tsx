@@ -1,11 +1,12 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useState } from "react";
 
 export default function SearchBar() {
   const router = useRouter();
   const params = useSearchParams();
+  const pathname = usePathname();
   const [value, setValue] = useState(params.get("search") ?? "");
 
   const submit = (e: React.FormEvent) => {
@@ -15,7 +16,9 @@ export default function SearchBar() {
     if (q) next.set("search", q);
     else next.delete("search");
     const qs = next.toString();
-    router.push(qs ? `/?${qs}` : "/");
+    const onCategoryPage = pathname?.startsWith("/c/");
+    const base = onCategoryPage ? pathname : "/";
+    router.push(qs ? `${base}?${qs}` : base);
   };
 
   return (

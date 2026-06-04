@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/useAuth";
+import MegaMenu from "@/components/MegaMenu";
 
 export default function Header() {
   const { items } = useCart();
@@ -23,7 +24,10 @@ export default function Header() {
           shop.
         </Link>
         <nav className="flex items-center gap-6 text-sm">
-          <Link href="/" className="hover:underline">Products</Link>
+          <div className="hidden md:block">
+            <MegaMenu />
+          </div>
+          <Link href="/" className="md:hidden hover:underline">Shop</Link>
           <Link href="/orders" className="hover:underline">Orders</Link>
           <Link href="/cart" className="hover:underline">
             Cart {count > 0 && <span className="ml-1 bg-black text-white rounded-full px-2 text-xs">{count}</span>}

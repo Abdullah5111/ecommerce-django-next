@@ -3,10 +3,9 @@ import { api } from "@/lib/api";
 import ProductCard from "@/components/ProductCard";
 import SearchBar from "@/components/SearchBar";
 
-function buildHref(params: { search?: string; category?: string }) {
+function buildHomeHref(params: { search?: string }) {
   const qs = new URLSearchParams();
   if (params.search) qs.set("search", params.search);
-  if (params.category) qs.set("category", params.category);
   const s = qs.toString();
   return s ? `/?${s}` : "/";
 }
@@ -20,7 +19,7 @@ export default async function HomePage({
   const category = searchParams.category?.trim() || "";
 
   let products = [];
-  let categories: { id: number; name: string; slug: string }[] = [];
+  let categories: { id: number; name: string; slug: string; full_slug: string; level: number; parent: number | null }[] = [];
   try {
     const [productsData, categoriesData] = await Promise.all([
       api.listProducts({ search: query || undefined, category: category || undefined }),
@@ -53,26 +52,24 @@ export default async function HomePage({
 
       <div className="flex flex-wrap gap-2 mb-6">
         <Link
-          href={buildHref({ search: query })}
+          href={buildHomeHref({ search: query })}
           className={`px-3 py-1 rounded-full text-sm border ${
             !category ? "bg-black text-white border-black" : "bg-white hover:border-zinc-400"
           }`}
         >
           All
         </Link>
-        {categories.map((c) => (
-          <Link
-            key={c.id}
-            href={buildHref({ search: query, category: c.slug })}
-            className={`px-3 py-1 rounded-full text-sm border ${
-              category === c.slug
-                ? "bg-black text-white border-black"
-                : "bg-white hover:border-zinc-400"
-            }`}
-          >
-            {c.name}
-          </Link>
-        ))}
+        {categories
+          .filter((c) => c.level === 0)
+          .map((c) => (
+            <Link
+              key={c.id}
+              href={`/c/${c.full_slug}`}
+              className="px-3 py-1 rounded-full text-sm border bg-white hover:border-zinc-400"
+            >
+              {c.name}
+            </Link>
+          ))}
       </div>
 
       {products.length === 0 ? (

@@ -2,7 +2,40 @@ import { auth } from "./auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
-export type Category = { id: number; name: string; slug: string };
+export type Category = {
+  id: number;
+  name: string;
+  slug: string;
+  full_slug: string;
+  level: number;
+  parent: number | null;
+};
+
+export type CategoryTreeNode = {
+  id: number;
+  name: string;
+  slug: string;
+  full_slug: string;
+  level: number;
+  children: CategoryTreeNode[];
+};
+
+export type CategoryRef = {
+  id: number;
+  name: string;
+  slug: string;
+  full_slug: string;
+};
+
+export type CategoryDetail = {
+  id: number;
+  name: string;
+  slug: string;
+  full_slug: string;
+  level: number;
+  ancestors: CategoryRef[];
+  children: CategoryRef[];
+};
 
 export type Product = {
   id: number;
@@ -93,15 +126,35 @@ async function request<T>(path: string, init: RequestInit = {}, _retry = false):
 }
 
 export const api = {
-  listProducts: (opts: { search?: string; category?: string } = {}) => {
+  listProducts: (
+    opts: {
+      search?: string;
+      category?: string;
+      category_path?: string;
+      price_min?: string | number;
+      price_max?: string | number;
+      in_stock?: boolean;
+      ordering?: string;
+    } = {}
+  ) => {
     const qs = new URLSearchParams();
     if (opts.search) qs.set("search", opts.search);
     if (opts.category) qs.set("category__slug", opts.category);
+    if (opts.category_path) qs.set("category_path", opts.category_path);
+    if (opts.price_min !== undefined && opts.price_min !== "")
+      qs.set("price__gte", String(opts.price_min));
+    if (opts.price_max !== undefined && opts.price_max !== "")
+      qs.set("price__lte", String(opts.price_max));
+    if (opts.in_stock) qs.set("in_stock", "true");
+    if (opts.ordering) qs.set("ordering", opts.ordering);
     const suffix = qs.toString();
     return request<Paginated<Product>>(`/products/${suffix ? `?${suffix}` : ""}`);
   },
   getProduct: (slug: string) => request<Product>(`/products/${slug}/`),
   listCategories: () => request<Paginated<Category>>(`/categories/`),
+  getCategoryTree: () => request<CategoryTreeNode[]>(`/categories/tree/`),
+  getCategoryByPath: (path: string) =>
+    request<CategoryDetail>(`/categories/by-path/?path=${encodeURIComponent(path)}`),
   login: (username: string, password: string) =>
     request<{ access: string; refresh: string }>(`/auth/token/`, {
       method: "POST",

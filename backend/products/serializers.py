@@ -5,7 +5,48 @@ from .models import Category, Product
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ("id", "name", "slug")
+        fields = ("id", "name", "slug", "full_slug", "level", "parent")
+
+
+class CategoryTreeSerializer(serializers.ModelSerializer):
+    children = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Category
+        fields = ("id", "name", "slug", "full_slug", "level", "children")
+
+    def get_children(self, obj):
+        return CategoryTreeSerializer(obj.children.all(), many=True).data
+
+
+def _minimal_cat(cat):
+    return {
+        "id": cat.id,
+        "name": cat.name,
+        "slug": cat.slug,
+        "full_slug": cat.full_slug,
+    }
+
+
+class CategoryDetailSerializer(serializers.ModelSerializer):
+    ancestors = serializers.SerializerMethodField()
+    children = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Category
+        fields = ("id", "name", "slug", "full_slug", "level", "ancestors", "children")
+
+    def get_ancestors(self, obj):
+        chain = []
+        node = obj.parent
+        while node is not None:
+            chain.append(_minimal_cat(node))
+            node = node.parent
+        chain.reverse()
+        return chain
+
+    def get_children(self, obj):
+        return [_minimal_cat(c) for c in obj.children.all()]
 
 
 class ProductSerializer(serializers.ModelSerializer):

@@ -5,6 +5,15 @@ from django.utils.text import slugify
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True)
     slug = models.SlugField(max_length=120, unique=True, blank=True)
+    parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="children",
+    )
+    full_slug = models.CharField(max_length=512, unique=True, blank=True)
+    level = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
         verbose_name_plural = "categories"
@@ -13,6 +22,12 @@ class Category(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)
+        if self.parent:
+            self.full_slug = f"{self.parent.full_slug}/{self.slug}"
+            self.level = self.parent.level + 1
+        else:
+            self.full_slug = self.slug
+            self.level = 0
         super().save(*args, **kwargs)
 
     def __str__(self):
