@@ -37,6 +37,13 @@ export type CategoryDetail = {
   children: CategoryRef[];
 };
 
+export type ProductImage = {
+  id: number;
+  url: string;
+  alt: string;
+  sort_order: number;
+};
+
 export type Product = {
   id: number;
   name: string;
@@ -46,6 +53,13 @@ export type Product = {
   stock: number;
   image_url: string;
   category: Category;
+  compare_at_price: string | null;
+  rating_avg: string;
+  rating_count: number;
+  images: ProductImage[];
+  is_on_sale: boolean;
+  discount_percent: number;
+  created_at?: string;
 };
 
 export type OrderItem = {
@@ -135,6 +149,7 @@ export const api = {
       price_max?: string | number;
       in_stock?: boolean;
       ordering?: string;
+      page?: number;
     } = {}
   ) => {
     const qs = new URLSearchParams();
@@ -147,6 +162,7 @@ export const api = {
       qs.set("price__lte", String(opts.price_max));
     if (opts.in_stock) qs.set("in_stock", "true");
     if (opts.ordering) qs.set("ordering", opts.ordering);
+    if (opts.page && opts.page > 1) qs.set("page", String(opts.page));
     const suffix = qs.toString();
     return request<Paginated<Product>>(`/products/${suffix ? `?${suffix}` : ""}`);
   },

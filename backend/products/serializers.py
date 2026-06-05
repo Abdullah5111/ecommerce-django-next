@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Product
+from .models import Category, Product, ProductImage
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -49,17 +49,31 @@ class CategoryDetailSerializer(serializers.ModelSerializer):
         return [_minimal_cat(c) for c in obj.children.all()]
 
 
+class ProductImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductImage
+        fields = ("id", "url", "alt", "sort_order")
+
+
 class ProductSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.all(), source="category", write_only=True
     )
+    images = ProductImageSerializer(many=True, read_only=True)
+    is_on_sale = serializers.BooleanField(read_only=True)
+    discount_percent = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Product
         fields = (
-            "id", "name", "slug", "description", "price", "stock",
-            "image_url", "is_active", "category", "category_id",
+            "id", "name", "slug", "description", "price", "compare_at_price",
+            "rating_avg", "rating_count", "stock",
+            "image_url", "images", "is_on_sale", "discount_percent",
+            "is_active", "category", "category_id",
             "created_at", "updated_at",
         )
-        read_only_fields = ("slug", "created_at", "updated_at")
+        read_only_fields = (
+            "slug", "created_at", "updated_at",
+            "rating_avg", "rating_count",
+        )

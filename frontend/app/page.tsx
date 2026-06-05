@@ -1,7 +1,10 @@
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, type Product } from "@/lib/api";
 import ProductCard from "@/components/ProductCard";
 import SearchBar from "@/components/SearchBar";
+import Pagination from "@/components/Pagination";
+
+const PAGE_SIZE = 12;
 
 function buildHomeHref(params: { search?: string }) {
   const qs = new URLSearchParams();
@@ -13,19 +16,26 @@ function buildHomeHref(params: { search?: string }) {
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: { search?: string; category?: string };
+  searchParams: { search?: string; category?: string; page?: string };
 }) {
   const query = searchParams.search?.trim() || "";
   const category = searchParams.category?.trim() || "";
+  const pageNum = Math.max(1, parseInt(searchParams.page || "1", 10) || 1);
 
-  let products = [];
+  let products: Product[] = [];
+  let totalCount = 0;
   let categories: { id: number; name: string; slug: string; full_slug: string; level: number; parent: number | null }[] = [];
   try {
     const [productsData, categoriesData] = await Promise.all([
-      api.listProducts({ search: query || undefined, category: category || undefined }),
+      api.listProducts({
+        search: query || undefined,
+        category: category || undefined,
+        page: pageNum,
+      }),
       api.listCategories(),
     ]);
     products = productsData.results;
+    totalCount = productsData.count;
     categories = categoriesData.results;
   } catch (e) {
     return (
@@ -44,6 +54,8 @@ export default async function HomePage({
     : activeCategory
       ? activeCategory.name
       : "Featured products";
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   return (
     <div>
@@ -78,11 +90,22 @@ export default async function HomePage({
           {activeCategory ? ` in ${activeCategory.name}` : ""}.
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {products.map((p) => (
-            <ProductCard key={p.id} product={p} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {products.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+          <Pagination
+            currentPage={pageNum}
+            totalPages={totalPages}
+            pathname="/"
+            searchParams={{
+              search: query || undefined,
+              category: category || undefined,
+            }}
+          />
+        </>
       )}
     </div>
   );

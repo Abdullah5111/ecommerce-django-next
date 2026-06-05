@@ -6,6 +6,9 @@ import Breadcrumbs from "@/components/Breadcrumbs";
 import CategoryFilters from "@/components/CategoryFilters";
 import SortDropdown from "@/components/SortDropdown";
 import ActiveFilters from "@/components/ActiveFilters";
+import Pagination from "@/components/Pagination";
+
+const PAGE_SIZE = 12;
 
 type SearchParams = {
   search?: string;
@@ -13,6 +16,7 @@ type SearchParams = {
   priceMin?: string;
   priceMax?: string;
   inStock?: string;
+  page?: string;
 };
 
 export default async function CategoryPage({
@@ -30,9 +34,11 @@ export default async function CategoryPage({
   const priceMin = searchParams.priceMin?.trim() || "";
   const priceMax = searchParams.priceMax?.trim() || "";
   const inStock = searchParams.inStock === "true";
+  const pageNum = Math.max(1, parseInt(searchParams.page || "1", 10) || 1);
 
   let category: CategoryDetail | null = null;
   let products: Product[] = [];
+  let totalCount = 0;
   let backendError = false;
   let notFound = false;
 
@@ -46,6 +52,7 @@ export default async function CategoryPage({
         price_min: priceMin || undefined,
         price_max: priceMax || undefined,
         in_stock: inStock || undefined,
+        page: pageNum,
       }),
     ]);
 
@@ -59,12 +66,15 @@ export default async function CategoryPage({
 
     if (prodRes.status === "fulfilled") {
       products = prodRes.value.results;
+      totalCount = prodRes.value.count;
     } else if (!notFound) {
       backendError = true;
     }
   } catch {
     backendError = true;
   }
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   if (notFound) {
     return (
@@ -147,11 +157,25 @@ export default async function CategoryPage({
               {search ? ` for “${search}”` : ""}.
             </p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {products.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {products.map((p) => (
+                  <ProductCard key={p.id} product={p} />
+                ))}
+              </div>
+              <Pagination
+                currentPage={pageNum}
+                totalPages={totalPages}
+                pathname={pathname}
+                searchParams={{
+                  search: search || undefined,
+                  ordering: ordering || undefined,
+                  priceMin: priceMin || undefined,
+                  priceMax: priceMax || undefined,
+                  inStock: inStock ? "true" : undefined,
+                }}
+              />
+            </>
           )}
         </div>
       </div>
