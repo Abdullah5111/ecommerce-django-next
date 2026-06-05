@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { api, type Product } from "@/lib/api";
 import ProductCard from "@/components/ProductCard";
+import RailCard from "@/components/RailCard";
 import SearchBar from "@/components/SearchBar";
 import Pagination from "@/components/Pagination";
 
@@ -25,18 +26,21 @@ export default async function HomePage({
   let products: Product[] = [];
   let totalCount = 0;
   let categories: { id: number; name: string; slug: string; full_slug: string; level: number; parent: number | null }[] = [];
+  let featured: Product[] = [];
   try {
-    const [productsData, categoriesData] = await Promise.all([
+    const [productsData, categoriesData, featuredResult] = await Promise.all([
       api.listProducts({
         search: query || undefined,
         category: category || undefined,
         page: pageNum,
       }),
       api.listCategories(),
+      api.getFeatured().catch(() => [] as Product[]),
     ]);
     products = productsData.results;
     totalCount = productsData.count;
     categories = categoriesData.results;
+    featured = featuredResult;
   } catch (e) {
     return (
       <div className="text-center py-20">
@@ -61,6 +65,17 @@ export default async function HomePage({
     <div>
       <h1 className="text-3xl font-bold mb-6">{heading}</h1>
       <SearchBar />
+
+      {featured.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold mb-3">Featured</h2>
+          <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-2 -mx-4 px-4">
+            {featured.map((p) => (
+              <RailCard key={p.id} product={p} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="flex flex-wrap gap-2 mb-6">
         <Link

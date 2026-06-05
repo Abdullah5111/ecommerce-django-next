@@ -59,6 +59,7 @@ export type Product = {
   images: ProductImage[];
   is_on_sale: boolean;
   discount_percent: number;
+  is_featured: boolean;
   created_at?: string;
 };
 
@@ -167,6 +168,8 @@ export const api = {
     return request<Paginated<Product>>(`/products/${suffix ? `?${suffix}` : ""}`);
   },
   getProduct: (slug: string) => request<Product>(`/products/${slug}/`),
+  getFeatured: () => request<Product[]>(`/products/featured/`),
+  getBestsellers: () => request<Product[]>(`/products/bestsellers/`),
   listCategories: () => request<Paginated<Category>>(`/categories/`),
   getCategoryTree: () => request<CategoryTreeNode[]>(`/categories/tree/`),
   getCategoryByPath: (path: string) =>

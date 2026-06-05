@@ -10,6 +10,15 @@ from products.models import Category, Product, ProductImage
 
 # Hierarchy: top-level -> {child: [products]}
 # Product tuple: (name, description, price, stock, [image_urls], on_sale)
+# Featured: roughly half the catalog, picking one product per top-level
+# parent category for variety. Deterministic + idempotent.
+FEATURED_NAMES = {
+    "Wireless Headphones",   # Electronics
+    "Cotton T-Shirt",        # Apparel
+    "French Press",          # Home & Kitchen
+    "Designing Data-Intensive Applications",  # Books
+}
+
 HIERARCHY = {
     "Electronics": {
         "Audio": [
@@ -130,6 +139,7 @@ def run():
             for name, desc, price, stock, images, on_sale in products:
                 rating_avg, rating_count = deterministic_rating(name)
                 compare_at = deterministic_compare_at(name, price) if on_sale else None
+                is_featured = name in FEATURED_NAMES
                 product, p_created = Product.objects.get_or_create(
                     name=name,
                     defaults={
@@ -141,6 +151,7 @@ def run():
                         "rating_count": rating_count,
                         "stock": stock,
                         "image_url": images[0],
+                        "is_featured": is_featured,
                     },
                 )
                 if not p_created:
@@ -149,6 +160,7 @@ def run():
                     product.compare_at_price = compare_at
                     product.rating_avg = rating_avg
                     product.rating_count = rating_count
+                    product.is_featured = is_featured
                     product.save()
 
                 # Image rows: only create if product has zero existing images.

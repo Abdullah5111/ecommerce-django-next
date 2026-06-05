@@ -1,18 +1,27 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import type { Product } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { useToast } from "@/lib/useToast";
 import RatingStars from "./RatingStars";
 
-function Badge({ children, color }: { children: React.ReactNode; color: "red" | "green" | "amber" }) {
+function Badge({
+  children,
+  color,
+}: {
+  children: React.ReactNode;
+  color: "red" | "green" | "amber" | "indigo";
+}) {
   const cls =
     color === "red"
       ? "bg-red-600 text-white"
       : color === "green"
         ? "bg-green-600 text-white"
-        : "bg-amber-500 text-white";
+        : color === "indigo"
+          ? "bg-indigo-600 text-white"
+          : "bg-amber-500 text-white";
   return (
     <span className={`${cls} text-[10px] font-semibold px-2 py-0.5 rounded uppercase tracking-wide`}>
       {children}
@@ -53,6 +62,13 @@ export default function ProductCard({ product }: { product: Product }) {
       </Badge>,
     );
   }
+  if (product.is_featured) {
+    badges.push(
+      <Badge key="featured" color="indigo">
+        Featured
+      </Badge>,
+    );
+  }
   const visibleBadges = badges.slice(0, 2);
 
   const handleAdd = (e: React.MouseEvent) => {
@@ -71,21 +87,23 @@ export default function ProductCard({ product }: { product: Product }) {
     >
       <div className="relative aspect-square overflow-hidden bg-zinc-100">
         {firstImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={firstImage}
             alt={product.name}
-            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
+            fill
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+            className={`object-cover transition-opacity duration-300 ${
               secondImage ? "group-hover:opacity-0" : "group-hover:scale-105"
             }`}
           />
         ) : null}
         {secondImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={secondImage}
             alt={product.name}
-            className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            fill
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+            className="object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-300"
           />
         ) : null}
 

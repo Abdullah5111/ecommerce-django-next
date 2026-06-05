@@ -46,11 +46,19 @@ class Product(models.Model):
     stock = models.PositiveIntegerField(default=0)
     image_url = models.URLField(blank=True)
     is_active = models.BooleanField(default=True)
+    is_featured = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["price"]),
+            models.Index(fields=["is_active"]),
+            models.Index(fields=["is_featured"]),
+            models.Index(fields=["stock"]),
+            models.Index(fields=["category", "is_active", "-created_at"]),
+        ]
 
     def save(self, *args, **kwargs):
         if not self.slug:

@@ -70,7 +70,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "id", "name", "slug", "description", "price", "compare_at_price",
             "rating_avg", "rating_count", "stock",
             "image_url", "images", "is_on_sale", "discount_percent",
-            "is_active", "category", "category_id",
+            "is_active", "is_featured", "category", "category_id",
             "created_at", "updated_at",
         )
         read_only_fields = (

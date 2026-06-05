@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { api, type Product } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { useToast } from "@/lib/useToast";
@@ -55,21 +56,32 @@ export default function ProductDetail({ params }: { params: { id: string } }) {
                 key={i}
                 type="button"
                 onClick={() => setActiveIdx(i)}
-                className={`aspect-square rounded-md overflow-hidden border-2 bg-zinc-100 ${
+                className={`relative aspect-square rounded-md overflow-hidden border-2 bg-zinc-100 ${
                   i === activeIdx ? "border-black" : "border-transparent hover:border-zinc-300"
                 }`}
                 aria-label={`View image ${i + 1}`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={img.url} alt={img.alt} className="w-full h-full object-cover" />
+                <Image
+                  src={img.url}
+                  alt={img.alt}
+                  fill
+                  sizes="64px"
+                  className="object-cover"
+                />
               </button>
             ))}
           </div>
         )}
-        <div className="flex-1 aspect-square bg-zinc-100 rounded-lg overflow-hidden">
+        <div className="relative flex-1 aspect-square bg-zinc-100 rounded-lg overflow-hidden">
           {active && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={active.url} alt={active.alt} className="w-full h-full object-cover" />
+            <Image
+              src={active.url}
+              alt={active.alt}
+              fill
+              sizes="(min-width: 768px) 50vw, 100vw"
+              priority
+              className="object-cover"
+            />
           )}
         </div>
       </div>

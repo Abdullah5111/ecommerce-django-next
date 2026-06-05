@@ -99,6 +99,16 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+CACHES = {
+    "default": {
+        "BACKEND": config(
+            "CACHE_BACKEND",
+            default="django.core.cache.backends.locmem.LocMemCache",
+        ),
+        "LOCATION": config("CACHE_LOCATION", default="ecommerce-cache"),
+    }
+}
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",

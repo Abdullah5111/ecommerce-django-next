@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCart } from "@/lib/cart";
 
@@ -22,10 +23,15 @@ export default function CartPage() {
       <div className="md:col-span-2 space-y-4">
         {items.map(({ product, quantity }) => (
           <div key={product.id} className="flex gap-4 bg-white p-4 rounded border">
-            <div className="w-24 h-24 bg-zinc-100 rounded overflow-hidden">
+            <div className="relative w-24 h-24 bg-zinc-100 rounded overflow-hidden shrink-0">
               {product.image_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                <Image
+                  src={product.image_url}
+                  alt={product.name}
+                  fill
+                  sizes="96px"
+                  className="object-cover"
+                />
               )}
             </div>
             <div className="flex-1">

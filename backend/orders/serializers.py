@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import F
 from rest_framework import serializers
 
 from products.models import Product
@@ -33,7 +34,10 @@ class OrderSerializer(serializers.ModelSerializer):
         for item_data in items_data:
             product = item_data["product"]
             quantity = item_data["quantity"]
-            if product.stock < quantity:
+            updated = Product.objects.filter(
+                pk=product.pk, stock__gte=quantity
+            ).update(stock=F("stock") - quantity)
+            if not updated:
                 raise serializers.ValidationError(
                     {"items": f"Not enough stock for {product.name}."}
                 )
@@ -43,8 +47,6 @@ class OrderSerializer(serializers.ModelSerializer):
                 quantity=quantity,
                 unit_price=product.price,
             )
-            product.stock -= quantity
-            product.save(update_fields=["stock"])
 
         order.recalculate_total()
         return order

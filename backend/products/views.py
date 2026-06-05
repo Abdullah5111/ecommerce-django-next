@@ -1,5 +1,8 @@
 import django_filters
-from django.db.models import Q
+from django.core.cache import cache
+from django.db import connection
+from django.db.models import Q, Sum
+from django.db.models.functions import Coalesce
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -70,3 +73,55 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = ProductFilter
     search_fields = ["name", "description"]
     ordering_fields = ["price", "created_at"]
+
+    def get_queryset(self):
+        qs = Product.objects.filter(is_active=True).select_related("category")
+        # Postgres full-text search path: only when on PG and ?search= is set.
+        if connection.vendor == "postgresql":
+            q = self.request.query_params.get("search") if hasattr(self, "request") and self.request else None
+            if q:
+                from django.contrib.postgres.search import (
+                    SearchQuery,
+                    SearchRank,
+                    SearchVector,
+                )
+                vector = SearchVector("name", "description")
+                query = SearchQuery(q)
+                qs = (
+                    qs.annotate(rank=SearchRank(vector, query))
+                    .filter(rank__gt=0)
+                    .order_by("-rank")
+                )
+        return qs
+
+    @action(detail=False, methods=["get"], url_path="featured")
+    def featured(self, request):
+        cache_key = "products:featured:v1"
+        data = cache.get(cache_key)
+        if data is None:
+            qs = self.get_queryset().filter(is_featured=True).order_by("-created_at")[:12]
+            data = self.get_serializer(qs, many=True).data
+            cache.set(cache_key, data, timeout=300)
+        return Response(data)
+
+    @action(detail=False, methods=["get"], url_path="bestsellers")
+    def bestsellers(self, request):
+        cache_key = "products:bestsellers:v1"
+        data = cache.get(cache_key)
+        if data is None:
+            qs = (
+                self.get_queryset()
+                .annotate(
+                    sales=Coalesce(
+                        Sum(
+                            "orderitem__quantity",
+                            filter=Q(orderitem__order__status="paid"),
+                        ),
+                        0,
+                    )
+                )
+                .order_by("-sales", "-created_at")[:12]
+            )
+            data = self.get_serializer(qs, many=True).data
+            cache.set(cache_key, data, timeout=300)
+        return Response(data)
