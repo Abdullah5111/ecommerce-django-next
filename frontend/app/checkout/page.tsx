@@ -1,19 +1,106 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart";
 import { auth } from "@/lib/auth";
-import { api } from "@/lib/api";
+import { api, type Address, type AddressInput } from "@/lib/api";
+import { useToast } from "@/lib/useToast";
+import AddressForm from "@/components/AddressForm";
 
 export default function CheckoutPage() {
   const { items, total, clear } = useCart();
-  const [address, setAddress] = useState("");
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const [authed, setAuthed] = useState<boolean | null>(null);
+  const [addresses, setAddresses] = useState<Address[] | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [showNewForm, setShowNewForm] = useState(false);
+
+  // guest fallback
+  const [guestAddress, setGuestAddress] = useState("");
+
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
-  const placeOrder = async () => {
+  useEffect(() => {
+    const token = auth.get();
+    if (!token) {
+      setAuthed(false);
+      return;
+    }
+    setAuthed(true);
+    api
+      .listAddresses(token)
+      .then((list) => {
+        setAddresses(list);
+        const def = list.find((a) => a.is_default_shipping) ?? list[0];
+        if (def) setSelectedId(def.id);
+        if (list.length === 0) setShowNewForm(true);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "Failed to load addresses");
+        setAddresses([]);
+      });
+  }, []);
+
+  const handleSaveNewAddress = async (input: AddressInput): Promise<Address | null> => {
+    const token = auth.get();
+    if (!token) return null;
+    try {
+      const created = await api.createAddress(token, input);
+      toast("Address saved", "success");
+      const next = addresses ? [...addresses, created] : [created];
+      setAddresses(next);
+      setSelectedId(created.id);
+      setShowNewForm(false);
+      return created;
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed to save address", "error");
+      return null;
+    }
+  };
+
+  const placeOrder = async (overrideAddressId?: number) => {
+    setError(null);
+    const token = auth.get();
+
+    if (!token) {
+      // guest path
+      if (!guestAddress.trim()) {
+        setError("Please enter a shipping address");
+        return;
+      }
+      router.push("/login?next=/checkout");
+      return;
+    }
+
+    const addressId = overrideAddressId ?? selectedId;
+    if (!addressId) {
+      setError("Please select or add a shipping address");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const order = await api.createOrder(token, {
+        shipping_address_id: addressId,
+        items: items.map((i) => ({ product: i.product.id, quantity: i.quantity })),
+      });
+      await api.payOrder(token, order.id);
+      clear();
+      toast("Order placed", "success");
+      router.push("/");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Checkout failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const placeGuestOrder = async () => {
+    // Guests must log in — keep legacy text fallback in case backend ever supports it.
     setError(null);
     const token = auth.get();
     if (!token) {
@@ -23,7 +110,7 @@ export default function CheckoutPage() {
     setLoading(true);
     try {
       const order = await api.createOrder(token, {
-        shipping_address: address,
+        shipping_address: guestAddress,
         items: items.map((i) => ({ product: i.product.id, quantity: i.quantity })),
       });
       await api.payOrder(token, order.id);
@@ -36,28 +123,126 @@ export default function CheckoutPage() {
     }
   };
 
+  if (authed === null) {
+    return <p className="text-zinc-600">Loading…</p>;
+  }
+
   return (
     <div className="max-w-lg">
       <h1 className="text-2xl font-bold mb-6">Checkout</h1>
-      <label className="block mb-2 text-sm font-medium">Shipping address</label>
-      <textarea
-        value={address}
-        onChange={(e) => setAddress(e.target.value)}
-        rows={4}
-        className="w-full border rounded p-3"
-        placeholder="Street, city, ZIP, country"
-      />
-      <div className="mt-6 flex justify-between text-lg font-semibold">
-        <span>Total</span>
-        <span>${total.toFixed(2)}</span>
-      </div>
-      <button
-        onClick={placeOrder}
-        disabled={!address || items.length === 0 || loading}
-        className="mt-6 w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50"
-      >
-        {loading ? "Placing order…" : "Place order (mock payment)"}
-      </button>
+
+      <h2 className="text-base font-semibold mb-3">Shipping address</h2>
+
+      {!authed ? (
+        <>
+          <textarea
+            value={guestAddress}
+            onChange={(e) => setGuestAddress(e.target.value)}
+            rows={4}
+            className="w-full border rounded p-3"
+            placeholder="Street, city, ZIP, country"
+          />
+          <div className="mt-6 flex justify-between text-lg font-semibold">
+            <span>Total</span>
+            <span>${total.toFixed(2)}</span>
+          </div>
+          <button
+            onClick={placeGuestOrder}
+            disabled={!guestAddress || items.length === 0 || loading}
+            className="mt-6 w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50"
+          >
+            {loading ? "Placing order…" : "Place order (mock payment)"}
+          </button>
+        </>
+      ) : addresses === null ? (
+        <p className="text-zinc-500 text-sm">Loading addresses…</p>
+      ) : (
+        <>
+          {addresses.length === 0 ? (
+            <AddressForm
+              submitLabel="Save & use this address"
+              onSubmit={async (input) => {
+                const created = await handleSaveNewAddress(input);
+                if (created) await placeOrder(created.id);
+              }}
+            />
+          ) : (
+            <>
+              <div className="space-y-2">
+                {addresses.map((a) => (
+                  <label
+                    key={a.id}
+                    className={`flex items-start gap-3 bg-white border rounded p-3 cursor-pointer ${
+                      selectedId === a.id ? "border-black" : "border-zinc-200"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      className="mt-1"
+                      name="shipping_address"
+                      checked={selectedId === a.id}
+                      onChange={() => setSelectedId(a.id)}
+                    />
+                    <div className="flex-1 text-sm">
+                      <div className="font-medium">
+                        {a.recipient}
+                        {a.label && (
+                          <span className="ml-2 text-xs text-zinc-500 font-normal">
+                            ({a.label})
+                          </span>
+                        )}
+                        {a.is_default_shipping && (
+                          <span className="ml-2 text-xs px-2 py-0.5 rounded bg-green-100 text-green-800 border border-green-200">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-zinc-600">
+                        {a.line1}
+                        {a.line2 ? `, ${a.line2}` : ""}, {a.city}
+                        {a.state ? `, ${a.state}` : ""} {a.postal_code}, {a.country}
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              {!showNewForm ? (
+                <button
+                  type="button"
+                  onClick={() => setShowNewForm(true)}
+                  className="mt-3 text-sm text-blue-600 hover:underline"
+                >
+                  Use a different address
+                </button>
+              ) : (
+                <div className="mt-3">
+                  <AddressForm
+                    submitLabel="Save address"
+                    onSubmit={async (input) => {
+                      await handleSaveNewAddress(input);
+                    }}
+                    onCancel={() => setShowNewForm(false)}
+                  />
+                </div>
+              )}
+
+              <div className="mt-6 flex justify-between text-lg font-semibold">
+                <span>Total</span>
+                <span>${total.toFixed(2)}</span>
+              </div>
+              <button
+                onClick={() => placeOrder()}
+                disabled={!selectedId || items.length === 0 || loading}
+                className="mt-6 w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50"
+              >
+                {loading ? "Placing order…" : "Place order (mock payment)"}
+              </button>
+            </>
+          )}
+        </>
+      )}
+
       {error && <p className="text-red-600 mt-4">{error}</p>}
     </div>
   );

@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from .models import Address
+
 User = get_user_model()
 
 
@@ -46,3 +48,25 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
         return user
+
+
+class AddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = (
+            "id",
+            "label",
+            "recipient",
+            "phone",
+            "line1",
+            "line2",
+            "city",
+            "state",
+            "postal_code",
+            "country",
+            "is_default_shipping",
+            "is_default_billing",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("id", "created_at", "updated_at")

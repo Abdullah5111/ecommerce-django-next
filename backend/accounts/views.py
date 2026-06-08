@@ -6,12 +6,15 @@ from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from .models import Address
 from .serializers import (
+    AddressSerializer,
     EmailOrUsernameTokenObtainPairSerializer,
     RegisterSerializer,
     UserSerializer,
@@ -125,3 +128,21 @@ class ResetPasswordView(APIView):
         user.set_password(new_password)
         user.save()
         return Response({"detail": "Password reset"})
+
+
+class AddressViewSet(viewsets.ModelViewSet):
+    serializer_class = AddressSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Address.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=["post"], url_path="set-default")
+    def set_default(self, request, pk=None):
+        address = self.get_object()
+        address.is_default_shipping = True
+        address.save()
+        return Response(AddressSerializer(address).data)

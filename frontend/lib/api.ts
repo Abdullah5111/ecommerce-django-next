@@ -76,9 +76,48 @@ export type Order = {
   id: number;
   status: "pending" | "paid" | "shipped" | "delivered" | "cancelled";
   shipping_address: string;
+  ship_recipient: string;
+  ship_phone: string;
+  ship_line1: string;
+  ship_line2: string;
+  ship_city: string;
+  ship_state: string;
+  ship_postal_code: string;
+  ship_country: string;
   total: string;
   items: OrderItem[];
   created_at: string;
+};
+
+export type Address = {
+  id: number;
+  label: string;
+  recipient: string;
+  phone: string;
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  is_default_shipping: boolean;
+  is_default_billing: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AddressInput = {
+  label: string;
+  recipient: string;
+  phone: string;
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  is_default_shipping?: boolean;
+  is_default_billing?: boolean;
 };
 
 type Paginated<T> = { count: number; next: string | null; previous: string | null; results: T[] };
@@ -181,14 +220,52 @@ export const api = {
     }),
   register: (data: { username: string; email: string; password: string }) =>
     request<unknown>(`/auth/register/`, { method: "POST", body: JSON.stringify(data) }),
-  createOrder: (token: string, payload: {
-    shipping_address: string;
-    items: { product: number; quantity: number }[];
-  }) =>
+  createOrder: (
+    token: string,
+    payload:
+      | {
+          shipping_address_id: number;
+          items: { product: number; quantity: number }[];
+        }
+      | {
+          shipping_address: string;
+          items: { product: number; quantity: number }[];
+        }
+  ) =>
     request<{ id: number; total: string }>(`/orders/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),
+    }),
+  listAddresses: (token: string) =>
+    request<Paginated<Address>>(`/auth/addresses/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((p) => p.results),
+  createAddress: (token: string, payload: AddressInput) =>
+    request<Address>(`/auth/addresses/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    }),
+  getAddress: (token: string, id: number) =>
+    request<Address>(`/auth/addresses/${id}/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  updateAddress: (token: string, id: number, payload: AddressInput) =>
+    request<Address>(`/auth/addresses/${id}/`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    }),
+  deleteAddress: (token: string, id: number) =>
+    request<void>(`/auth/addresses/${id}/`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  setDefaultAddress: (token: string, id: number) =>
+    request<Address>(`/auth/addresses/${id}/set-default/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
     }),
   payOrder: (token: string, orderId: number) =>
     request<unknown>(`/orders/${orderId}/pay/`, {

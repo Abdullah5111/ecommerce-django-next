@@ -97,11 +97,26 @@ export default function OrdersPage() {
               ))}
             </ul>
 
-            <div className="flex justify-between items-center mt-3">
-              <span className="text-sm text-zinc-500 truncate max-w-xs">
-                Ship to: {order.shipping_address}
-              </span>
-              <span className="font-semibold">Total ${order.total}</span>
+            <div className="flex justify-between items-start mt-3 gap-4">
+              <div className="text-sm text-zinc-500 max-w-xs">
+                <div className="font-medium text-zinc-600">Ship to</div>
+                {order.ship_recipient ? (
+                  <div className="space-y-0.5">
+                    <div>{order.ship_recipient}</div>
+                    <div>{order.ship_line1}</div>
+                    {order.ship_line2 && <div>{order.ship_line2}</div>}
+                    <div>
+                      {[order.ship_city, order.ship_state].filter(Boolean).join(", ")}
+                      {order.ship_postal_code ? ` ${order.ship_postal_code}` : ""}
+                    </div>
+                    {order.ship_country && <div>{order.ship_country}</div>}
+                    {order.ship_phone && <div>{order.ship_phone}</div>}
+                  </div>
+                ) : (
+                  <div className="truncate">{order.shipping_address}</div>
+                )}
+              </div>
+              <span className="font-semibold whitespace-nowrap">Total ${order.total}</span>
             </div>
           </div>
         ))}
