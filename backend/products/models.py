@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils.text import slugify
 
 
@@ -47,6 +49,7 @@ class Product(models.Model):
     image_url = models.URLField(blank=True)
     is_active = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
+    specifications = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -90,3 +93,45 @@ class ProductImage(models.Model):
 
     def __str__(self):
         return f"{self.product.name} image #{self.sort_order}"
+
+
+class Review(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="reviews")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="reviews",
+    )
+    # Snapshot the reviewer display name at write time so the review survives
+    # account deletion / username change.
+    author_name = models.CharField(max_length=120, blank=True)
+    rating = models.PositiveSmallIntegerField()  # 1-5
+    title = models.CharField(max_length=200, blank=True)
+    body = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product", "user"],
+                name="uniq_review_per_user_product",
+                condition=Q(user__isnull=False),
+            ),
+            models.CheckConstraint(
+                check=Q(rating__gte=1) & Q(rating__lte=5),
+                name="review_rating_1_to_5",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["product", "-created_at"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.author_name and self.user_id:
+            self.author_name = self.user.get_full_name() or self.user.username
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Review {self.rating} on {self.product_id} by {self.author_name or 'anon'}"

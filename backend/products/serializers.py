@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Product, ProductImage
+from .models import Category, Product, ProductImage, Review
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -70,10 +70,23 @@ class ProductSerializer(serializers.ModelSerializer):
             "id", "name", "slug", "description", "price", "compare_at_price",
             "rating_avg", "rating_count", "stock",
             "image_url", "images", "is_on_sale", "discount_percent",
-            "is_active", "is_featured", "category", "category_id",
+            "is_active", "is_featured", "specifications",
+            "category", "category_id",
             "created_at", "updated_at",
         )
         read_only_fields = (
             "slug", "created_at", "updated_at",
-            "rating_avg", "rating_count",
+            "rating_avg", "rating_count", "specifications",
         )
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Review
+        fields = ("id", "rating", "title", "body", "author_name", "created_at")
+        read_only_fields = ("id", "author_name", "created_at")
+
+    def validate_rating(self, value):
+        if not 1 <= value <= 5:
+            raise serializers.ValidationError("Rating must be 1-5.")
+        return value

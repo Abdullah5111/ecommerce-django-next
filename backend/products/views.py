@@ -1,6 +1,6 @@
 import django_filters
 from django.core.cache import cache
-from django.db import connection
+from django.db import IntegrityError, connection
 from django.db.models import Q, Sum
 from django.db.models.functions import Coalesce
 from rest_framework import viewsets, permissions
@@ -13,6 +13,7 @@ from .serializers import (
     CategoryTreeSerializer,
     CategoryDetailSerializer,
     ProductSerializer,
+    ReviewSerializer,
 )
 
 
@@ -101,6 +102,58 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         if data is None:
             qs = self.get_queryset().filter(is_featured=True).order_by("-created_at")[:12]
             data = self.get_serializer(qs, many=True).data
+            cache.set(cache_key, data, timeout=300)
+        return Response(data)
+
+    @action(
+        detail=True,
+        methods=["get", "post"],
+        url_path="reviews",
+        permission_classes=[permissions.AllowAny],
+    )
+    def reviews(self, request, slug=None):
+        product = self.get_object()
+        if request.method == "GET":
+            qs = product.reviews.all().order_by("-created_at")
+            page = self.paginate_queryset(qs)
+            ser = ReviewSerializer(page if page is not None else qs, many=True)
+            return (
+                self.get_paginated_response(ser.data)
+                if page is not None
+                else Response(ser.data)
+            )
+
+        # POST — require auth
+        if not request.user.is_authenticated:
+            return Response({"detail": "Authentication required."}, status=401)
+        ser = ReviewSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        try:
+            review = ser.save(product=product, user=request.user)
+        except IntegrityError:
+            return Response(
+                {"detail": "You already reviewed this product."}, status=400
+            )
+        return Response(ReviewSerializer(review).data, status=201)
+
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="related",
+        permission_classes=[permissions.AllowAny],
+    )
+    def related(self, request, slug=None):
+        product = self.get_object()
+        cache_key = f"products:related:{product.id}:v1"
+        data = cache.get(cache_key)
+        if data is None:
+            qs = (
+                Product.objects.filter(is_active=True, category=product.category)
+                .exclude(pk=product.pk)
+                .select_related("category")
+                .order_by("-rating_avg", "-created_at")[:8]
+            )
+            data = ProductSerializer(qs, many=True).data
             cache.set(cache_key, data, timeout=300)
         return Response(data)
 

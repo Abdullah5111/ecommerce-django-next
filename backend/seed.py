@@ -6,7 +6,9 @@ Usage:
 import hashlib
 from decimal import Decimal, ROUND_HALF_UP
 
-from products.models import Category, Product, ProductImage
+from django.db.models import Avg, Count
+
+from products.models import Category, Product, ProductImage, Review
 
 # Hierarchy: top-level -> {child: [products]}
 # Product tuple: (name, description, price, stock, [image_urls], on_sale)
@@ -112,6 +114,130 @@ def deterministic_rating(name: str):
     return avg, count
 
 
+SPECS_BY_NAME = {
+    "Wireless Headphones": {
+        "Battery": "30h",
+        "Bluetooth": "5.3",
+        "Noise Cancellation": "Active",
+        "Weight": "240 g",
+        "Driver": "40 mm dynamic",
+    },
+    "Mechanical Keyboard": {
+        "Layout": "75%",
+        "Switches": "Hot-swappable",
+        "Backlight": "RGB",
+        "Connection": "USB-C / Bluetooth",
+        "Keycaps": "PBT double-shot",
+    },
+    "4K Webcam": {
+        "Resolution": "4K @ 30fps",
+        "Focus": "Auto",
+        "Microphone": "Dual stereo",
+        "Connection": "USB-C",
+        "Field of View": "90 deg",
+    },
+    "Cotton T-Shirt": {
+        "Material": "100% organic cotton",
+        "Fit": "Unisex regular",
+        "Weight": "180 gsm",
+        "Care": "Machine wash cold",
+        "Origin": "Portugal",
+    },
+    "Denim Jacket": {
+        "Material": "100% cotton denim",
+        "Weight": "Mid-weight",
+        "Closure": "Button front",
+        "Pockets": "4",
+        "Care": "Machine wash cold",
+    },
+    "Ceramic Mug Set": {
+        "Material": "Stoneware ceramic",
+        "Capacity": "350 ml",
+        "Set Size": "4 pieces",
+        "Microwave Safe": "Yes",
+        "Dishwasher Safe": "Yes",
+    },
+    "French Press": {
+        "Capacity": "1 L",
+        "Carafe": "Borosilicate glass",
+        "Filter": "Stainless steel",
+        "Frame": "Brushed steel",
+        "Dishwasher Safe": "Yes",
+    },
+    "The Pragmatic Programmer": {
+        "Edition": "20th Anniversary",
+        "Pages": "352",
+        "Format": "Hardcover",
+        "Publisher": "Addison-Wesley",
+        "Language": "English",
+    },
+    "Designing Data-Intensive Applications": {
+        "Author": "Martin Kleppmann",
+        "Pages": "616",
+        "Format": "Paperback",
+        "Publisher": "O'Reilly",
+        "Language": "English",
+    },
+}
+
+GENERIC_SPECS = {
+    "Material": "Mixed",
+    "Origin": "Imported",
+    "Warranty": "1 year",
+}
+
+
+def specs_for(product_name: str) -> dict:
+    return SPECS_BY_NAME.get(product_name, dict(GENERIC_SPECS))
+
+
+SAMPLE_REVIEW_USERS = [
+    "Alex P.", "Jordan M.", "Sam K.", "Taylor R.", "Casey L.",
+    "Morgan S.", "Riley J.", "Avery N.", "Quinn D.", "Hayden B.",
+    "Reese T.", "Sky W.", "Drew H.", "Parker V.",
+]
+
+REVIEW_TEMPLATES = [
+    ("Excellent value", "Exactly as described. Very happy with this purchase."),
+    ("Great quality", "Solid build and works perfectly out of the box."),
+    ("Highly recommend", "I would buy this again. No regrets."),
+    ("Pretty good", "Mostly meets expectations, minor nitpicks aside."),
+    ("Love it", "Use it every day. Quality is noticeably better than what I had before."),
+    ("Solid pick", "Good price for the quality you get."),
+    ("Worth it", "Took a chance and glad I did. Recommended."),
+    ("Decent", "Does the job. Nothing fancy but reliable."),
+]
+
+
+def seed_reviews_for(product):
+    """Create deterministic, idempotent reviews for a product."""
+    name = product.name
+    n = (_digest_byte(name, 3) % 4) + 3  # 3..6 reviews
+    for i in range(n):
+        idx_user = _digest_byte(name, 4 + i) % len(SAMPLE_REVIEW_USERS)
+        idx_tmpl = _digest_byte(name, 10 + i) % len(REVIEW_TEMPLATES)
+        # Bias rating high: 3..5, weighted toward 5.
+        r_byte = _digest_byte(name, 6 + i) % 10
+        if r_byte < 6:
+            rating = 5
+        elif r_byte < 9:
+            rating = 4
+        else:
+            rating = 3
+        author = SAMPLE_REVIEW_USERS[idx_user]
+        title, body = REVIEW_TEMPLATES[idx_tmpl]
+        Review.objects.get_or_create(
+            product=product,
+            author_name=author,
+            title=title,
+            defaults={
+                "user": None,
+                "rating": rating,
+                "body": body,
+            },
+        )
+
+
 def deterministic_compare_at(name: str, price: float):
     """compare_at_price ~20-35% above price, deterministic."""
     b = _digest_byte(name, 2)
@@ -140,6 +266,7 @@ def run():
                 rating_avg, rating_count = deterministic_rating(name)
                 compare_at = deterministic_compare_at(name, price) if on_sale else None
                 is_featured = name in FEATURED_NAMES
+                specs = specs_for(name)
                 product, p_created = Product.objects.get_or_create(
                     name=name,
                     defaults={
@@ -152,6 +279,7 @@ def run():
                         "stock": stock,
                         "image_url": images[0],
                         "is_featured": is_featured,
+                        "specifications": specs,
                     },
                 )
                 if not p_created:
@@ -161,6 +289,7 @@ def run():
                     product.rating_avg = rating_avg
                     product.rating_count = rating_count
                     product.is_featured = is_featured
+                    product.specifications = specs
                     product.save()
 
                 # Image rows: only create if product has zero existing images.
@@ -172,6 +301,13 @@ def run():
                             alt=f"{name} image {idx + 1}",
                             sort_order=idx,
                         )
+
+                # Seed reviews and recompute aggregate explicitly.
+                seed_reviews_for(product)
+                agg = product.reviews.aggregate(avg=Avg("rating"), n=Count("id"))
+                product.rating_avg = round(agg["avg"] or 0, 2)
+                product.rating_count = agg["n"] or 0
+                product.save(update_fields=["rating_avg", "rating_count"])
 
                 if p_created:
                     created += 1
