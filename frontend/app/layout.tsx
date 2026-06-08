@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import { CartProvider } from "@/lib/cart";
 import { AuthProvider } from "@/lib/useAuth";
 import { ToastProvider } from "@/lib/useToast";
+import { WishlistProvider } from "@/lib/useWishlist";
 import ToastContainer from "@/components/ToastContainer";
 
 export const metadata: Metadata = {
@@ -17,11 +18,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <AuthProvider>
           <CartProvider>
-            <ToastProvider>
-              <Header />
-              <main className="max-w-6xl mx-auto px-4 py-8">{children}</main>
-              <ToastContainer />
-            </ToastProvider>
+            <WishlistProvider>
+              <ToastProvider>
+                <Header />
+                <main className="max-w-6xl mx-auto px-4 py-8">{children}</main>
+                <ToastContainer />
+              </ToastProvider>
+            </WishlistProvider>
           </CartProvider>
         </AuthProvider>
       </body>

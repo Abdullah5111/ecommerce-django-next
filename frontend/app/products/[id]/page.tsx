@@ -1,159 +1,158 @@
-"use client";
+import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import { api, type CategoryDetail, type Product, type Review } from "@/lib/api";
+import Breadcrumbs from "@/components/Breadcrumbs";
+import Gallery from "@/components/product-detail/Gallery";
+import PurchasePanel from "@/components/product-detail/PurchasePanel";
+import Tabs from "@/components/product-detail/Tabs";
+import SpecsTable from "@/components/product-detail/SpecsTable";
+import ReviewsSection from "@/components/product-detail/ReviewsSection";
+import RelatedRail from "@/components/product-detail/RelatedRail";
+import RecentlyViewedRail from "@/components/product-detail/RecentlyViewedRail";
+import StickyCta from "@/components/product-detail/StickyCta";
 
-import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
-import { api, type Product } from "@/lib/api";
-import { useCart } from "@/lib/cart";
-import { useToast } from "@/lib/useToast";
-import RatingStars from "@/components/RatingStars";
+function buildGallery(product: Product): { url: string; alt: string }[] {
+  if (product.images && product.images.length > 0) {
+    return [...product.images]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((img) => ({ url: img.url, alt: img.alt || product.name }));
+  }
+  if (product.image_url) {
+    return [{ url: product.image_url, alt: product.name }];
+  }
+  return [];
+}
 
-export default function ProductDetail({ params }: { params: { id: string } }) {
-  const [product, setProduct] = useState<Product | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [activeIdx, setActiveIdx] = useState(0);
-  const [qty, setQty] = useState(1);
-  const { add } = useCart();
-  const { toast } = useToast();
+export async function generateMetadata({
+  params,
+}: {
+  params: { id: string };
+}): Promise<Metadata> {
+  try {
+    const product = await api.getProduct(params.id);
+    const gallery = buildGallery(product);
+    const description = (product.description || "").slice(0, 160);
+    return {
+      title: `${product.name} — Shop`,
+      description,
+      openGraph: {
+        title: `${product.name} — Shop`,
+        description,
+        images: gallery.length > 0 ? [{ url: gallery[0].url }] : undefined,
+      },
+    };
+  } catch {
+    return { title: "Product — Shop" };
+  }
+}
 
-  useEffect(() => {
-    api.getProduct(params.id).then(setProduct).catch((e) => setError(e.message));
-  }, [params.id]);
+export default async function ProductDetailPage({
+  params,
+}: {
+  params: { id: string };
+}) {
+  const slug = params.id;
 
-  const gallery = useMemo(() => {
-    if (!product) return [] as { url: string; alt: string }[];
-    if (product.images && product.images.length > 0) {
-      return [...product.images]
-        .sort((a, b) => a.sort_order - b.sort_order)
-        .map((img) => ({ url: img.url, alt: img.alt || product.name }));
-    }
-    if (product.image_url) {
-      return [{ url: product.image_url, alt: product.name }];
-    }
-    return [];
-  }, [product]);
+  let product: Product;
+  try {
+    product = await api.getProduct(slug);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("404")) notFound();
+    return (
+      <div className="text-center py-20">
+        <h2 className="text-2xl font-semibold">Backend unreachable</h2>
+        <p className="text-zinc-500 mt-2">Start the Django API and refresh.</p>
+      </div>
+    );
+  }
 
-  if (error) return <p className="text-red-600">{error}</p>;
-  if (!product) return <p>Loading…</p>;
+  const [catRes, reviewsRes, relatedRes] = await Promise.allSettled([
+    api.getCategoryByPath(product.category.full_slug),
+    api.listReviews(slug),
+    api.getRelated(slug),
+  ]);
 
-  const active = gallery[activeIdx] || gallery[0];
-  const maxQty = Math.max(1, product.stock);
+  const category: CategoryDetail | null =
+    catRes.status === "fulfilled" ? catRes.value : null;
+  const reviews: Review[] =
+    reviewsRes.status === "fulfilled" ? reviewsRes.value.results : [];
+  const reviewCount =
+    reviewsRes.status === "fulfilled" ? reviewsRes.value.count : 0;
+  const related: Product[] =
+    relatedRes.status === "fulfilled" ? relatedRes.value : [];
 
-  const dec = () => setQty((q) => Math.max(1, q - 1));
-  const inc = () => setQty((q) => Math.min(maxQty, q + 1));
+  const gallery = buildGallery(product);
+  const specs = product.specifications || {};
+  const ancestors = category?.ancestors ?? [];
 
-  const handleAdd = () => {
-    add(product, qty);
-    toast("Added to cart", "success");
+  const ratingCount = product.rating_count || 0;
+  const ratingAvg = product.rating_avg || "0";
+
+  const jsonLd: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    image: gallery.map((g) => g.url),
+    description: product.description,
+    sku: `PROD-${product.id}`,
+    brand: { "@type": "Brand", name: "Shop" },
+    offers: {
+      "@type": "Offer",
+      url: `/products/${product.slug}`,
+      priceCurrency: "USD",
+      price: product.price,
+      availability:
+        product.stock > 0
+          ? "https://schema.org/InStock"
+          : "https://schema.org/OutOfStock",
+    },
   };
+  if (ratingCount > 0) {
+    jsonLd.aggregateRating = {
+      "@type": "AggregateRating",
+      ratingValue: ratingAvg,
+      reviewCount: ratingCount,
+    };
+  }
 
   return (
-    <div className="grid md:grid-cols-2 gap-8">
-      <div className="flex gap-3">
-        {gallery.length > 1 && (
-          <div className="flex flex-col gap-2 w-16 shrink-0">
-            {gallery.map((img, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => setActiveIdx(i)}
-                className={`relative aspect-square rounded-md overflow-hidden border-2 bg-zinc-100 ${
-                  i === activeIdx ? "border-black" : "border-transparent hover:border-zinc-300"
-                }`}
-                aria-label={`View image ${i + 1}`}
-              >
-                <Image
-                  src={img.url}
-                  alt={img.alt}
-                  fill
-                  sizes="64px"
-                  className="object-cover"
-                />
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="relative flex-1 aspect-square bg-zinc-100 rounded-lg overflow-hidden">
-          {active && (
-            <Image
-              src={active.url}
-              alt={active.alt}
-              fill
-              sizes="(min-width: 768px) 50vw, 100vw"
-              priority
-              className="object-cover"
-            />
-          )}
-        </div>
+    <div className="pb-24 md:pb-0">
+      <Breadcrumbs ancestors={ancestors} current={product.name} />
+
+      <div className="grid md:grid-cols-2 gap-8">
+        <Gallery images={gallery} />
+        <PurchasePanel product={product} />
       </div>
 
-      <div>
-        <div className="text-sm text-zinc-500 uppercase">{product.category.name}</div>
-        <h1 className="text-3xl font-bold mt-1">{product.name}</h1>
+      <Tabs
+        description={
+          <p className="text-zinc-700 whitespace-pre-line leading-relaxed">
+            {product.description || "No description available."}
+          </p>
+        }
+        specifications={
+          Object.keys(specs).length > 0 ? <SpecsTable specs={specs} /> : undefined
+        }
+        reviews={
+          <ReviewsSection
+            slug={slug}
+            reviews={reviews}
+            count={reviewCount}
+            ratingAvg={ratingAvg}
+            ratingCount={ratingCount}
+          />
+        }
+      />
 
-        {product.rating_count > 0 && (
-          <div className="mt-2">
-            <RatingStars value={product.rating_avg} count={product.rating_count} size="md" />
-          </div>
-        )}
+      <RelatedRail products={related} categoryName={product.category.name} />
+      <RecentlyViewedRail product={product} />
+      <StickyCta product={product} />
 
-        <div className="text-2xl font-semibold mt-4 flex items-baseline gap-3">
-          {product.is_on_sale && product.compare_at_price ? (
-            <>
-              <span className="text-red-600">${product.price}</span>
-              <span className="text-base text-zinc-400 line-through font-normal">
-                ${product.compare_at_price}
-              </span>
-              {product.discount_percent > 0 && (
-                <span className="text-sm bg-red-600 text-white px-2 py-0.5 rounded font-medium">
-                  −{product.discount_percent}%
-                </span>
-              )}
-            </>
-          ) : (
-            <span>${product.price}</span>
-          )}
-        </div>
-
-        <p className="text-zinc-700 mt-4 leading-relaxed whitespace-pre-line">{product.description}</p>
-
-        {product.stock < 10 && product.stock > 0 && (
-          <div className="text-sm text-amber-700 mt-3">{product.stock} in stock</div>
-        )}
-
-        {product.stock > 0 && (
-          <div className="mt-6 flex items-center gap-3">
-            <div className="inline-flex items-center border rounded">
-              <button
-                type="button"
-                onClick={dec}
-                disabled={qty <= 1}
-                className="px-3 py-2 disabled:text-zinc-300 hover:bg-zinc-50"
-                aria-label="Decrease quantity"
-              >
-                –
-              </button>
-              <span className="px-4 py-2 min-w-[2rem] text-center select-none">{qty}</span>
-              <button
-                type="button"
-                onClick={inc}
-                disabled={qty >= maxQty}
-                className="px-3 py-2 disabled:text-zinc-300 hover:bg-zinc-50"
-                aria-label="Increase quantity"
-              >
-                +
-              </button>
-            </div>
-          </div>
-        )}
-
-        <button
-          onClick={handleAdd}
-          className="mt-6 bg-black text-white px-6 py-3 rounded font-medium hover:bg-zinc-800 disabled:bg-zinc-300 disabled:cursor-not-allowed"
-          disabled={product.stock === 0}
-        >
-          {product.stock > 0 ? "Add to cart" : "Out of stock"}
-        </button>
-      </div>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
     </div>
   );
 }

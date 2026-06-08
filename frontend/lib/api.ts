@@ -61,6 +61,16 @@ export type Product = {
   discount_percent: number;
   is_featured: boolean;
   created_at?: string;
+  specifications?: Record<string, string>;
+};
+
+export type Review = {
+  id: number;
+  rating: number;
+  title: string;
+  body: string;
+  author_name: string;
+  created_at: string;
 };
 
 export type OrderItem = {
@@ -120,7 +130,7 @@ export type AddressInput = {
   is_default_billing?: boolean;
 };
 
-type Paginated<T> = { count: number; next: string | null; previous: string | null; results: T[] };
+export type Paginated<T> = { count: number; next: string | null; previous: string | null; results: T[] };
 
 async function request<T>(path: string, init: RequestInit = {}, _retry = false): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -207,6 +217,21 @@ export const api = {
     return request<Paginated<Product>>(`/products/${suffix ? `?${suffix}` : ""}`);
   },
   getProduct: (slug: string) => request<Product>(`/products/${slug}/`),
+  listReviews: (slug: string, page?: number) => {
+    const qs = page && page > 1 ? `?page=${page}` : "";
+    return request<Paginated<Review>>(`/products/${slug}/reviews/${qs}`);
+  },
+  postReview: (
+    token: string,
+    slug: string,
+    payload: { rating: number; title?: string; body?: string }
+  ) =>
+    request<Review>(`/products/${slug}/reviews/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    }),
+  getRelated: (slug: string) => request<Product[]>(`/products/${slug}/related/`),
   getFeatured: () => request<Product[]>(`/products/featured/`),
   getBestsellers: () => request<Product[]>(`/products/bestsellers/`),
   listCategories: () => request<Paginated<Category>>(`/categories/`),
