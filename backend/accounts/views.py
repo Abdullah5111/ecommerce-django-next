@@ -8,6 +8,7 @@ from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -47,6 +48,49 @@ class MeView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+class AvatarView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    MAX_BYTES = 2 * 1024 * 1024  # 2 MB
+
+    def post(self, request):
+        upload = request.FILES.get("avatar")
+        if upload is None:
+            return Response(
+                {"detail": "No image provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if upload.size > self.MAX_BYTES:
+            return Response(
+                {"detail": "Image must be 2 MB or smaller."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            from PIL import Image
+
+            Image.open(upload).verify()
+            upload.seek(0)
+        except Exception:
+            return Response(
+                {"detail": "Invalid image file."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user = request.user
+        user.avatar.delete(save=False)  # drop the previous file, if any
+        user.avatar = upload
+        user.save(update_fields=["avatar"])
+        return Response(UserSerializer(user, context={"request": request}).data)
+
+    def delete(self, request):
+        user = request.user
+        if user.avatar:
+            user.avatar.delete(save=False)
+            user.avatar = None
+            user.save(update_fields=["avatar"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class EmailOrUsernameTokenObtainPairView(TokenObtainPairView):
