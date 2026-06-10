@@ -1,3 +1,5 @@
+import hmac
+import logging
 import secrets
 
 from django.conf import settings
@@ -25,6 +27,7 @@ from .serializers import (
 )
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 class RegisterView(generics.CreateAPIView):
@@ -179,6 +182,7 @@ class ResetPasswordView(APIView):
 
 OTP_TTL = 600  # code is valid for 10 minutes
 OTP_COOLDOWN = 30  # seconds a user must wait between sends
+OTP_MAX_ATTEMPTS = 5  # wrong guesses before the code is burned
 
 
 def _otp_key(user_id):
@@ -212,9 +216,15 @@ class PhoneSendCodeView(APIView):
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
         code = f"{secrets.randbelow(1_000_000):06d}"
-        cache.set(_otp_key(user.id), {"code": code, "phone": phone}, OTP_TTL)
+        cache.set(
+            _otp_key(user.id), {"code": code, "phone": phone, "attempts": 0}, OTP_TTL
+        )
         cache.set(_otp_cooldown_key(user.id), True, OTP_COOLDOWN)
-        print(f"[DEV] SMS to {phone}: your verification code is {code}")
+        # TODO: replace with a real SMS provider. Never log the code in production.
+        if settings.DEBUG:
+            print(f"[DEV] SMS to {phone}: your verification code is {code}")
+        else:
+            logger.info("Phone verification code issued for user %s", user.id)
         return Response({"detail": "Verification code sent."})
 
 
@@ -224,16 +234,35 @@ class PhoneVerifyView(APIView):
     def post(self, request):
         code = (request.data.get("code") or "").strip()
         user = request.user
-        data = cache.get(_otp_key(user.id))
-        if not data or code != data["code"]:
+        key = _otp_key(user.id)
+        data = cache.get(key)
+        invalid = Response(
+            {"detail": "Invalid or expired code."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+        if not data:
+            return invalid
+        if not hmac.compare_digest(code, data["code"]):
+            data["attempts"] += 1
+            if data["attempts"] >= OTP_MAX_ATTEMPTS:
+                cache.delete(key)  # burn the code after too many wrong guesses
+            else:
+                cache.set(key, data, OTP_TTL)
+            return invalid
+        phone = data["phone"]
+        if (
+            User.objects.filter(phone=phone, phone_verified=True)
+            .exclude(pk=user.pk)
+            .exists()
+        ):
             return Response(
-                {"detail": "Invalid or expired code."},
+                {"detail": "That phone number is already in use."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        user.phone = data["phone"]
+        user.phone = phone
         user.phone_verified = True
         user.save(update_fields=["phone", "phone_verified"])
-        cache.delete(_otp_key(user.id))
+        cache.delete(key)
         cache.delete(_otp_cooldown_key(user.id))
         return Response(UserSerializer(user, context={"request": request}).data)
 

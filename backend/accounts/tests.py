@@ -125,3 +125,38 @@ class PhoneVerificationTests(APITestCase):
             "/api/auth/phone/send-code/", {"phone": "+15551234567"}, format="json"
         )
         self.assertEqual(res.status_code, 429)
+
+    def test_code_is_burned_after_too_many_wrong_attempts(self):
+        self.client.post(
+            "/api/auth/phone/send-code/", {"phone": "+15551234567"}, format="json"
+        )
+        good_code = self._sent_code()
+        for _ in range(5):
+            self.client.post(
+                "/api/auth/phone/verify/", {"code": "000000"}, format="json"
+            )
+        # the real code no longer works once the attempt limit is hit
+        res = self.client.post(
+            "/api/auth/phone/verify/", {"code": good_code}, format="json"
+        )
+        self.assertEqual(res.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.phone_verified)
+
+    def test_phone_already_verified_by_another_user_is_rejected(self):
+        User.objects.create_user(
+            username="owner",
+            email="owner@example.com",
+            password="pw-123456",
+            phone="+15551234567",
+            phone_verified=True,
+        )
+        self.client.post(
+            "/api/auth/phone/send-code/", {"phone": "+15551234567"}, format="json"
+        )
+        res = self.client.post(
+            "/api/auth/phone/verify/", {"code": self._sent_code()}, format="json"
+        )
+        self.assertEqual(res.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.phone_verified)
