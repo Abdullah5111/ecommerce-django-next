@@ -50,7 +50,7 @@ User ─< Address                                Category (self-FK: parent/child
                               └─< Review
 ```
 
-- **`User`** — custom model on `accounts.User` (extends `AbstractUser`), with `email` (unique), `email_verified`. Defined upfront so swapping later doesn't require a painful migration. Legacy `address`/`phone` fields kept for backward compat; new code uses the address book.
+- **`User`** — custom model on `accounts.User` (extends `AbstractUser`), with `email` (unique), `email_verified`, and profile fields: `avatar` (ImageField → MEDIA, GCS in prod), `display_name`, `bio`, `date_of_birth`, `gender`, plus `phone` + `phone_verified`. Defined upfront so swapping later doesn't require a painful migration. `phone`/`phone_verified` are read-only via `me` and only set through the phone-verification flow; legacy `address` text kept for backward compat (new code uses the address book).
 - **`Address`** — `user` FK, `recipient`, `phone`, `line1/2`, `city`, `state`, `postal_code`, `country` (ISO-2), `label`, `is_default_shipping`, `is_default_billing`. `save()` enforces a single default-shipping (and default-billing) per user by demoting siblings atomically.
 - **`Category`** — self-referential. `parent`, computed `full_slug` (e.g. `electronics/audio`), `level`. `save()` keeps the latter two coherent on writes. Indexed on the unique `full_slug` for fast path lookups.
 - **`Product`** — `category` FK, pricing (`price`, `compare_at_price`, computed `is_on_sale`/`discount_percent`), `stock`, `rating_avg`/`rating_count` (denormalised — driven by Review signals), `specifications` (JSONField, flat key→value), `is_featured`, `is_active`. Has many `ProductImage`s and `Review`s; keeps a legacy `image_url` for backward compat.
@@ -104,6 +104,13 @@ Category-tree helpers:
 - `GET /api/categories/tree/` — nested top-level → children recursive.
 - `GET /api/categories/by-path/?path=electronics/audio` — single category with `ancestors[]` + `children[]`.
 
+Profile & account (auth):
+
+- `GET/PUT/PATCH /api/auth/me/` — current user; PATCH writes editable profile fields (name, display name, bio, DOB, gender).
+- `POST/DELETE /api/auth/me/avatar/` — multipart upload (validated: image, ≤2 MB) / remove; replaces the previous file.
+- `POST /api/auth/phone/send-code/` → issues a 6-digit code (cache-backed, 10-min TTL, 30s resend cooldown), "sent" via console in dev.
+- `POST /api/auth/phone/verify/` → constant-time check, attempt-capped (5), rejects a number already verified by another user, then sets `phone` + `phone_verified`.
+
 Address book (auth):
 
 - `GET/POST /api/auth/addresses/` and standard `GET/PUT/PATCH/DELETE /{id}/`.
@@ -122,7 +129,10 @@ frontend/
 │   ├── c/[...slug]/                      # hierarchical category landing pages (catch-all)
 │   ├── cart/, checkout/                  # cart + checkout (saved-address picker)
 │   ├── orders/                           # per-user order history (structured shipping)
-│   ├── account/                          # profile editor + verification badge
+│   ├── account/                          # account hub (card grid) + shared layout
+│   ├── account/profile/                  # profile editor: avatar, name, bio, DOB, gender, phone verify
+│   ├── account/security/                 # email/phone status + change-password entry
+│   ├── account/payment/, notifications/  # roadmap stubs
 │   ├── account/addresses/                # address book CRUD
 │   ├── wishlist/                         # saved-products grid
 │   ├── login/, signup/                   # auth forms (login accepts username OR email)

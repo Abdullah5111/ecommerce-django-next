@@ -49,7 +49,10 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - JWT with auto-refresh on 401 and global redirect when both tokens expire
 - Email verification (`/verify-email?uid&token`) with verified badge on the account page
 - Forgot / reset password (`/forgot-password`, `/reset-password?uid&token`) via Django's password-reset token generator
-- Account page: profile editing (PUT `/api/auth/me/`) + verification status + change-password link
+- **Account hub** at `/account` — Amazon-style card grid linking profile, orders, addresses, wishlist, security, and payment/notification preferences
+- **Profile** (`/account/profile`): avatar upload (with initials fallback), display name + bio, date of birth + gender, and editable name
+- **Phone verification**: one-time code flow (rate-limited, attempt-capped, constant-time check); code is printed to the console in dev, swap for an SMS provider in prod
+- **Login & security** (`/account/security`): email + phone verification status and change-password entry point
 - Address book at `/account/addresses`: list, add, edit, delete, set default
 - Password-strength hints on the signup form
 - Console email backend for dev; SMTP via env for production
@@ -115,7 +118,10 @@ npm run dev
 | POST     | /api/auth/token/                           | —    | Login (JWT); `username` accepts username OR email |
 | POST     | /api/auth/token/refresh/                   | —    | Rotate access token (refresh tokens rotate too)   |
 | POST     | /api/auth/logout/                          | —    | Blacklist refresh token                           |
-| GET/PUT  | /api/auth/me/                              | JWT  | Current user; PUT updates profile fields          |
+| GET/PUT/PATCH | /api/auth/me/                         | JWT  | Current user; PATCH updates editable profile fields |
+| POST/DELETE | /api/auth/me/avatar/                    | JWT  | Upload (multipart `avatar`) or remove profile photo |
+| POST     | /api/auth/phone/send-code/                 | JWT  | `{phone}` → issue a one-time verification code     |
+| POST     | /api/auth/phone/verify/                    | JWT  | `{code}` → set phone + mark verified               |
 | POST     | /api/auth/verify-email/                    | —    | `{uid, token}` → mark email verified              |
 | POST     | /api/auth/forgot-password/                 | —    | `{email}` → always 200 (no email-existence leak)  |
 | POST     | /api/auth/reset-password/                  | —    | `{uid, token, new_password}`                      |
