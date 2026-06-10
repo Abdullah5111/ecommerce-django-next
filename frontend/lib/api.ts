@@ -341,6 +341,37 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),
     }),
+  uploadAvatar: async (token: string, file: File): Promise<Me> => {
+    const fd = new FormData();
+    fd.append("avatar", file);
+    // Multipart: let the browser set Content-Type (with boundary), so this
+    // bypasses the JSON `request` helper.
+    const res = await fetch(`${API_URL}/auth/me/avatar/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+    return (await res.json()) as Me;
+  },
+  deleteAvatar: (token: string) =>
+    request<void>(`/auth/me/avatar/`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  sendPhoneCode: (token: string, phone: string) =>
+    request<{ detail: string }>(`/auth/phone/send-code/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ phone }),
+    }),
+  verifyPhone: (token: string, code: string) =>
+    request<Me>(`/auth/phone/verify/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ code }),
+    }),
   logout: (refresh: string) =>
     request<unknown>(`/auth/logout/`, {
       method: "POST",
