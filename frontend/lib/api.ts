@@ -130,6 +130,25 @@ export type AddressInput = {
   is_default_billing?: boolean;
 };
 
+export type Gender = "" | "female" | "male" | "nonbinary" | "prefer_not_to_say";
+
+export type Me = {
+  id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  address: string;
+  phone: string;
+  email_verified: boolean;
+  phone_verified: boolean;
+  avatar: string | null;
+  display_name: string;
+  bio: string;
+  date_of_birth: string | null;
+  gender: Gender;
+};
+
 export type Paginated<T> = { count: number; next: string | null; previous: string | null; results: T[] };
 
 async function request<T>(path: string, init: RequestInit = {}, _retry = false): Promise<T> {
@@ -302,33 +321,23 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` },
     }),
   me: (token: string) =>
-    request<{
-      id: number;
-      username: string;
-      email: string;
-      first_name: string;
-      last_name: string;
-      address: string;
-      phone: string;
-      email_verified: boolean;
-    }>(`/auth/me/`, {
+    request<Me>(`/auth/me/`, {
       headers: { Authorization: `Bearer ${token}` },
     }),
   updateMe: (
     token: string,
-    payload: { first_name?: string; last_name?: string; address?: string; phone?: string }
+    payload: {
+      first_name?: string;
+      last_name?: string;
+      address?: string;
+      display_name?: string;
+      bio?: string;
+      date_of_birth?: string | null;
+      gender?: Gender;
+    }
   ) =>
-    request<{
-      id: number;
-      username: string;
-      email: string;
-      first_name: string;
-      last_name: string;
-      address: string;
-      phone: string;
-      email_verified: boolean;
-    }>(`/auth/me/`, {
-      method: "PUT",
+    request<Me>(`/auth/me/`, {
+      method: "PATCH",
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),
     }),
