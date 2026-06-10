@@ -4,10 +4,23 @@ from django.db import models
 
 
 class User(AbstractUser):
+    class Gender(models.TextChoices):
+        FEMALE = "female", "Female"
+        MALE = "male", "Male"
+        NONBINARY = "nonbinary", "Non-binary"
+        UNDISCLOSED = "prefer_not_to_say", "Prefer not to say"
+
     email = models.EmailField(unique=True)
     address = models.TextField(blank=True)
     phone = models.CharField(max_length=20, blank=True)
     email_verified = models.BooleanField(default=False)
+    phone_verified = models.BooleanField(default=False)
+
+    avatar = models.ImageField(upload_to="avatars/", blank=True, null=True)
+    display_name = models.CharField(max_length=60, blank=True)
+    bio = models.CharField(max_length=280, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    gender = models.CharField(max_length=20, blank=True, choices=Gender.choices)
 
     REQUIRED_FIELDS = ["email"]
 

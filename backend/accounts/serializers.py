@@ -8,6 +8,8 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
+    avatar = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = (
@@ -19,8 +21,28 @@ class UserSerializer(serializers.ModelSerializer):
             "address",
             "phone",
             "email_verified",
+            "phone_verified",
+            "avatar",
+            "display_name",
+            "bio",
+            "date_of_birth",
+            "gender",
         )
-        read_only_fields = ("id", "email_verified")
+        read_only_fields = (
+            "id",
+            "email",
+            "email_verified",
+            "phone",
+            "phone_verified",
+            "avatar",
+        )
+
+    def get_avatar(self, obj):
+        if not obj.avatar:
+            return None
+        url = obj.avatar.url
+        request = self.context.get("request")
+        return request.build_absolute_uri(url) if request else url
 
 
 class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
