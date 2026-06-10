@@ -2,6 +2,7 @@ import io
 import tempfile
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import override_settings
 from PIL import Image
 from rest_framework.test import APITestCase
@@ -68,3 +69,59 @@ class ProfileTests(APITestCase):
         self.assertEqual(res.status_code, 400)
         self.user.refresh_from_db()
         self.assertFalse(self.user.avatar)
+
+
+class PhoneVerificationTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            username="ben", email="ben@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def _sent_code(self):
+        return cache.get(f"phone_otp:{self.user.id}")["code"]
+
+    def test_send_then_verify_sets_phone_and_flag(self):
+        res = self.client.post(
+            "/api/auth/phone/send-code/", {"phone": "+15551234567"}, format="json"
+        )
+        self.assertEqual(res.status_code, 200)
+
+        res = self.client.post(
+            "/api/auth/phone/verify/", {"code": self._sent_code()}, format="json"
+        )
+        self.assertEqual(res.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone, "+15551234567")
+        self.assertTrue(self.user.phone_verified)
+
+    def test_send_requires_phone(self):
+        res = self.client.post("/api/auth/phone/send-code/", {}, format="json")
+        self.assertEqual(res.status_code, 400)
+
+    def test_verify_rejects_wrong_code(self):
+        self.client.post(
+            "/api/auth/phone/send-code/", {"phone": "+15551234567"}, format="json"
+        )
+        res = self.client.post(
+            "/api/auth/phone/verify/", {"code": "000000"}, format="json"
+        )
+        self.assertEqual(res.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.phone_verified)
+
+    def test_verify_without_a_sent_code_fails(self):
+        res = self.client.post(
+            "/api/auth/phone/verify/", {"code": "123456"}, format="json"
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_immediate_resend_is_rate_limited(self):
+        self.client.post(
+            "/api/auth/phone/send-code/", {"phone": "+15551234567"}, format="json"
+        )
+        res = self.client.post(
+            "/api/auth/phone/send-code/", {"phone": "+15551234567"}, format="json"
+        )
+        self.assertEqual(res.status_code, 429)

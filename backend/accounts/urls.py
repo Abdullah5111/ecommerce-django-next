@@ -7,6 +7,8 @@ from .views import (
     AvatarView,
     ForgotPasswordView,
     MeView,
+    PhoneSendCodeView,
+    PhoneVerifyView,
     RegisterView,
     ResetPasswordView,
     VerifyEmailView,
@@ -23,5 +25,7 @@ urlpatterns = [
     path("verify-email/", VerifyEmailView.as_view(), name="verify_email"),
     path("forgot-password/", ForgotPasswordView.as_view(), name="forgot_password"),
     path("reset-password/", ResetPasswordView.as_view(), name="reset_password"),
+    path("phone/send-code/", PhoneSendCodeView.as_view(), name="phone_send_code"),
+    path("phone/verify/", PhoneVerifyView.as_view(), name="phone_verify"),
     path("", include(router.urls)),
 ]

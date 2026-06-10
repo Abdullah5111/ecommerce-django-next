@@ -1,7 +1,10 @@
+import secrets
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
@@ -172,6 +175,67 @@ class ResetPasswordView(APIView):
         user.set_password(new_password)
         user.save()
         return Response({"detail": "Password reset"})
+
+
+OTP_TTL = 600  # code is valid for 10 minutes
+OTP_COOLDOWN = 30  # seconds a user must wait between sends
+
+
+def _otp_key(user_id):
+    return f"phone_otp:{user_id}"
+
+
+def _otp_cooldown_key(user_id):
+    return f"phone_otp_cooldown:{user_id}"
+
+
+class PhoneSendCodeView(APIView):
+    """Generate a one-time code for a phone number and 'send' it.
+
+    Mirrors the email-verification flow: in dev the code is written to the
+    server console (swap for a real SMS provider in production).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        phone = (request.data.get("phone") or "").strip()
+        if not phone:
+            return Response(
+                {"detail": "Phone number is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user = request.user
+        if cache.get(_otp_cooldown_key(user.id)):
+            return Response(
+                {"detail": "Please wait before requesting another code."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        cache.set(_otp_key(user.id), {"code": code, "phone": phone}, OTP_TTL)
+        cache.set(_otp_cooldown_key(user.id), True, OTP_COOLDOWN)
+        print(f"[DEV] SMS to {phone}: your verification code is {code}")
+        return Response({"detail": "Verification code sent."})
+
+
+class PhoneVerifyView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        code = (request.data.get("code") or "").strip()
+        user = request.user
+        data = cache.get(_otp_key(user.id))
+        if not data or code != data["code"]:
+            return Response(
+                {"detail": "Invalid or expired code."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user.phone = data["phone"]
+        user.phone_verified = True
+        user.save(update_fields=["phone", "phone_verified"])
+        cache.delete(_otp_key(user.id))
+        cache.delete(_otp_cooldown_key(user.id))
+        return Response(UserSerializer(user, context={"request": request}).data)
 
 
 class AddressViewSet(viewsets.ModelViewSet):
