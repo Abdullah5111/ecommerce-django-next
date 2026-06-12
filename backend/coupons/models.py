@@ -77,8 +77,10 @@ class Coupon(models.Model):
             return "This coupon has expired."
         if self.min_subtotal is not None and subtotal < self.min_subtotal:
             return f"Spend at least ${self.min_subtotal} to use this coupon."
-        if self.max_redemptions is not None and self.redemptions.count() >= self.max_redemptions:
+        redemption_count = self.redemptions.count()
+        if self.max_redemptions is not None and redemption_count >= self.max_redemptions:
             return "This coupon has reached its redemption limit."
+        # per_user_limit is intentionally skipped for anonymous (user=None) callers.
         if user is not None and self.per_user_limit is not None:
             if self.redemptions.filter(user=user).count() >= self.per_user_limit:
                 return "You have already used this coupon."
@@ -95,6 +97,9 @@ class CouponRedemption(models.Model):
     )
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.coupon.code} → order #{self.order_id}"
