@@ -1,5 +1,7 @@
 from pathlib import Path
 from datetime import timedelta
+from decimal import Decimal
+
 from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,6 +25,7 @@ INSTALLED_APPS = [
     "accounts",
     "products",
     "orders",
+    "coupons",
 ]
 
 MIDDLEWARE = [
@@ -146,3 +149,7 @@ CSRF_TRUSTED_ORIGINS = config(
     default="http://localhost:3000",
     cast=Csv(),
 )
+
+# Shipping (used by orders.pricing)
+SHIPPING_FLAT_FEE = Decimal(config("SHIPPING_FLAT_FEE", default="5.00"))
+FREE_SHIPPING_THRESHOLD = Decimal(config("FREE_SHIPPING_THRESHOLD", default="50.00"))
