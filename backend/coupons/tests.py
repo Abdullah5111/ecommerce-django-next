@@ -1,9 +1,12 @@
 from decimal import Decimal
+from decimal import Decimal as _D
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
+
+from rest_framework.test import APITestCase
 
 from coupons.models import Coupon
 from products.models import Category, Product
@@ -85,3 +88,47 @@ class CouponValidationTests(TestCase):
     def test_valid_coupon_returns_none(self):
         c = Coupon.objects.create(code="GOOD", kind=Coupon.Kind.PERCENT, value=Decimal("10"))
         self.assertIsNone(c.validate_for(self.user, self._items(), Decimal("55")))
+
+
+class CouponQuoteApiTests(APITestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(name="Widget", price=_D("40.00"), stock=10, category=self.cat)
+        self.user = User.objects.create_user(username="buyer", password="pw-123456")
+        self.client.force_authenticate(self.user)
+
+    def test_quote_requires_auth(self):
+        self.client.force_authenticate(None)
+        res = self.client.post("/api/coupons/quote/", {"items": [{"product": self.p.id, "quantity": 1}]}, format="json")
+        self.assertEqual(res.status_code, 401)
+
+    def test_quote_without_code_returns_breakdown(self):
+        res = self.client.post(
+            "/api/coupons/quote/",
+            {"items": [{"product": self.p.id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["subtotal"], "40.00")
+        self.assertEqual(res.data["shipping_total"], "5.00")
+        self.assertIsNone(res.data["coupon_error"])
+
+    def test_quote_with_valid_code_applies_discount(self):
+        Coupon.objects.create(code="SAVE10", kind=Coupon.Kind.PERCENT, value=_D("10"))
+        res = self.client.post(
+            "/api/coupons/quote/",
+            {"code": "save10", "items": [{"product": self.p.id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(res.data["discount_total"], "4.00")
+        self.assertEqual(res.data["coupon_code"], "SAVE10")
+
+    def test_quote_with_unknown_code_returns_error_inline(self):
+        res = self.client.post(
+            "/api/coupons/quote/",
+            {"code": "NOPE", "items": [{"product": self.p.id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["coupon_error"], "Invalid coupon code.")
+        self.assertIsNone(res.data["coupon_code"])
