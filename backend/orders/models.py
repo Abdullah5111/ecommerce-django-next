@@ -26,15 +26,18 @@ class Order(models.Model):
     ship_postal_code = models.CharField(max_length=20, blank=True)
     ship_country = models.CharField(max_length=2, blank=True)
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    discount_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    shipping_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    coupon = models.ForeignKey(
+        "coupons.Coupon", null=True, blank=True, on_delete=models.SET_NULL, related_name="orders"
+    )
+    coupon_code = models.CharField(max_length=40, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
-
-    def recalculate_total(self):
-        self.total = sum((item.subtotal for item in self.items.all()), start=0)
-        self.save(update_fields=["total"])
 
     def __str__(self):
         return f"Order #{self.pk} ({self.user})"

@@ -315,3 +315,24 @@ def run():
 
 
 run()
+
+# --- Demo coupons -------------------------------------------------------
+from coupons.models import Coupon  # noqa: E402
+
+Coupon.objects.get_or_create(
+    code="SAVE10",
+    defaults=dict(kind=Coupon.Kind.PERCENT, value=Decimal("10")),
+)
+Coupon.objects.get_or_create(
+    code="15OFF50",
+    defaults=dict(kind=Coupon.Kind.FIXED, value=Decimal("15"), min_subtotal=Decimal("50")),
+)
+Coupon.objects.get_or_create(
+    code="FREESHIP",
+    defaults=dict(kind=Coupon.Kind.FREE_SHIPPING),
+)
+Coupon.objects.get_or_create(
+    code="BOGO",
+    defaults=dict(kind=Coupon.Kind.BOGO, value=Decimal("100"), buy_quantity=1, get_quantity=1),
+)
+print("Seeded demo coupons: SAVE10, 15OFF50, FREESHIP, BOGO")

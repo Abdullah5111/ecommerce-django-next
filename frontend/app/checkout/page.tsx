@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart";
 import { auth } from "@/lib/auth";
-import { api, type Address, type AddressInput } from "@/lib/api";
+import { api, type Address, type AddressInput, type QuoteResult } from "@/lib/api";
 import { useToast } from "@/lib/useToast";
 import AddressForm from "@/components/AddressForm";
 
@@ -23,6 +23,12 @@ export default function CheckoutPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedCode, setAppliedCode] = useState<string | null>(null);
+  const [quote, setQuote] = useState<QuoteResult | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [quoting, setQuoting] = useState(false);
 
   useEffect(() => {
     const token = auth.get();
@@ -62,6 +68,54 @@ export default function CheckoutPage() {
     }
   };
 
+  const refreshQuote = async (code?: string) => {
+    const token = auth.get();
+    if (!token || items.length === 0) return;
+    setQuoting(true);
+    setPromoError(null);
+    try {
+      const result = await api.quoteOrder(token, {
+        code,
+        items: items.map((i) => ({ product: i.product.id, quantity: i.quantity })),
+      });
+      setQuote(result);
+      if (code) {
+        if (result.coupon_error) {
+          setPromoError(result.coupon_error);
+          setAppliedCode(null);
+        } else {
+          setAppliedCode(result.coupon_code);
+        }
+      }
+    } catch (e) {
+      setPromoError(e instanceof Error ? e.message : "Could not apply code");
+    } finally {
+      setQuoting(false);
+    }
+  };
+
+  const applyPromo = () => {
+    if (!promoInput.trim()) return;
+    refreshQuote(promoInput.trim());
+  };
+
+  const removePromo = () => {
+    setPromoInput("");
+    setAppliedCode(null);
+    setPromoError(null);
+    refreshQuote();
+  };
+
+  useEffect(() => {
+    if (authed && items.length > 0) {
+      refreshQuote(appliedCode ?? undefined);
+    }
+    // Re-quote only when auth resolves or the cart size changes. appliedCode is
+    // intentionally excluded — applyPromo/removePromo already re-quote on change,
+    // and adding it here would fire a duplicate request right after applying a code.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authed, items.length]);
+
   const placeOrder = async (overrideAddressId?: number) => {
     setError(null);
     const token = auth.get();
@@ -87,6 +141,7 @@ export default function CheckoutPage() {
       const order = await api.createOrder(token, {
         shipping_address_id: addressId,
         items: items.map((i) => ({ product: i.product.id, quantity: i.quantity })),
+        coupon_code: appliedCode ?? undefined,
       });
       await api.payOrder(token, order.id);
       clear();
@@ -227,9 +282,66 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              <div className="mt-6 flex justify-between text-lg font-semibold">
-                <span>Total</span>
-                <span>${total.toFixed(2)}</span>
+              <div className="mt-6 border-t pt-4">
+                <label className="block text-sm font-medium mb-1">Promo code</label>
+                <div className="flex gap-2">
+                  <input
+                    value={promoInput}
+                    onChange={(e) => setPromoInput(e.target.value)}
+                    placeholder="e.g. SAVE10"
+                    className="flex-1 border rounded px-3 py-2 text-sm"
+                    disabled={!!appliedCode}
+                  />
+                  {appliedCode ? (
+                    <button
+                      type="button"
+                      onClick={removePromo}
+                      className="px-4 py-2 text-sm border rounded"
+                    >
+                      Remove
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={applyPromo}
+                      disabled={quoting || !promoInput.trim()}
+                      className="px-4 py-2 text-sm border rounded disabled:opacity-50"
+                    >
+                      {quoting ? "…" : "Apply"}
+                    </button>
+                  )}
+                </div>
+                {promoError && <p className="text-red-600 text-sm mt-1">{promoError}</p>}
+                {appliedCode && (
+                  <p className="text-green-700 text-sm mt-1">Code {appliedCode} applied</p>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span>${quote ? quote.subtotal : total.toFixed(2)}</span>
+                </div>
+                {quote && Number(quote.discount_total) > 0 && (
+                  <div className="flex justify-between text-green-700">
+                    <span>Discount{appliedCode ? ` (${appliedCode})` : ""}</span>
+                    <span>−${quote.discount_total}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span>Shipping</span>
+                  <span>
+                    {!quote
+                      ? "—"
+                      : Number(quote.shipping_total) === 0
+                        ? "Free"
+                        : `$${quote.shipping_total}`}
+                  </span>
+                </div>
+                <div className="flex justify-between text-lg font-semibold border-t pt-2 mt-2">
+                  <span>Total</span>
+                  <span>${quote ? quote.grand_total : total.toFixed(2)}</span>
+                </div>
               </div>
               <button
                 onClick={() => placeOrder()}

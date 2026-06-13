@@ -95,8 +95,21 @@ export type Order = {
   ship_postal_code: string;
   ship_country: string;
   total: string;
+  subtotal: string;
+  discount_total: string;
+  shipping_total: string;
+  coupon_code: string;
   items: OrderItem[];
   created_at: string;
+};
+
+export type QuoteResult = {
+  subtotal: string;
+  discount_total: string;
+  shipping_total: string;
+  grand_total: string;
+  coupon_code: string | null;
+  coupon_error: string | null;
 };
 
 export type Address = {
@@ -270,13 +283,24 @@ export const api = {
       | {
           shipping_address_id: number;
           items: { product: number; quantity: number }[];
+          coupon_code?: string;
         }
       | {
           shipping_address: string;
           items: { product: number; quantity: number }[];
+          coupon_code?: string;
         }
   ) =>
     request<{ id: number; total: string }>(`/orders/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    }),
+  quoteOrder: (
+    token: string,
+    payload: { code?: string; items: { product: number; quantity: number }[] }
+  ) =>
+    request<QuoteResult>(`/coupons/quote/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),

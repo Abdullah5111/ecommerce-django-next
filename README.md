@@ -43,6 +43,8 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - Mock checkout that creates the order and atomically decrements stock (concurrent-safe `F()` UPDATE)
 - Orders snapshot a structured shipping address at write time — editing the saved address later doesn't mutate order history
 - Per-user order history with the structured shipping snapshot rendered per order
+- Promo codes at checkout: percent, fixed-amount, free-shipping, and buy-X-get-Y; one per order, validated and priced server-side with a live breakdown
+- Flat-fee shipping ($5) waived over $50 subtotal or by a free-shipping coupon
 
 ### Auth & profile
 - Register, login (by username **or** email), logout (server-side refresh-token blacklist)
@@ -153,9 +155,15 @@ Product list query params:
 | Method | Path                              | Auth | Purpose                                                                |
 |--------|-----------------------------------|------|------------------------------------------------------------------------|
 | GET    | /api/orders/                      | JWT  | List my orders (with structured shipping snapshot)                     |
-| POST   | /api/orders/                      | JWT  | Create order — body accepts `shipping_address_id` or legacy `shipping_address` text |
+| POST   | /api/orders/                      | JWT  | Create order — body accepts `shipping_address_id` or legacy `shipping_address` text; optional `coupon_code` applies a promo; response includes `subtotal`, `discount_total`, `shipping_total`, and `coupon_code` |
 | GET    | /api/orders/{id}/                 | JWT  | Order detail                                                           |
 | POST   | /api/orders/{id}/pay/             | JWT  | Mock payment                                                           |
+
+### Coupons
+
+| Method | Path                  | Auth | Purpose                                                                                              |
+|--------|-----------------------|------|------------------------------------------------------------------------------------------------------|
+| POST   | /api/coupons/quote/   | JWT  | Price a cart with an optional `code`; returns the breakdown (subtotal, discount, shipping, total) with `coupon_error` inline for an invalid code |
 
 ## Documentation
 
