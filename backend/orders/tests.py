@@ -1,10 +1,15 @@
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from rest_framework.test import APITestCase
 
-from coupons.models import Coupon
+from coupons.models import Coupon, CouponRedemption
+from orders.models import Order
 from orders.pricing import quote
 from products.models import Category, Product
+
+User = get_user_model()
 
 
 def _product(name, price, category):
@@ -66,3 +71,67 @@ class PricingTests(TestCase):
         self.assertIsNotNone(q.coupon_error)
         self.assertEqual(q.discount_total, Decimal("0.00"))
         self.assertIsNone(q.coupon_code)
+
+
+@override_settings(SHIPPING_FLAT_FEE=Decimal("5.00"), FREE_SHIPPING_THRESHOLD=Decimal("50.00"))
+class OrderCouponTests(APITestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(name="Widget", price=Decimal("40.00"), stock=10, category=self.cat)
+        self.user = User.objects.create_user(username="buyer", password="pw-123456")
+        self.client.force_authenticate(self.user)
+
+    def _payload(self, **extra):
+        body = {
+            "shipping_address": "123 Test St",
+            "items": [{"product": self.p.id, "quantity": 1}],
+        }
+        body.update(extra)
+        return body
+
+    def test_order_without_coupon_snapshots_totals(self):
+        res = self.client.post("/api/orders/", self._payload(), format="json")
+        self.assertEqual(res.status_code, 201)
+        order = Order.objects.get(id=res.data["id"])
+        self.assertEqual(order.subtotal, Decimal("40.00"))
+        self.assertEqual(order.shipping_total, Decimal("5.00"))
+        self.assertEqual(order.total, Decimal("45.00"))
+        self.assertEqual(order.coupon_code, "")
+
+    def test_order_with_valid_coupon_applies_and_records_redemption(self):
+        Coupon.objects.create(code="SAVE10", kind=Coupon.Kind.PERCENT, value=Decimal("10"))
+        res = self.client.post("/api/orders/", self._payload(coupon_code="save10"), format="json")
+        self.assertEqual(res.status_code, 201)
+        order = Order.objects.get(id=res.data["id"])
+        self.assertEqual(order.discount_total, Decimal("4.00"))
+        self.assertEqual(order.total, Decimal("41.00"))  # 40 - 4 + 5
+        self.assertEqual(order.coupon_code, "SAVE10")
+        self.assertEqual(CouponRedemption.objects.filter(order=order).count(), 1)
+
+    def test_order_with_invalid_coupon_is_rejected(self):
+        Coupon.objects.create(code="OFF", kind=Coupon.Kind.PERCENT, value=Decimal("10"), is_active=False)
+        res = self.client.post("/api/orders/", self._payload(coupon_code="OFF"), format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_unknown_coupon_code_is_rejected(self):
+        res = self.client.post("/api/orders/", self._payload(coupon_code="NOPE"), format="json")
+        self.assertEqual(res.status_code, 400)
+
+    def test_global_redemption_limit_enforced(self):
+        Coupon.objects.create(
+            code="ONCE", kind=Coupon.Kind.PERCENT, value=Decimal("10"), max_redemptions=1,
+        )
+        first = self.client.post("/api/orders/", self._payload(coupon_code="ONCE"), format="json")
+        self.assertEqual(first.status_code, 201)
+        second = self.client.post("/api/orders/", self._payload(coupon_code="ONCE"), format="json")
+        self.assertEqual(second.status_code, 400)
+        self.assertEqual(CouponRedemption.objects.count(), 1)
+
+    def test_per_user_limit_enforced(self):
+        Coupon.objects.create(
+            code="SOLO", kind=Coupon.Kind.PERCENT, value=Decimal("10"), per_user_limit=1,
+        )
+        self.client.post("/api/orders/", self._payload(coupon_code="SOLO"), format="json")
+        second = self.client.post("/api/orders/", self._payload(coupon_code="SOLO"), format="json")
+        self.assertEqual(second.status_code, 400)

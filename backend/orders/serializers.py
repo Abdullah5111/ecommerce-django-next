@@ -3,8 +3,10 @@ from django.db.models import F
 from rest_framework import serializers
 
 from accounts.models import Address
+from coupons.models import Coupon, CouponRedemption
 from products.models import Product
 from .models import Order, OrderItem
+from .pricing import quote
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -23,47 +25,28 @@ class OrderSerializer(serializers.ModelSerializer):
     shipping_address_id = serializers.PrimaryKeyRelatedField(
         queryset=Address.objects.none(), write_only=True, required=False
     )
+    coupon_code = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = Order
         fields = (
-            "id",
-            "status",
-            "shipping_address",
-            "shipping_address_id",
-            "ship_recipient",
-            "ship_phone",
-            "ship_line1",
-            "ship_line2",
-            "ship_city",
-            "ship_state",
-            "ship_postal_code",
-            "ship_country",
-            "total",
-            "items",
-            "created_at",
+            "id", "status", "shipping_address", "shipping_address_id",
+            "ship_recipient", "ship_phone", "ship_line1", "ship_line2",
+            "ship_city", "ship_state", "ship_postal_code", "ship_country",
+            "subtotal", "discount_total", "shipping_total", "coupon_code",
+            "total", "items", "created_at",
         )
         read_only_fields = (
-            "status",
-            "total",
-            "created_at",
-            "ship_recipient",
-            "ship_phone",
-            "ship_line1",
-            "ship_line2",
-            "ship_city",
-            "ship_state",
-            "ship_postal_code",
-            "ship_country",
+            "status", "subtotal", "discount_total", "shipping_total", "total", "created_at",
+            "ship_recipient", "ship_phone", "ship_line1", "ship_line2",
+            "ship_city", "ship_state", "ship_postal_code", "ship_country",
         )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         request = self.context.get("request") if hasattr(self, "context") else None
         if request is not None and request.user.is_authenticated:
-            self.fields["shipping_address_id"].queryset = Address.objects.filter(
-                user=request.user
-            )
+            self.fields["shipping_address_id"].queryset = Address.objects.filter(user=request.user)
 
     def validate(self, attrs):
         if not attrs.get("shipping_address_id") and not attrs.get("shipping_address"):
@@ -78,6 +61,17 @@ class OrderSerializer(serializers.ModelSerializer):
         if not items_data:
             raise serializers.ValidationError({"items": "At least one item is required."})
 
+        user = self.context["request"].user
+
+        # Resolve + lock the coupon (if any) so the redemption count is race-safe.
+        code = (validated_data.pop("coupon_code", "") or "").strip().upper()
+        coupon = None
+        if code:
+            coupon = Coupon.objects.select_for_update().filter(code=code).first()
+            if coupon is None:
+                raise serializers.ValidationError({"coupon_code": "Invalid coupon code."})
+
+        # Address resolution (unchanged).
         address = validated_data.pop("shipping_address_id", None)
         order_kwargs = {}
         if address is not None:
@@ -94,9 +88,24 @@ class OrderSerializer(serializers.ModelSerializer):
         else:
             order_kwargs["shipping_address"] = validated_data.pop("shipping_address")
 
+        # Authoritative pricing (re-validates the coupon under the lock).
+        pairs = [(it["product"], it["quantity"]) for it in items_data]
+        price = quote(pairs, coupon, user)
+        if coupon is not None and price.coupon_error:
+            raise serializers.ValidationError({"coupon_code": price.coupon_error})
+
         order = Order.objects.create(
-            user=self.context["request"].user, **order_kwargs, **validated_data
+            user=user,
+            subtotal=price.subtotal,
+            discount_total=price.discount_total,
+            shipping_total=price.shipping_total,
+            total=price.grand_total,
+            coupon=coupon,
+            coupon_code=(coupon.code if coupon else ""),
+            **order_kwargs,
+            **validated_data,
         )
+
         for item_data in items_data:
             product = item_data["product"]
             quantity = item_data["quantity"]
@@ -108,11 +117,12 @@ class OrderSerializer(serializers.ModelSerializer):
                     {"items": f"Not enough stock for {product.name}."}
                 )
             OrderItem.objects.create(
-                order=order,
-                product=product,
-                quantity=quantity,
-                unit_price=product.price,
+                order=order, product=product, quantity=quantity, unit_price=product.price,
             )
 
-        order.recalculate_total()
+        if coupon is not None:
+            CouponRedemption.objects.create(
+                coupon=coupon, user=user, order=order, discount_amount=price.discount_total
+            )
+
         return order
