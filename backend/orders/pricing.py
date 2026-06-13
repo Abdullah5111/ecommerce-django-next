@@ -25,7 +25,7 @@ class PriceQuote:
 def _subtotal(items) -> Decimal:
     total = Decimal("0")
     for product, qty in items:
-        total += product.price * qty
+        total += product.price * Decimal(qty)
     return money(total)
 
 
@@ -82,6 +82,8 @@ def quote(items, coupon=None, user=None) -> PriceQuote:
 
     shipping = _shipping(subtotal, free_shipping)
     grand = subtotal - discount + shipping
+    # Defensive floor: a misconfigured coupon (e.g. BOGO/percent value > 100)
+    # could discount more than the cart is worth. Never bill a negative total.
     if grand < 0:
         grand = Decimal("0.00")
 
