@@ -67,7 +67,13 @@ class Coupon(models.Model):
         ]
 
     def validate_for(self, user, items, subtotal):
-        """Return the first failing reason as a string, or None if valid."""
+        """Return the first failing reason as a string, or None if valid.
+
+        The redemption-count checks below are only race-safe when the caller
+        holds a row lock on this coupon (``select_for_update``), as order
+        creation does — otherwise two concurrent checkouts could both pass a
+        ``max_redemptions`` gate before either records its redemption.
+        """
         now = timezone.now()
         if not self.is_active:
             return "This coupon is not active."
