@@ -110,6 +110,9 @@ export default function CheckoutPage() {
     if (authed && items.length > 0) {
       refreshQuote(appliedCode ?? undefined);
     }
+    // Re-quote only when auth resolves or the cart size changes. appliedCode is
+    // intentionally excluded — applyPromo/removePromo already re-quote on change,
+    // and adding it here would fire a duplicate request right after applying a code.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed, items.length]);
 
@@ -328,9 +331,11 @@ export default function CheckoutPage() {
                 <div className="flex justify-between">
                   <span>Shipping</span>
                   <span>
-                    {quote && Number(quote.shipping_total) === 0
-                      ? "Free"
-                      : `$${quote ? quote.shipping_total : "0.00"}`}
+                    {!quote
+                      ? "—"
+                      : Number(quote.shipping_total) === 0
+                        ? "Free"
+                        : `$${quote.shipping_total}`}
                   </span>
                 </div>
                 <div className="flex justify-between text-lg font-semibold border-t pt-2 mt-2">

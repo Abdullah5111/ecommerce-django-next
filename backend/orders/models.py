@@ -39,10 +39,6 @@ class Order(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
-    def recalculate_total(self):
-        self.total = sum((item.subtotal for item in self.items.all()), start=0)
-        self.save(update_fields=["total"])
-
     def __str__(self):
         return f"Order #{self.pk} ({self.user})"
 
