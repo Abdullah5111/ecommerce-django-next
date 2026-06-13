@@ -116,7 +116,26 @@ export default function OrdersPage() {
                   <div className="truncate">{order.shipping_address}</div>
                 )}
               </div>
-              <span className="font-semibold whitespace-nowrap">Total ${order.total}</span>
+              <div className="text-sm text-right whitespace-nowrap">
+                <div className="flex justify-end gap-6">
+                  <span className="text-zinc-500">Subtotal</span>
+                  <span>${order.subtotal}</span>
+                </div>
+                {Number(order.discount_total) > 0 && (
+                  <div className="flex justify-end gap-6 text-green-700">
+                    <span>Discount{order.coupon_code ? ` (${order.coupon_code})` : ""}</span>
+                    <span>−${order.discount_total}</span>
+                  </div>
+                )}
+                <div className="flex justify-end gap-6">
+                  <span className="text-zinc-500">Shipping</span>
+                  <span>{Number(order.shipping_total) === 0 ? "Free" : `$${order.shipping_total}`}</span>
+                </div>
+                <div className="flex justify-end gap-6 font-semibold border-t mt-1 pt-1">
+                  <span>Total</span>
+                  <span>${order.total}</span>
+                </div>
+              </div>
             </div>
           </div>
         ))}
