@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "products",
     "orders",
     "coupons",
+    "returns",
 ]
 
 MIDDLEWARE = [
@@ -153,3 +154,5 @@ CSRF_TRUSTED_ORIGINS = config(
 # Shipping (used by orders.pricing)
 SHIPPING_FLAT_FEE = Decimal(config("SHIPPING_FLAT_FEE", default="5.00"))
 FREE_SHIPPING_THRESHOLD = Decimal(config("FREE_SHIPPING_THRESHOLD", default="50.00"))
+
+RETURN_WINDOW_DAYS = config("RETURN_WINDOW_DAYS", default=30, cast=int)

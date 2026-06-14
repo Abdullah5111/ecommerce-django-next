@@ -5,7 +5,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
 from coupons.models import Coupon, CouponRedemption
-from orders.models import Order
+from orders.models import Order, OrderEvent
 from orders.pricing import quote
 from products.models import Category, Product
 
@@ -135,3 +135,77 @@ class OrderCouponTests(APITestCase):
         self.client.post("/api/orders/", self._payload(coupon_code="SOLO"), format="json")
         second = self.client.post("/api/orders/", self._payload(coupon_code="SOLO"), format="json")
         self.assertEqual(second.status_code, 400)
+
+
+@override_settings(SHIPPING_FLAT_FEE=Decimal("5.00"), FREE_SHIPPING_THRESHOLD=Decimal("50.00"))
+class OrderLifecycleTests(APITestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(name="Widget", price=Decimal("40.00"), stock=10, category=self.cat)
+        self.user = User.objects.create_user(username="buyer", email="buyer@example.com", password="pw-123456")
+        self.staff = User.objects.create_user(username="staff", email="staff@example.com", password="pw-123456", is_staff=True)
+        self.client.force_authenticate(self.user)
+
+    def _order(self, coupon_code=None):
+        body = {"shipping_address": "123 Test St", "items": [{"product": self.p.id, "quantity": 2}]}
+        if coupon_code:
+            body["coupon_code"] = coupon_code
+        res = self.client.post("/api/orders/", body, format="json")
+        self.assertEqual(res.status_code, 201)
+        return Order.objects.get(id=res.data["id"])
+
+    def test_pay_then_ship_then_deliver_stamps_and_logs(self):
+        order = self._order()
+        self.client.post(f"/api/orders/{order.id}/pay/")
+        res = self.client.post(f"/api/orders/{order.id}/ship/", {"tracking_carrier": "UPS", "tracking_number": "1Z9"}, format="json")
+        self.assertEqual(res.status_code, 403)
+        self.client.force_authenticate(self.staff)
+        res = self.client.post(f"/api/orders/{order.id}/ship/", {"tracking_carrier": "UPS", "tracking_number": "1Z9"}, format="json")
+        self.assertEqual(res.status_code, 200)
+        res = self.client.post(f"/api/orders/{order.id}/deliver/")
+        self.assertEqual(res.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.DELIVERED)
+        self.assertIsNotNone(order.paid_at)
+        self.assertIsNotNone(order.shipped_at)
+        self.assertIsNotNone(order.delivered_at)
+        self.assertEqual(order.tracking_number, "1Z9")
+        self.assertEqual(order.events.count(), 3)
+
+    def test_illegal_transition_rejected(self):
+        order = self._order()
+        self.client.force_authenticate(self.staff)
+        res = self.client.post(f"/api/orders/{order.id}/deliver/")
+        self.assertEqual(res.status_code, 400)
+
+    def test_cancel_restocks_and_releases_coupon(self):
+        Coupon.objects.create(code="SAVE10", kind=Coupon.Kind.PERCENT, value=Decimal("10"))
+        order = self._order(coupon_code="SAVE10")
+        self.client.post(f"/api/orders/{order.id}/pay/")
+        self.p.refresh_from_db()
+        self.assertEqual(self.p.stock, 8)
+        self.assertEqual(CouponRedemption.objects.filter(order=order).count(), 1)
+        res = self.client.post(f"/api/orders/{order.id}/cancel/")
+        self.assertEqual(res.status_code, 200)
+        order.refresh_from_db()
+        self.p.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(self.p.stock, 10)
+        self.assertEqual(order.refunded_total, order.total)
+        self.assertEqual(CouponRedemption.objects.filter(order=order).count(), 0)
+
+    def test_cannot_cancel_shipped_order(self):
+        order = self._order()
+        self.client.post(f"/api/orders/{order.id}/pay/")
+        self.client.force_authenticate(self.staff)
+        self.client.post(f"/api/orders/{order.id}/ship/", {}, format="json")
+        self.client.force_authenticate(self.user)
+        res = self.client.post(f"/api/orders/{order.id}/cancel/")
+        self.assertEqual(res.status_code, 400)
+
+    def test_user_cannot_see_others_order(self):
+        order = self._order()
+        other = User.objects.create_user(username="other", email="other@example.com", password="pw-123456")
+        self.client.force_authenticate(other)
+        res = self.client.get(f"/api/orders/{order.id}/")
+        self.assertEqual(res.status_code, 404)

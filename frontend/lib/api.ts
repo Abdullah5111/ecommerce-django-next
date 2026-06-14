@@ -82,9 +82,42 @@ export type OrderItem = {
   subtotal: string;
 };
 
+export type OrderEvent = {
+  id: number;
+  message: string;
+  to_status: string;
+  actor_name: string | null;
+  created_at: string;
+};
+
+export type ReturnReason =
+  | "defective" | "wrong_item" | "not_as_described" | "no_longer_needed" | "other";
+
+export type ReturnLine = {
+  id: number;
+  order_item: number;
+  product_name: string;
+  quantity: number;
+  reason: ReturnReason;
+  note: string;
+};
+
+export type ReturnRequest = {
+  id: number;
+  order: number;
+  status: "requested" | "approved" | "received" | "refunded" | "rejected";
+  refund_amount: string;
+  staff_note: string;
+  created_at: string;
+  decided_at: string | null;
+  received_at: string | null;
+  refunded_at: string | null;
+  lines: ReturnLine[];
+};
+
 export type Order = {
   id: number;
-  status: "pending" | "paid" | "shipped" | "delivered" | "cancelled";
+  status: "pending" | "paid" | "shipped" | "delivered" | "cancelled" | "partially_refunded" | "refunded";
   shipping_address: string;
   ship_recipient: string;
   ship_phone: string;
@@ -101,6 +134,14 @@ export type Order = {
   coupon_code: string;
   items: OrderItem[];
   created_at: string;
+  paid_at: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  cancelled_at: string | null;
+  tracking_number: string;
+  tracking_carrier: string;
+  refunded_total: string;
+  events: OrderEvent[];
 };
 
 export type QuoteResult = {
@@ -343,6 +384,26 @@ export const api = {
   listOrders: (token: string) =>
     request<Paginated<Order>>(`/orders/`, {
       headers: { Authorization: `Bearer ${token}` },
+    }),
+  getOrder: (token: string, id: number) =>
+    request<Order>(`/orders/${id}/`, { headers: { Authorization: `Bearer ${token}` } }),
+  cancelOrder: (token: string, id: number) =>
+    request<Order>(`/orders/${id}/cancel/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  listReturns: (token: string) =>
+    request<Paginated<ReturnRequest>>(`/returns/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  createReturn: (
+    token: string,
+    payload: { order: number; lines: { order_item: number; quantity: number; reason: ReturnReason; note?: string }[] }
+  ) =>
+    request<ReturnRequest>(`/returns/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
     }),
   me: (token: string) =>
     request<Me>(`/auth/me/`, {

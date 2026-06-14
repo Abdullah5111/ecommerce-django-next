@@ -11,6 +11,8 @@ class Order(models.Model):
         SHIPPED = "shipped", "Shipped"
         DELIVERED = "delivered", "Delivered"
         CANCELLED = "cancelled", "Cancelled"
+        PARTIALLY_REFUNDED = "partially_refunded", "Partially refunded"
+        REFUNDED = "refunded", "Refunded"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"
@@ -33,6 +35,13 @@ class Order(models.Model):
         "coupons.Coupon", null=True, blank=True, on_delete=models.SET_NULL, related_name="orders"
     )
     coupon_code = models.CharField(max_length=40, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    shipped_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    tracking_number = models.CharField(max_length=100, blank=True)
+    tracking_carrier = models.CharField(max_length=60, blank=True)
+    refunded_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -41,6 +50,22 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Order #{self.pk} ({self.user})"
+
+
+class OrderEvent(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="events")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    message = models.CharField(max_length=255)
+    to_status = models.CharField(max_length=30, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"Order #{self.order_id}: {self.message}"
 
 
 class OrderItem(models.Model):
