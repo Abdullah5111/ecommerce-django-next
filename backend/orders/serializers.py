@@ -5,7 +5,7 @@ from rest_framework import serializers
 from accounts.models import Address
 from coupons.models import Coupon, CouponRedemption
 from products.models import Product
-from .models import Order, OrderItem
+from .models import Order, OrderItem, OrderEvent
 from .pricing import quote
 
 
@@ -19,8 +19,22 @@ class OrderItemSerializer(serializers.ModelSerializer):
         read_only_fields = ("unit_price",)
 
 
+class OrderEventSerializer(serializers.ModelSerializer):
+    actor_name = serializers.CharField(source="actor.username", read_only=True, default=None)
+
+    class Meta:
+        model = OrderEvent
+        fields = ("id", "message", "to_status", "actor_name", "created_at")
+
+
+class ShipInputSerializer(serializers.Serializer):
+    tracking_number = serializers.CharField(required=False, allow_blank=True)
+    tracking_carrier = serializers.CharField(required=False, allow_blank=True)
+
+
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True)
+    events = OrderEventSerializer(many=True, read_only=True)
     shipping_address = serializers.CharField(required=False, allow_blank=True)
     shipping_address_id = serializers.PrimaryKeyRelatedField(
         queryset=Address.objects.none(), write_only=True, required=False
@@ -34,10 +48,14 @@ class OrderSerializer(serializers.ModelSerializer):
             "ship_recipient", "ship_phone", "ship_line1", "ship_line2",
             "ship_city", "ship_state", "ship_postal_code", "ship_country",
             "subtotal", "discount_total", "shipping_total", "coupon_code",
-            "total", "items", "created_at",
+            "paid_at", "shipped_at", "delivered_at", "cancelled_at",
+            "tracking_number", "tracking_carrier", "refunded_total",
+            "total", "items", "events", "created_at",
         )
         read_only_fields = (
-            "status", "subtotal", "discount_total", "shipping_total", "total", "created_at",
+            "status", "subtotal", "discount_total", "shipping_total", "total",
+            "paid_at", "shipped_at", "delivered_at", "cancelled_at",
+            "tracking_number", "tracking_carrier", "refunded_total", "created_at",
             "ship_recipient", "ship_phone", "ship_line1", "ship_line2",
             "ship_city", "ship_state", "ship_postal_code", "ship_country",
         )
