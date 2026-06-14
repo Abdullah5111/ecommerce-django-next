@@ -46,6 +46,10 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - Promo codes at checkout: percent, fixed-amount, free-shipping, and buy-X-get-Y; one per order, validated and priced server-side with a live breakdown
 - Flat-fee shipping ($5) waived over $50 subtotal or by a free-shipping coupon
 
+### Orders & returns
+- Full order lifecycle: pay → ship (with tracking) → deliver, plus customer cancel (restock + coupon release), each recorded in a per-order audit timeline
+- Line-item returns/RMA: request specific items + reasons within a return window; staff approve → receive (restock) → refund (proportional to discount, shipping excluded, mock payment); orders reflect partial/full refunded status
+
 ### Auth & profile
 - Register, login (by username **or** email), logout (server-side refresh-token blacklist)
 - JWT with auto-refresh on 401 and global redirect when both tokens expire
@@ -158,12 +162,30 @@ Product list query params:
 | POST   | /api/orders/                      | JWT  | Create order — body accepts `shipping_address_id` or legacy `shipping_address` text; optional `coupon_code` applies a promo; response includes `subtotal`, `discount_total`, `shipping_total`, and `coupon_code` |
 | GET    | /api/orders/{id}/                 | JWT  | Order detail                                                           |
 | POST   | /api/orders/{id}/pay/             | JWT  | Mock payment                                                           |
+| POST   | /api/orders/{id}/cancel/          | owner/staff | Cancel a pending/paid order (restock + release coupon)          |
+| POST   | /api/orders/{id}/ship/            | staff | Body `{tracking_number, tracking_carrier}` → shipped              |
+| POST   | /api/orders/{id}/deliver/         | staff | shipped → delivered                                               |
+
+Order detail now includes per-status timestamps (`paid_at`, `shipped_at`, `delivered_at`, `cancelled_at`), `tracking_number`, `tracking_carrier`, `refunded_total`, and an `events` audit timeline. Staff users see all orders; ship/deliver/cancel (staff path) are also available as Django admin actions.
 
 ### Coupons
 
 | Method | Path                  | Auth | Purpose                                                                                              |
 |--------|-----------------------|------|------------------------------------------------------------------------------------------------------|
 | POST   | /api/coupons/quote/   | JWT  | Price a cart with an optional `code`; returns the breakdown (subtotal, discount, shipping, total) with `coupon_error` inline for an invalid code |
+
+### Returns
+
+| Method   | Path                           | Auth        | Purpose                                                          |
+|----------|--------------------------------|-------------|------------------------------------------------------------------|
+| GET/POST | /api/returns/                  | JWT         | List my returns / request a return (line items + reason)         |
+| GET      | /api/returns/{id}/             | owner/staff | Return detail                                                    |
+| POST     | /api/returns/{id}/approve/     | staff       | requested → approved                                             |
+| POST     | /api/returns/{id}/reject/      | staff       | → rejected (`{staff_note}`)                                      |
+| POST     | /api/returns/{id}/receive/     | staff       | approved → received (restock)                                    |
+| POST     | /api/returns/{id}/refund/      | staff       | received → refunded (proportional, mock)                         |
+
+Return requests are accepted only on delivered orders within the return window (default 30 days, configurable via `RETURN_WINDOW_DAYS`). The refund is proportional to the line-item discount; shipping is not refunded. Quantities cannot exceed the original purchased quantity. Order status reflects `partially_refunded` or `refunded` once refunds are issued.
 
 ## Documentation
 
