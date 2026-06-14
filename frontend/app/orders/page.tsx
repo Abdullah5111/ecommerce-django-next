@@ -12,6 +12,8 @@ const STATUS_STYLES: Record<Order["status"], string> = {
   shipped: "bg-indigo-100 text-indigo-800",
   delivered: "bg-green-100 text-green-800",
   cancelled: "bg-zinc-200 text-zinc-700",
+  partially_refunded: "bg-orange-100 text-orange-800",
+  refunded: "bg-rose-100 text-rose-800",
 };
 
 function formatDate(iso: string) {
@@ -76,7 +78,9 @@ export default function OrdersPage() {
           <div key={order.id} className="bg-white border rounded-lg p-5">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <div className="font-semibold">Order #{order.id}</div>
+                <Link href={`/orders/${order.id}`} className="font-semibold hover:underline">
+                  Order #{order.id}
+                </Link>
                 <div className="text-sm text-zinc-500">{formatDate(order.created_at)}</div>
               </div>
               <span
