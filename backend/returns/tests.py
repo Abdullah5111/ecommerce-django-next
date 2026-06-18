@@ -6,7 +6,6 @@ from django.utils import timezone
 from datetime import timedelta
 from rest_framework.test import APITestCase
 
-from coupons.models import Coupon
 from orders.models import Order
 from products.models import Category, Product
 from returns.models import Return

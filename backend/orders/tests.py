@@ -5,7 +5,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
 from coupons.models import Coupon, CouponRedemption
-from orders.models import Order, OrderEvent
+from orders.models import Order
 from orders.pricing import quote
 from products.models import Category, Product
 
