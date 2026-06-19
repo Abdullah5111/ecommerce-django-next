@@ -115,6 +115,12 @@ export type ReturnRequest = {
   lines: ReturnLine[];
 };
 
+export type CartLine = { id: number; product: Product; quantity: number };
+
+export type Cart = { id: number; items: CartLine[]; total: string };
+
+export type WishlistEntry = { id: number; product: Product; created_at: string };
+
 export type Order = {
   id: number;
   status: "pending" | "paid" | "shipped" | "delivered" | "cancelled" | "partially_refunded" | "refunded";
@@ -401,6 +407,52 @@ export const api = {
     payload: { order: number; lines: { order_item: number; quantity: number; reason: ReturnReason; note?: string }[] }
   ) =>
     request<ReturnRequest>(`/returns/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    }),
+  getCart: (token: string) =>
+    request<Cart>(`/cart/`, { headers: { Authorization: `Bearer ${token}` } }),
+  addToCart: (token: string, payload: { product: number; quantity: number }) =>
+    request<Cart>(`/cart/items/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    }),
+  updateCartItem: (token: string, productId: number, quantity: number) =>
+    request<Cart>(`/cart/items/${productId}/`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ quantity }),
+    }),
+  removeCartItem: (token: string, productId: number) =>
+    request<Cart>(`/cart/items/${productId}/`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  clearCart: (token: string) =>
+    request<Cart>(`/cart/`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
+  mergeCart: (token: string, payload: { items: { product: number; quantity: number }[] }) =>
+    request<Cart>(`/cart/merge/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    }),
+  getWishlist: (token: string) =>
+    request<WishlistEntry[]>(`/wishlist/`, { headers: { Authorization: `Bearer ${token}` } }),
+  addWishlistItem: (token: string, productId: number) =>
+    request<WishlistEntry[]>(`/wishlist/items/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ product: productId }),
+    }),
+  removeWishlistItem: (token: string, productId: number) =>
+    request<WishlistEntry[]>(`/wishlist/items/${productId}/`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  mergeWishlist: (token: string, payload: { product_ids: number[] }) =>
+    request<WishlistEntry[]>(`/wishlist/merge/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),
