@@ -2,6 +2,7 @@ import Link from "next/link";
 import { api, type Product } from "@/lib/api";
 import ProductCard from "@/components/ProductCard";
 import RailCard from "@/components/RailCard";
+import RecommendedRail from "@/components/RecommendedRail";
 import SearchBar from "@/components/SearchBar";
 import Pagination from "@/components/Pagination";
 
@@ -65,6 +66,8 @@ export default async function HomePage({
     <div>
       <h1 className="text-3xl font-bold mb-6">{heading}</h1>
       <SearchBar />
+
+      <RecommendedRail />
 
       {featured.length > 0 && (
         <section className="mb-8">

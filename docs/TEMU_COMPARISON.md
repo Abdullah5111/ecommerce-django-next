@@ -17,7 +17,7 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 | Sort (price, newest, featured) | ✅ | ✅ | |
 | Featured / bestsellers / related | ✅ | ✅ | Cached endpoints |
 | Recently viewed | ✅ | ✅ | |
-| Personalized feed / recommendations | ✅ | ❌ | Only "same-category" related |
+| Personalized feed / recommendations | ✅ | ✅ | "Recommended for you" rail from purchase/wishlist/cart affinity, featured fallback |
 | Flash / lightning deals + countdowns | ✅ | ❌ | |
 | Homepage banners / carousels | ✅ | 🟡 | Featured grid only |
 | Search autocomplete / visual / voice search | ✅ | ❌ | |

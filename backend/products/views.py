@@ -157,6 +157,55 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             cache.set(cache_key, data, timeout=300)
         return Response(data)
 
+    @action(detail=False, methods=["get"], url_path="recommended")
+    def recommended(self, request):
+        """Content-based recommendations from the signed-in user's signals.
+
+        Affinity categories come from the user's purchases, wishlist, and cart;
+        we surface active products from those categories (excluding ones already
+        purchased), ranked featured-first then by rating. Guests and new users
+        with no signals fall back to top featured/rated products.
+        """
+        limit = 12
+        user = request.user
+        if user.is_authenticated:
+            # Local imports avoid a circular dependency (orders/cart/wishlist
+            # all import products at module load).
+            from cart.models import CartItem
+            from orders.models import OrderItem
+            from wishlist.models import WishlistItem
+
+            owned_ids = set(
+                OrderItem.objects.filter(order__user=user).values_list("product_id", flat=True)
+            )
+            cat_ids = set(
+                Product.objects.filter(pk__in=owned_ids).values_list("category_id", flat=True)
+            )
+            cat_ids |= set(
+                WishlistItem.objects.filter(user=user).values_list("product__category_id", flat=True)
+            )
+            cat_ids |= set(
+                CartItem.objects.filter(cart__user=user).values_list("product__category_id", flat=True)
+            )
+            if cat_ids:
+                qs = (
+                    Product.objects.filter(is_active=True, category_id__in=cat_ids)
+                    .exclude(pk__in=owned_ids)
+                    .select_related("category")
+                    .order_by("-is_featured", "-rating_avg", "-rating_count")[:limit]
+                )
+                products = list(qs)
+                if products:
+                    return Response(self.get_serializer(products, many=True).data)
+
+        # Fallback: guests, new users, or no in-category candidates left.
+        qs = (
+            Product.objects.filter(is_active=True)
+            .select_related("category")
+            .order_by("-is_featured", "-rating_avg", "-rating_count")[:limit]
+        )
+        return Response(self.get_serializer(qs, many=True).data)
+
     @action(detail=False, methods=["get"], url_path="bestsellers")
     def bestsellers(self, request):
         cache_key = "products:bestsellers:v1"

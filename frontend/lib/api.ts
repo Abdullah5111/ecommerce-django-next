@@ -313,6 +313,11 @@ export const api = {
   getRelated: (slug: string) => request<Product[]>(`/products/${slug}/related/`),
   getFeatured: () => request<Product[]>(`/products/featured/`),
   getBestsellers: () => request<Product[]>(`/products/bestsellers/`),
+  getRecommended: (token?: string) =>
+    request<Product[]>(
+      `/products/recommended/`,
+      token ? { headers: { Authorization: `Bearer ${token}` } } : {},
+    ),
   listCategories: () => request<Paginated<Category>>(`/categories/`),
   getCategoryTree: () => request<CategoryTreeNode[]>(`/categories/tree/`),
   getCategoryByPath: (path: string) =>
