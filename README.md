@@ -1,6 +1,6 @@
 # E-commerce — Django + Next.js
 
-A full-stack e-commerce app built as a portfolio piece. Django REST Framework backend, Next.js 14 (App Router) frontend, PostgreSQL, JWT auth with email verification and password reset, hierarchical categories with faceted search, server-rendered product pages with reviews and structured data, saved-address book with immutable shipping snapshots on orders, and a scale-aware data layer (DB indexes, Postgres full-text search, atomic stock decrement, cached featured/bestsellers/related endpoints). Containerised and ready to deploy to Google Cloud Run.
+A full-stack e-commerce app built as a portfolio piece. Django REST Framework backend, Next.js 14 (App Router) frontend, PostgreSQL, JWT auth with email verification and password reset, hierarchical categories with faceted search, server-rendered product pages with reviews and structured data, saved-address book with immutable shipping snapshots on orders, server-persisted cart & wishlist with guest-merge on login, personalized product recommendations, and a scale-aware data layer (DB indexes, Postgres full-text search, atomic stock decrement, cached featured/bestsellers/related endpoints). Containerised and ready to deploy to Google Cloud Run.
 
 ## Stack
 
@@ -24,6 +24,7 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - Sort: featured, newest, price ↑ / ↓
 - Search (Postgres full-text when available, icontains otherwise) scoped to category when on a category page
 - Paginated grid with shareable URLs (`?page=2&priceMin=20&inStock=true&ordering=-price`)
+- Personalized **"Recommended for you"** rail (logged-in users): products from the categories you've purchased / wishlisted / carted, ranked featured-first; guests see the Featured rail
 
 ### Product detail
 - Server-rendered with `generateMetadata` (title, description, og:image) and `schema.org Product` JSON-LD including aggregate rating
@@ -32,12 +33,12 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - Specifications table from `Product.specifications` (flat key→value)
 - Reviews block with summary number, 5-bar rating histogram, review list, and "Write a review" form (auth-gated)
 - Related products rail ("More from {category}") and recently viewed rail (localStorage)
-- Wishlist heart icon; saved items shown at `/wishlist`
+- Wishlist heart icon; saved items shown at `/wishlist` (server-backed when logged in)
 - Contextual stock urgency ("Only 3 left — order soon", "Selling fast")
 - Mobile sticky bottom-bar with quantity stepper + Add to cart
 
 ### Cart & checkout
-- Client-side cart persisted to `localStorage`
+- Server-persisted cart & wishlist for logged-in users (REST-backed, optimistic UI); guests use `localStorage` and their items **merge into the server on login** — cart quantities summed (capped at stock), wishlist unioned
 - Inline "Add to cart" with toast (no navigation)
 - Saved-address picker at checkout (default pre-selected) plus inline "use a different address" form
 - Mock checkout that creates the order and atomically decrements stock (concurrent-safe `F()` UPDATE)
@@ -73,8 +74,8 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - All product images served via `next/image` (lazy loading, responsive `sizes`, AVIF/WebP)
 
 ### Admin
-- Django admin for products, categories (hierarchy-aware), orders, users, reviews, addresses
-- Inline `ProductImage` editing on products
+- Django admin for products, categories (hierarchy-aware), orders, users, reviews, addresses, coupons, returns, carts, wishlists
+- Inline `ProductImage` editing on products; order/return transitions exposed as admin actions
 
 ## Quick start (local, with Docker)
 
@@ -143,6 +144,7 @@ npm run dev
 | GET        | /api/products/{slug}/                         | —    | Product detail (includes `specifications`, `images`, ratings)    |
 | GET        | /api/products/featured/                       | —    | Top featured (cached 5 min)                                      |
 | GET        | /api/products/bestsellers/                    | —    | Top by paid-order quantity (cached 5 min)                        |
+| GET        | /api/products/recommended/                    | —/JWT | Personalized picks from purchase/wishlist/cart affinity; featured fallback for guests/new users |
 | GET        | /api/products/{slug}/related/                 | —    | Up to 8 sibling products in same category (cached 5 min)         |
 | GET/POST   | /api/products/{slug}/reviews/                 | —/JWT | List reviews (paginated) / create one (one per user per product) |
 | GET        | /api/categories/                              | —    | Flat list                                                        |
@@ -186,6 +188,28 @@ Order detail now includes per-status timestamps (`paid_at`, `shipped_at`, `deliv
 | POST     | /api/returns/{id}/refund/      | staff       | received → refunded (proportional, mock)                         |
 
 Return requests are accepted only on delivered orders within the return window (default 30 days, configurable via `RETURN_WINDOW_DAYS`). The refund is proportional to the line-item discount; shipping is not refunded. Quantities cannot exceed the original purchased quantity. Order status reflects `partially_refunded` or `refunded` once refunds are issued.
+
+### Cart
+
+| Method | Path                            | Auth | Purpose                                                        |
+|--------|---------------------------------|------|----------------------------------------------------------------|
+| GET    | /api/cart/                      | JWT  | My cart with nested products + computed total                  |
+| DELETE | /api/cart/                      | JWT  | Clear the cart                                                 |
+| POST   | /api/cart/items/                | JWT  | Add `{product, quantity}` (increments; capped at stock)        |
+| PATCH  | /api/cart/items/{product_id}/   | JWT  | Set quantity (≤0 removes; capped at stock)                     |
+| DELETE | /api/cart/items/{product_id}/   | JWT  | Remove a line                                                  |
+| POST   | /api/cart/merge/                | JWT  | Merge a guest cart `{items:[{product, quantity}]}` — quantities **summed**, capped at stock |
+
+### Wishlist
+
+| Method | Path                              | Auth | Purpose                                                |
+|--------|-----------------------------------|------|--------------------------------------------------------|
+| GET    | /api/wishlist/                    | JWT  | My wishlist (nested products)                          |
+| POST   | /api/wishlist/items/              | JWT  | Add `{product}` (idempotent)                           |
+| DELETE | /api/wishlist/items/{product_id}/ | JWT  | Remove                                                 |
+| POST   | /api/wishlist/merge/              | JWT  | Merge a guest wishlist `{product_ids:[...]}` — **unioned** |
+
+Logged-in cart/wishlist are server-backed; guests use `localStorage` and merge into the server on login.
 
 ## Documentation
 
