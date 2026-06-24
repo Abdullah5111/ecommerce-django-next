@@ -1,6 +1,9 @@
+from django.conf import settings
 from rest_framework import mixins, permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+
+from payments import gateway
 
 from . import transitions
 from .models import Order
@@ -30,8 +33,36 @@ class OrderViewSet(
             return Response({"detail": str(exc)}, status=400)
         return Response(self.get_serializer(order).data)
 
+    @action(detail=True, methods=["post"], url_path="create-payment-intent")
+    def create_payment_intent(self, request, pk=None):
+        """Start (or resume) payment for a pending order.
+
+        Returns the Stripe client secret + publishable key for the frontend's
+        PaymentElement. In mock mode `mock` is true and the secret is a stub —
+        the frontend then confirms via the `pay` action instead of Stripe.js.
+        """
+        order = self.get_object()
+        if order.status != Order.Status.PENDING:
+            return Response({"detail": "Order is not awaiting payment."}, status=400)
+        client_secret, intent_id, mock = gateway.create_payment_intent(order)
+        if order.payment_intent_id != intent_id:
+            order.payment_intent_id = intent_id
+            order.save(update_fields=["payment_intent_id", "updated_at"])
+        return Response({
+            "client_secret": client_secret,
+            "publishable_key": settings.STRIPE_PUBLISHABLE_KEY,
+            "mock": mock,
+        })
+
     @action(detail=True, methods=["post"])
     def pay(self, request, pk=None):
+        # Mock mode confirms immediately; live mode only honors a genuinely
+        # succeeded PaymentIntent (defence in depth alongside the webhook).
+        order = self.get_object()
+        if gateway.is_live():
+            ok, detail = gateway.verify_paid(order)
+            if not ok:
+                return Response({"detail": detail}, status=400)
         return self._transition(request, transitions.mark_paid)
 
     @action(detail=True, methods=["post"])

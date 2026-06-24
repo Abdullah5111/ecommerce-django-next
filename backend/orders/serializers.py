@@ -50,12 +50,13 @@ class OrderSerializer(serializers.ModelSerializer):
             "subtotal", "discount_total", "shipping_total", "coupon_code",
             "paid_at", "shipped_at", "delivered_at", "cancelled_at",
             "tracking_number", "tracking_carrier", "refunded_total",
-            "total", "items", "events", "created_at",
+            "payment_intent_id", "total", "items", "events", "created_at",
         )
         read_only_fields = (
             "status", "subtotal", "discount_total", "shipping_total", "total",
             "paid_at", "shipped_at", "delivered_at", "cancelled_at",
-            "tracking_number", "tracking_carrier", "refunded_total", "created_at",
+            "tracking_number", "tracking_carrier", "refunded_total",
+            "payment_intent_id", "created_at",
             "ship_recipient", "ship_phone", "ship_line1", "ship_line2",
             "ship_city", "ship_state", "ship_postal_code", "ship_country",
         )

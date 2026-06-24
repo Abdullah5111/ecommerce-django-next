@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "returns",
     "cart",
     "wishlist",
+    "payments",
 ]
 
 MIDDLEWARE = [
@@ -158,3 +159,10 @@ SHIPPING_FLAT_FEE = Decimal(config("SHIPPING_FLAT_FEE", default="5.00"))
 FREE_SHIPPING_THRESHOLD = Decimal(config("FREE_SHIPPING_THRESHOLD", default="50.00"))
 
 RETURN_WINDOW_DAYS = config("RETURN_WINDOW_DAYS", default=30, cast=int)
+
+# Stripe payments. Leave the secret key blank to run checkout in mock mode
+# (the demo default — no SDK calls, no network, no keys required).
+STRIPE_SECRET_KEY = config("STRIPE_SECRET_KEY", default="")
+STRIPE_PUBLISHABLE_KEY = config("STRIPE_PUBLISHABLE_KEY", default="")
+STRIPE_WEBHOOK_SECRET = config("STRIPE_WEBHOOK_SECRET", default="")
+STRIPE_CURRENCY = config("STRIPE_CURRENCY", default="usd")

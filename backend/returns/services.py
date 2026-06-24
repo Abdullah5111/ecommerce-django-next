@@ -81,6 +81,9 @@ def refund(ret, actor=None):
     if amount > max_refundable:
         amount = max_refundable
 
+    from payments import gateway
+    refund_id = gateway.create_refund(order, amount)
+
     ret.refund_amount = amount
     ret.status = Return.Status.REFUNDED
     ret.refunded_at = timezone.now()
@@ -100,5 +103,6 @@ def refund(ret, actor=None):
         else Order.Status.PARTIALLY_REFUNDED
     )
     order.save(update_fields=["refunded_total", "status", "updated_at"])
-    log_event(order, actor, f"Return #{ret.id} refunded ${amount}", order.status)
+    suffix = f" ({refund_id})" if refund_id else ""
+    log_event(order, actor, f"Return #{ret.id} refunded ${amount}{suffix}", order.status)
     return ret

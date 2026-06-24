@@ -78,15 +78,17 @@ def cancel(order, actor=None):
     from coupons.models import CouponRedemption
     CouponRedemption.objects.filter(order=order).delete()
     update_fields = ["status", "cancelled_at", "updated_at"]
+    refund_id = ""
     if was_paid:
+        from payments import gateway
+        refund_id = gateway.create_refund(order, order.total)
         order.refunded_total = order.total
         update_fields.append("refunded_total")
     order.status = Order.Status.CANCELLED
     order.cancelled_at = timezone.now()
     order.save(update_fields=update_fields)
-    log_event(
-        order, actor,
-        "Cancelled and refunded" if was_paid else "Cancelled",
-        Order.Status.CANCELLED,
-    )
+    message = "Cancelled and refunded" if was_paid else "Cancelled"
+    if refund_id:
+        message += f" ({refund_id})"
+    log_event(order, actor, message, Order.Status.CANCELLED)
     return order
