@@ -7,6 +7,13 @@ import { auth } from "@/lib/auth";
 import { api, type Address, type AddressInput, type QuoteResult } from "@/lib/api";
 import { useToast } from "@/lib/useToast";
 import AddressForm from "@/components/AddressForm";
+import StripePaymentForm from "@/components/StripePaymentForm";
+
+type LivePayment = {
+  orderId: number;
+  clientSecret: string;
+  publishableKey: string;
+};
 
 export default function CheckoutPage() {
   const { items, total, clear } = useCart();
@@ -23,6 +30,7 @@ export default function CheckoutPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [payment, setPayment] = useState<LivePayment | null>(null);
 
   const [promoInput, setPromoInput] = useState("");
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
@@ -116,6 +124,32 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed, items.length]);
 
+  // Confirm a paid order on the backend, then finish up. In live Stripe mode
+  // this runs after the card is confirmed; in mock mode it runs immediately.
+  const finalizeOrder = async (orderId: number) => {
+    const token = auth.get();
+    if (!token) return;
+    await api.payOrder(token, orderId);
+    clear();
+    toast("Order placed", "success");
+    router.push("/");
+  };
+
+  // Kick off payment for a freshly-created order. Mock mode confirms straight
+  // away; live mode surfaces the Stripe PaymentElement.
+  const startPayment = async (token: string, orderId: number) => {
+    const intent = await api.createPaymentIntent(token, orderId);
+    if (intent.mock || !intent.publishable_key) {
+      await finalizeOrder(orderId);
+      return;
+    }
+    setPayment({
+      orderId,
+      clientSecret: intent.client_secret,
+      publishableKey: intent.publishable_key,
+    });
+  };
+
   const placeOrder = async (overrideAddressId?: number) => {
     setError(null);
     const token = auth.get();
@@ -143,10 +177,7 @@ export default function CheckoutPage() {
         items: items.map((i) => ({ product: i.product.id, quantity: i.quantity })),
         coupon_code: appliedCode ?? undefined,
       });
-      await api.payOrder(token, order.id);
-      clear();
-      toast("Order placed", "success");
-      router.push("/");
+      await startPayment(token, order.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Checkout failed");
     } finally {
@@ -168,9 +199,7 @@ export default function CheckoutPage() {
         shipping_address: guestAddress,
         items: items.map((i) => ({ product: i.product.id, quantity: i.quantity })),
       });
-      await api.payOrder(token, order.id);
-      clear();
-      router.push("/");
+      await startPayment(token, order.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Checkout failed");
     } finally {
@@ -180,6 +209,22 @@ export default function CheckoutPage() {
 
   if (authed === null) {
     return <p className="text-zinc-600">Loading…</p>;
+  }
+
+  if (payment) {
+    const amountLabel = `$${quote ? quote.grand_total : total.toFixed(2)}`;
+    return (
+      <div className="max-w-lg">
+        <h1 className="text-2xl font-bold mb-6">Payment</h1>
+        <StripePaymentForm
+          publishableKey={payment.publishableKey}
+          clientSecret={payment.clientSecret}
+          amountLabel={amountLabel}
+          onPaid={() => finalizeOrder(payment.orderId)}
+        />
+        {error && <p className="text-red-600 mt-4">{error}</p>}
+      </div>
+    );
   }
 
   return (
@@ -206,7 +251,7 @@ export default function CheckoutPage() {
             disabled={!guestAddress || items.length === 0 || loading}
             className="mt-6 w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50"
           >
-            {loading ? "Placing order…" : "Place order (mock payment)"}
+            {loading ? "Placing order…" : "Place order"}
           </button>
         </>
       ) : addresses === null ? (
@@ -348,7 +393,7 @@ export default function CheckoutPage() {
                 disabled={!selectedId || items.length === 0 || loading}
                 className="mt-6 w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50"
               >
-                {loading ? "Placing order…" : "Place order (mock payment)"}
+                {loading ? "Placing order…" : "Place order"}
               </button>
             </>
           )}

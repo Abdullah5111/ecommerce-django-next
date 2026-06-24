@@ -159,6 +159,12 @@ export type QuoteResult = {
   coupon_error: string | null;
 };
 
+export type PaymentIntentResult = {
+  client_secret: string;
+  publishable_key: string;
+  mock: boolean;
+};
+
 export type Address = {
   id: number;
   label: string;
@@ -384,6 +390,11 @@ export const api = {
     }),
   setDefaultAddress: (token: string, id: number) =>
     request<Address>(`/auth/addresses/${id}/set-default/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  createPaymentIntent: (token: string, orderId: number) =>
+    request<PaymentIntentResult>(`/orders/${orderId}/create-payment-intent/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     }),
