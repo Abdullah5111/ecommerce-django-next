@@ -35,6 +35,7 @@ backend/
 │   ├── pagination.py      # ProductCursorPagination (opt-in)
 │   └── migrations/
 ├── orders/                # Order, OrderItem + create/list/pay (with shipping snapshot)
+├── payments/              # Stripe gateway (mock fallback) + PaymentIntent action + webhook
 ├── seed.py                # idempotent hierarchical seeder + reviews + specs
 ├── Dockerfile             # python:3.12-slim + gunicorn
 └── cloudbuild.yaml        # Cloud Build pipeline to Cloud Run
@@ -206,10 +207,26 @@ cart ─► /checkout ─► fetch saved addresses
                           │
               Order serializer snapshots ship_* fields from the Address
                           │
-              POST /api/orders/{id}/pay/   (mock)
+              POST /api/orders/{id}/create-payment-intent/
+                          │
+            ┌─────────────┴─────────────┐
+        mock mode                    live mode
+            │                            │
+   POST /orders/{id}/pay/      Stripe Elements confirms card
+   (immediate confirm)                  │
+            │              ┌────────────┴────────────┐
+            │       webhook → mark_paid    POST /pay/ (verifies intent)
+            └─────────────┬─────────────┘
                           │
                  toast + clear cart + redirect home
 ```
+
+Whether a checkout is live or mock is decided server-side by the presence of
+`STRIPE_SECRET_KEY` — the `create-payment-intent` response carries a `mock` flag
+and the publishable key, so the frontend needs no Stripe config of its own. The
+webhook is the authoritative paid-signal in live mode; the synchronous `pay`
+call (which verifies the PaymentIntent actually succeeded) is a UX backstop and
+is idempotent with it.
 
 The legacy free-text `shipping_address` path on `POST /api/orders/` still works for backward compatibility, but the UI never sends it now.
 
@@ -227,7 +244,7 @@ Caching is used on `featured`, `bestsellers`, and per-product `related` (5-minut
 ## Trade-offs
 
 - **localStorage JWT** — easy demo, but XSS-vulnerable. Production should move to httpOnly cookies + same-site protection.
-- **Mock payment** — `POST /orders/{id}/pay/` just flips the order status. Stripe Checkout is a small drop-in (intent + webhook → status transition).
+- **Payments** — Stripe (test mode): a `payments` app wraps the SDK behind a gateway that **degrades to mock mode when `STRIPE_SECRET_KEY` is unset**, so the demo runs key-free. Live mode uses PaymentIntent + Elements, a signature-verified webhook for the authoritative paid signal, and real `stripe.Refund.create` on cancel/return. The SDK is imported lazily so mock paths never need it. A production hardening step is webhook event de-duplication (store processed event IDs) — today idempotency rests on the `PENDING`-only `mark_paid` guard.
 - **Stock model is single-integer** — fine for a simple catalog. Real systems need reserved-vs-available, idempotent order creation keyed by client token, and a dedicated inventory service.
 - **Denormalised ratings, kept honest by signals** — works at our scale and is testable; at very high write volumes you'd switch to an async pipeline (Celery / Pub/Sub) so the API doesn't pay the recompute cost.
 - **No variants** — `Product` is the saleable unit. Adding size/color requires a `ProductVariant` model and pushes through cart, stock, images, and order serializers.

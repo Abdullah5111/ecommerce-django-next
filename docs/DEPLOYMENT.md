@@ -58,6 +58,20 @@ echo -n "$(openssl rand -base64 48)" | gcloud secrets create django-secret --dat
 echo -n "your-db-password"            | gcloud secrets create db-password    --data-file=-
 ```
 
+**Stripe (optional).** Leave these unset and checkout runs in mock mode — fine for
+a demo. To take real (test-mode) card payments, store the keys and expose them to
+the backend service as `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, and
+`STRIPE_WEBHOOK_SECRET`:
+
+```bash
+echo -n "sk_test_..."   | gcloud secrets create stripe-secret-key     --data-file=-
+echo -n "whsec_..."     | gcloud secrets create stripe-webhook-secret --data-file=-
+# publishable key is not sensitive; pass it as a plain env var
+```
+
+Then point a Stripe webhook endpoint at `https://<backend-url>/api/payments/webhook/`
+and use its signing secret for `STRIPE_WEBHOOK_SECRET`.
+
 ## 6. Deploy backend
 
 The pipeline in [`backend/cloudbuild.yaml`](../backend/cloudbuild.yaml) builds the image and deploys to Cloud Run.
