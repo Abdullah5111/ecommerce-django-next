@@ -41,7 +41,7 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - Server-persisted cart & wishlist for logged-in users (REST-backed, optimistic UI); guests use `localStorage` and their items **merge into the server on login** — cart quantities summed (capped at stock), wishlist unioned
 - Inline "Add to cart" with toast (no navigation)
 - Saved-address picker at checkout (default pre-selected) plus inline "use a different address" form
-- Mock checkout that creates the order and atomically decrements stock (concurrent-safe `F()` UPDATE)
+- Stripe card payments (test mode): server creates a PaymentIntent, the frontend confirms via Stripe Elements, and a signature-verified webhook marks the order paid; checkout atomically decrements stock (concurrent-safe `F()` UPDATE). **Without Stripe keys it falls back to a one-click mock payment**, so the demo runs key-free
 - Orders snapshot a structured shipping address at write time — editing the saved address later doesn't mutate order history
 - Per-user order history with the structured shipping snapshot rendered per order
 - Promo codes at checkout: percent, fixed-amount, free-shipping, and buy-X-get-Y; one per order, validated and priced server-side with a live breakdown
@@ -49,7 +49,7 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 
 ### Orders & returns
 - Full order lifecycle: pay → ship (with tracking) → deliver, plus customer cancel (restock + coupon release), each recorded in a per-order audit timeline
-- Line-item returns/RMA: request specific items + reasons within a return window; staff approve → receive (restock) → refund (proportional to discount, shipping excluded, mock payment); orders reflect partial/full refunded status
+- Line-item returns/RMA: request specific items + reasons within a return window; staff approve → receive (restock) → refund (proportional to discount, shipping excluded — issued through Stripe when keys are set, mock otherwise); orders reflect partial/full refunded status
 
 ### Auth & profile
 - Register, login (by username **or** email), logout (server-side refresh-token blacklist)
@@ -115,6 +115,21 @@ cp .env.example .env.local
 npm run dev
 ```
 
+### Enabling real Stripe payments (optional)
+
+Checkout runs in **mock mode** out of the box — no keys needed. To switch on real
+card payments, set these in `backend/.env` (test-mode keys from the Stripe dashboard):
+
+```bash
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...      # from `stripe listen` or a dashboard endpoint
+```
+
+The publishable key is handed to the frontend by the API, so no frontend env is
+required. Forward webhooks locally with
+`stripe listen --forward-to localhost:8000/api/payments/webhook/`.
+
 ## API reference
 
 ### Auth
@@ -163,7 +178,9 @@ Product list query params:
 | GET    | /api/orders/                      | JWT  | List my orders (with structured shipping snapshot)                     |
 | POST   | /api/orders/                      | JWT  | Create order — body accepts `shipping_address_id` or legacy `shipping_address` text; optional `coupon_code` applies a promo; response includes `subtotal`, `discount_total`, `shipping_total`, and `coupon_code` |
 | GET    | /api/orders/{id}/                 | JWT  | Order detail                                                           |
-| POST   | /api/orders/{id}/pay/             | JWT  | Mock payment                                                           |
+| POST   | /api/orders/{id}/create-payment-intent/ | JWT  | Start payment for a pending order → `{client_secret, publishable_key, mock}` (Stripe when keyed, mock stub otherwise) |
+| POST   | /api/orders/{id}/pay/             | JWT  | Confirm payment → paid. Mock mode confirms immediately; live mode requires a succeeded PaymentIntent |
+| POST   | /api/payments/webhook/            | Stripe sig | Stripe webhook — `payment_intent.succeeded` marks the order paid (authoritative, signature-verified) |
 | POST   | /api/orders/{id}/cancel/          | owner/staff | Cancel a pending/paid order (restock + release coupon)          |
 | POST   | /api/orders/{id}/ship/            | staff | Body `{tracking_number, tracking_carrier}` → shipped              |
 | POST   | /api/orders/{id}/deliver/         | staff | shipped → delivered                                               |

@@ -59,8 +59,8 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 ## Payments
 | Sub-feature | Temu | Yours | Notes |
 |---|---|---|---|
-| Card payments | ✅ | ❌ | Checkout is mock |
-| PayPal / wallets (Apple/Google Pay) | ✅ | ❌ | |
+| Card payments | ✅ | ✅ | Stripe (test mode) — PaymentIntent + Elements + webhook; mock fallback without keys |
+| PayPal / wallets (Apple/Google Pay) | ✅ | 🟡 | Stripe `automatic_payment_methods` surfaces wallets where eligible |
 | BNPL (Klarna/Afterpay) | ✅ | ❌ | |
 | Store credit / wallet | ✅ | ❌ | |
 
@@ -71,7 +71,7 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 | Tracking number | ✅ | 🟡 | Stored/shown; no carrier-API live tracking |
 | Cancellation | ✅ | ✅ | Restock + coupon release |
 | Returns / RMA (line-item) | ✅ | ✅ | Request→approve→receive→refund |
-| Refunds | ✅ | 🟡 | Mock (no real money movement) |
+| Refunds | ✅ | ✅ | Real Stripe refunds on cancel/return when keys set; mock otherwise |
 | Order history | ✅ | ✅ | |
 | Delivery guarantee credits | ✅ | ❌ | |
 
@@ -105,17 +105,19 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 
 | Status | Count (approx) | Examples |
 |---|---|---|
-| ✅ Matched | ~28 | catalog, coupons, persistent cart/wishlist, lifecycle, returns, accounts |
-| 🟡 Partial | ~7 | tracking, refunds (mock), social proof, notifications, save-for-later |
-| ❌ Not matched | ~25 | payments, tax, variants, multi-vendor, gamification, social login, i18n, push/emails |
+| ✅ Matched | ~30 | catalog, coupons, persistent cart/wishlist, lifecycle, returns, accounts, card payments, refunds |
+| 🟡 Partial | ~7 | tracking, wallets, social proof, notifications, save-for-later |
+| ❌ Not matched | ~23 | tax, variants, multi-vendor, gamification, social login, i18n, push/emails, BNPL |
 
 ## Recommended next gaps (impact order)
 
-1. **Real payments (Stripe)** — converts both mock checkout and the mock refund path
-2. **Tax** in the totals breakdown (structure already supports it)
-3. **Product variants** (size/color/SKU)
-4. **Order-confirmation / shipping emails**
-5. **Review enhancements** (photos, verified-purchase badge, helpful votes)
+1. **Tax** in the totals breakdown (structure already supports it)
+2. **Product variants** (size/color/SKU)
+3. **Order-confirmation / shipping emails**
+4. **Review enhancements** (photos, verified-purchase badge, helpful votes)
+
+~~Real payments (Stripe)~~ — done: PaymentIntent + Elements + webhook, real refunds, with a
+keyless mock fallback for demos.
 
 Marketplace-scale items (multi-vendor, gamification, BNPL, i18n) are realistically
 out of scope for this portfolio piece.
