@@ -165,6 +165,21 @@ export type PaymentIntentResult = {
   mock: boolean;
 };
 
+export type NotificationKind =
+  | "order_paid" | "order_shipped" | "order_delivered" | "order_cancelled" | "order_refunded";
+
+export type AppNotification = {
+  id: number;
+  kind: NotificationKind;
+  title: string;
+  body: string;
+  order: number | null;
+  is_read: boolean;
+  created_at: string;
+};
+
+export type PushConfig = { enabled: boolean; public_key: string };
+
 export type Address = {
   id: number;
   label: string;
@@ -472,6 +487,37 @@ export const api = {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),
+    }),
+  listNotifications: (token: string) =>
+    request<Paginated<AppNotification>>(`/notifications/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  unreadNotificationCount: (token: string) =>
+    request<{ unread: number }>(`/notifications/unread_count/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  markNotificationRead: (token: string, id: number) =>
+    request<AppNotification>(`/notifications/${id}/read/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  markAllNotificationsRead: (token: string) =>
+    request<{ marked_read: number }>(`/notifications/read-all/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  getPushConfig: () => request<PushConfig>(`/push/config/`, {}),
+  subscribePush: (token: string, subscription: PushSubscriptionJSON) =>
+    request<{ subscribed: boolean }>(`/push/subscribe/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(subscription),
+    }),
+  unsubscribePush: (token: string, endpoint: string) =>
+    request<unknown>(`/push/subscribe/`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ endpoint }),
     }),
   me: (token: string) =>
     request<Me>(`/auth/me/`, {
