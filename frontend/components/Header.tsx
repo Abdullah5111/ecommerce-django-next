@@ -6,6 +6,7 @@ import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/useAuth";
 import { useWishlist } from "@/lib/useWishlist";
 import MegaMenu from "@/components/MegaMenu";
+import NotificationBell from "@/components/NotificationBell";
 
 export default function Header() {
   const { items } = useCart();
@@ -44,6 +45,7 @@ export default function Header() {
           </Link>
           {loading ? null : user ? (
             <div className="flex items-center gap-3">
+              <NotificationBell />
               <Link href="/account" className="text-zinc-600 hover:underline">Hi, {user.username}</Link>
               <button
                 onClick={handleLogout}
