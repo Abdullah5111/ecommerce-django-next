@@ -7,6 +7,7 @@ import { api, type AppNotification, type NotificationKind } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/lib/useToast";
+import PushToggle from "@/components/PushToggle";
 
 const ICONS: Record<NotificationKind, string> = {
   order_paid: "✅",
@@ -91,11 +92,14 @@ export default function NotificationsPage() {
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Notifications</h1>
-        {unread > 0 && (
-          <button onClick={markAllRead} className="text-sm text-blue-600 hover:underline">
-            Mark all read
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <PushToggle />
+          {unread > 0 && (
+            <button onClick={markAllRead} className="text-sm text-blue-600 hover:underline">
+              Mark all read
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <p className="text-red-600 mb-4">{error}</p>}
