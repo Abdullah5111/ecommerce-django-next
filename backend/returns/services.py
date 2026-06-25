@@ -105,4 +105,8 @@ def refund(ret, actor=None):
     order.save(update_fields=["refunded_total", "status", "updated_at"])
     suffix = f" ({refund_id})" if refund_id else ""
     log_event(order, actor, f"Return #{ret.id} refunded ${amount}{suffix}", order.status)
+
+    from notifications.models import Notification
+    from notifications.service import notify_order
+    transaction.on_commit(lambda: notify_order(order, Notification.Kind.ORDER_REFUNDED))
     return ret

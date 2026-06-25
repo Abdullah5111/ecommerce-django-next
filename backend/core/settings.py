@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "cart",
     "wishlist",
     "payments",
+    "notifications",
 ]
 
 MIDDLEWARE = [
@@ -166,3 +167,10 @@ STRIPE_SECRET_KEY = config("STRIPE_SECRET_KEY", default="")
 STRIPE_PUBLISHABLE_KEY = config("STRIPE_PUBLISHABLE_KEY", default="")
 STRIPE_WEBHOOK_SECRET = config("STRIPE_WEBHOOK_SECRET", default="")
 STRIPE_CURRENCY = config("STRIPE_CURRENCY", default="usd")
+
+# Web Push (VAPID). Leave the keys blank to disable browser push — the in-app
+# notification center and emails still work; the subscribe UI is just hidden.
+# Generate a keypair with: python -m py_vapid --gen  (or the `vapid` CLI).
+VAPID_PUBLIC_KEY = config("VAPID_PUBLIC_KEY", default="")
+VAPID_PRIVATE_KEY = config("VAPID_PRIVATE_KEY", default="")
+VAPID_ADMIN_EMAIL = config("VAPID_ADMIN_EMAIL", default="admin@example.com")

@@ -29,6 +29,25 @@ def log_event(order, actor, message, to_status=""):
     OrderEvent.objects.create(order=order, actor=actor, message=message, to_status=to_status)
 
 
+def _notify(order, key):
+    """Queue a user notification for after the transaction commits.
+
+    `key` is a short order-event name; deferring to on_commit guarantees we
+    never notify on a rolled-back transition.
+    """
+    from notifications.models import Notification
+    from notifications.service import notify_order
+
+    kind = {
+        "paid": Notification.Kind.ORDER_PAID,
+        "shipped": Notification.Kind.ORDER_SHIPPED,
+        "delivered": Notification.Kind.ORDER_DELIVERED,
+        "cancelled": Notification.Kind.ORDER_CANCELLED,
+        "refunded": Notification.Kind.ORDER_REFUNDED,
+    }[key]
+    transaction.on_commit(lambda: notify_order(order, kind))
+
+
 @transaction.atomic
 def mark_paid(order, actor=None):
     order = Order.objects.select_for_update().get(pk=order.pk)
@@ -37,6 +56,7 @@ def mark_paid(order, actor=None):
     order.paid_at = timezone.now()
     order.save(update_fields=["status", "paid_at", "updated_at"])
     log_event(order, actor, "Payment received", Order.Status.PAID)
+    _notify(order, "paid")
     return order
 
 
@@ -54,6 +74,7 @@ def ship(order, actor=None, tracking_number="", tracking_carrier=""):
     detail = " via " + tracking_carrier if tracking_carrier else ""
     detail += f" ({tracking_number})" if tracking_number else ""
     log_event(order, actor, ("Shipped" + detail).strip(), Order.Status.SHIPPED)
+    _notify(order, "shipped")
     return order
 
 
@@ -65,6 +86,7 @@ def deliver(order, actor=None):
     order.delivered_at = timezone.now()
     order.save(update_fields=["status", "delivered_at", "updated_at"])
     log_event(order, actor, "Delivered", Order.Status.DELIVERED)
+    _notify(order, "delivered")
     return order
 
 
@@ -91,4 +113,5 @@ def cancel(order, actor=None):
     if refund_id:
         message += f" ({refund_id})"
     log_event(order, actor, message, Order.Status.CANCELLED)
+    _notify(order, "cancelled")
     return order
