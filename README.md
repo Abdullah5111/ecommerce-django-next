@@ -1,6 +1,6 @@
 # E-commerce — Django + Next.js
 
-A full-stack e-commerce app built as a portfolio piece. Django REST Framework backend, Next.js 14 (App Router) frontend, PostgreSQL, JWT auth with email verification and password reset, hierarchical categories with faceted search, server-rendered product pages with reviews and structured data, saved-address book with immutable shipping snapshots on orders, server-persisted cart & wishlist with guest-merge on login, personalized product recommendations, and a scale-aware data layer (DB indexes, Postgres full-text search, atomic stock decrement, cached featured/bestsellers/related endpoints). Containerised and ready to deploy to Google Cloud Run.
+A full-stack e-commerce app built as a portfolio piece. Django REST Framework backend, Next.js 14 (App Router) frontend, PostgreSQL, JWT auth with email verification and password reset, hierarchical categories with faceted search, server-rendered product pages with reviews and structured data, saved-address book with immutable shipping snapshots on orders, server-persisted cart & wishlist with guest-merge on login, personalized product recommendations, Stripe payments, multi-channel order notifications (in-app, email, web push), and a scale-aware data layer (DB indexes, Postgres full-text search, atomic stock decrement, cached featured/bestsellers/related endpoints). Containerised and ready to deploy to Google Cloud Run.
 
 ## Stack
 
@@ -51,6 +51,13 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - Full order lifecycle: pay → ship (with tracking) → deliver, plus customer cancel (restock + coupon release), each recorded in a per-order audit timeline
 - Line-item returns/RMA: request specific items + reasons within a return window; staff approve → receive (restock) → refund (proportional to discount, shipping excluded — issued through Stripe when keys are set, mock otherwise); orders reflect partial/full refunded status
 
+### Notifications & alerts
+- Every order lifecycle event (paid, shipped, delivered, cancelled, refunded) fans out to three channels from one `notify()` call: an in-app notification row, an email, and a browser push
+- **In-app notification center**: a header bell with an unread badge (polled) and dropdown, plus a full feed at `/account/notifications` with mark-read / mark-all-read
+- **Email**: order-confirmation and shipping notifications (with tracking) on the existing email backend — console in dev, SMTP via env in prod
+- **Web Push** (VAPID + service worker): opt-in toggle; works with the tab closed. **Disabled gracefully without VAPID keys** — the in-app center and emails still work, the subscribe UI just hides
+- Notifications fire from `transaction.on_commit`, so a rolled-back transition never sends a false alert
+
 ### Auth & profile
 - Register, login (by username **or** email), logout (server-side refresh-token blacklist)
 - JWT with auto-refresh on 401 and global redirect when both tokens expire
@@ -74,7 +81,7 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - All product images served via `next/image` (lazy loading, responsive `sizes`, AVIF/WebP)
 
 ### Admin
-- Django admin for products, categories (hierarchy-aware), orders, users, reviews, addresses, coupons, returns, carts, wishlists
+- Django admin for products, categories (hierarchy-aware), orders, users, reviews, addresses, coupons, returns, carts, wishlists, notifications, push subscriptions
 - Inline `ProductImage` editing on products; order/return transitions exposed as admin actions
 
 ## Quick start (local, with Docker)
@@ -129,6 +136,23 @@ STRIPE_WEBHOOK_SECRET=whsec_...      # from `stripe listen` or a dashboard endpo
 The publishable key is handed to the frontend by the API, so no frontend env is
 required. Forward webhooks locally with
 `stripe listen --forward-to localhost:8000/api/payments/webhook/`.
+
+### Enabling browser push (optional)
+
+In-app notifications and emails work with no setup. To also send **Web Push**
+(browser notifications with the tab closed), generate a VAPID keypair and set it
+in `backend/.env`:
+
+```bash
+python -m py_vapid --gen          # writes private_key.pem / public_key.pem
+# put the base64 keys (urlsafe) into:
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_ADMIN_EMAIL=you@example.com
+```
+
+The public key is served to the frontend via `/api/push/config/`; the subscribe
+toggle then appears at `/account/notifications`. Without keys, push stays hidden.
 
 ## API reference
 
@@ -227,6 +251,18 @@ Return requests are accepted only on delivered orders within the return window (
 | POST   | /api/wishlist/merge/              | JWT  | Merge a guest wishlist `{product_ids:[...]}` — **unioned** |
 
 Logged-in cart/wishlist are server-backed; guests use `localStorage` and merge into the server on login.
+
+### Notifications & push
+
+| Method | Path                                   | Auth | Purpose                                              |
+|--------|----------------------------------------|------|------------------------------------------------------|
+| GET    | /api/notifications/                    | JWT  | My notifications (paginated, newest first)           |
+| GET    | /api/notifications/unread_count/       | JWT  | `{unread}` count for the header bell                 |
+| POST   | /api/notifications/{id}/read/          | JWT  | Mark one read                                        |
+| POST   | /api/notifications/read-all/           | JWT  | Mark all read                                        |
+| GET    | /api/push/config/                      | —    | `{enabled, public_key}` — VAPID key for subscribing  |
+| POST   | /api/push/subscribe/                   | JWT  | Register a browser `PushSubscription` (upsert)       |
+| DELETE | /api/push/subscribe/                   | JWT  | Remove a subscription by `{endpoint}`                |
 
 ## Documentation
 

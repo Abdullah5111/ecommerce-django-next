@@ -36,6 +36,7 @@ backend/
 │   └── migrations/
 ├── orders/                # Order, OrderItem + create/list/pay (with shipping snapshot)
 ├── payments/              # Stripe gateway (mock fallback) + PaymentIntent action + webhook
+├── notifications/         # in-app feed + email + Web Push fan-out on order events
 ├── seed.py                # idempotent hierarchical seeder + reviews + specs
 ├── Dockerfile             # python:3.12-slim + gunicorn
 └── cloudbuild.yaml        # Cloud Build pipeline to Cloud Run
@@ -245,6 +246,7 @@ Caching is used on `featured`, `bestsellers`, and per-product `related` (5-minut
 
 - **localStorage JWT** — easy demo, but XSS-vulnerable. Production should move to httpOnly cookies + same-site protection.
 - **Payments** — Stripe (test mode): a `payments` app wraps the SDK behind a gateway that **degrades to mock mode when `STRIPE_SECRET_KEY` is unset**, so the demo runs key-free. Live mode uses PaymentIntent + Elements, a signature-verified webhook for the authoritative paid signal, and real `stripe.Refund.create` on cancel/return. The SDK is imported lazily so mock paths never need it. A production hardening step is webhook event de-duplication (store processed event IDs) — today idempotency rests on the `PENDING`-only `mark_paid` guard.
+- **Notifications** — order transitions call `notifications.service.notify_order()` from `transaction.on_commit`, so an alert is only sent after the status change durably commits (never on rollback). One `notify()` fans out to three channels: an in-app `Notification` row, an email, and Web Push. Email and push are best-effort — a failure never breaks the transition. Web Push uses VAPID and **degrades to a no-op when keys are unset** (`pywebpush` imported lazily); the in-app feed + emails still work. Synchronous (in-request) fan-out is fine at this scale; a queue (Celery / Pub/Sub) is the natural step when push fan-out grows or third-party latency matters.
 - **Stock model is single-integer** — fine for a simple catalog. Real systems need reserved-vs-available, idempotent order creation keyed by client token, and a dedicated inventory service.
 - **Denormalised ratings, kept honest by signals** — works at our scale and is testable; at very high write volumes you'd switch to an async pipeline (Celery / Pub/Sub) so the API doesn't pay the recompute cost.
 - **No variants** — `Product` is the saleable unit. Adding size/color requires a `ProductVariant` model and pushes through cart, stock, images, and order serializers.

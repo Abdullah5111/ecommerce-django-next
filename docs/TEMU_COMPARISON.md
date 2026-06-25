@@ -85,14 +85,14 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 | Phone verification | ✅ | ✅ | OTP flow |
 | Wishlist / favorites | ✅ | ✅ | Server-backed |
 | Social login (Google/Apple/FB) | ✅ | ❌ | |
-| Notification center | ✅ | 🟡 | Preferences page is a stub |
+| Notification center | ✅ | ✅ | In-app feed + header bell with unread badge; per-event notifications |
 
 ## Engagement, marketplace & platform
 | Sub-feature | Temu | Yours | Notes |
 |---|---|---|---|
 | Transactional emails (verify/reset) | ✅ | ✅ | |
-| Order-confirmation / shipping emails | ✅ | ❌ | |
-| Push notifications | ✅ | ❌ | |
+| Order-confirmation / shipping emails | ✅ | ✅ | Emails on every lifecycle event (paid/shipped/delivered/cancelled/refunded) |
+| Push notifications | ✅ | ✅ | Web Push (VAPID + service worker); graceful no-op without keys |
 | Referral / affiliate program | ✅ | ❌ | |
 | Multi-vendor marketplace + seller storefronts | ✅ | ❌ | Single-store |
 | Group buying / social feed | ✅ | ❌ | |
@@ -105,19 +105,20 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 
 | Status | Count (approx) | Examples |
 |---|---|---|
-| ✅ Matched | ~30 | catalog, coupons, persistent cart/wishlist, lifecycle, returns, accounts, card payments, refunds |
-| 🟡 Partial | ~7 | tracking, wallets, social proof, notifications, save-for-later |
-| ❌ Not matched | ~23 | tax, variants, multi-vendor, gamification, social login, i18n, push/emails, BNPL |
+| ✅ Matched | ~33 | catalog, coupons, cart/wishlist, lifecycle, returns, accounts, card payments, refunds, notifications, order emails, web push |
+| 🟡 Partial | ~6 | tracking, wallets, social proof, save-for-later |
+| ❌ Not matched | ~21 | tax, variants, multi-vendor, gamification, social login, i18n, BNPL |
 
 ## Recommended next gaps (impact order)
 
 1. **Tax** in the totals breakdown (structure already supports it)
 2. **Product variants** (size/color/SKU)
-3. **Order-confirmation / shipping emails**
-4. **Review enhancements** (photos, verified-purchase badge, helpful votes)
+3. **Review enhancements** (photos, verified-purchase badge, helpful votes)
 
-~~Real payments (Stripe)~~ — done: PaymentIntent + Elements + webhook, real refunds, with a
-keyless mock fallback for demos.
+Recently shipped:
+- ~~Real payments (Stripe)~~ — PaymentIntent + Elements + webhook, real refunds, keyless mock fallback.
+- ~~Order-confirmation / shipping emails~~ — emails on every order lifecycle event.
+- ~~Push notifications~~ — in-app notification center + bell, plus Web Push (VAPID), keyless-disabled by default.
 
 Marketplace-scale items (multi-vendor, gamification, BNPL, i18n) are realistically
 out of scope for this portfolio piece.
