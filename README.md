@@ -40,6 +40,7 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 ### Cart & checkout
 - Server-persisted cart & wishlist for logged-in users (REST-backed, optimistic UI); guests use `localStorage` and their items **merge into the server on login** — cart quantities summed (capped at stock), wishlist unioned
 - Inline "Add to cart" with toast (no navigation)
+- **Save for later**: move a cart line into a saved (wishlist-backed) section and move it back with "Move to cart" — right on the cart page
 - Saved-address picker at checkout (default pre-selected) plus inline "use a different address" form
 - Stripe card payments (test mode): server creates a PaymentIntent, the frontend confirms via Stripe Elements, and a signature-verified webhook marks the order paid; checkout atomically decrements stock (concurrent-safe `F()` UPDATE). **Without Stripe keys it falls back to a one-click mock payment**, so the demo runs key-free
 - Orders snapshot a structured shipping address at write time — editing the saved address later doesn't mutate order history

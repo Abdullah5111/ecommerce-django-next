@@ -52,7 +52,7 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 | Address book | ✅ | ✅ | |
 | Order summary (subtotal/discount/shipping/total) | ✅ | ✅ | |
 | Guest cart | ✅ | ✅ | localStorage, merges on login |
-| Save for later | ✅ | 🟡 | Wishlist covers part of this |
+| Save for later | ✅ | ✅ | "Save for later" on cart lines ↔ "Move to cart" from a saved section (wishlist-backed) |
 | Tax in totals | ✅ | ❌ | Explicitly deferred |
 | Express / one-click checkout | ✅ | ❌ | |
 
@@ -105,8 +105,8 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 
 | Status | Count (approx) | Examples |
 |---|---|---|
-| ✅ Matched | ~33 | catalog, coupons, cart/wishlist, lifecycle, returns, accounts, card payments, refunds, notifications, order emails, web push |
-| 🟡 Partial | ~6 | tracking, wallets, social proof, save-for-later |
+| ✅ Matched | ~34 | catalog, coupons, cart/wishlist, save-for-later, lifecycle, returns, accounts, card payments, refunds, notifications, order emails, web push |
+| 🟡 Partial | ~5 | tracking, wallets, social proof, homepage banners |
 | ❌ Not matched | ~21 | tax, variants, multi-vendor, gamification, social login, i18n, BNPL |
 
 ## Recommended next gaps (impact order)
