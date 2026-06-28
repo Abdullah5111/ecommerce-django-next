@@ -28,7 +28,7 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 | Image gallery + lightbox | ✅ | ✅ | |
 | Specifications table | ✅ | ✅ | |
 | Ratings + reviews | ✅ | ✅ | Histogram + write-review |
-| Stock urgency / social proof ("X left") | ✅ | 🟡 | Stock-urgency hints; no "X sold / X viewing" |
+| Stock urgency / social proof ("X left") | ✅ | ✅ | "X sold" from order data + stock-urgency hints; no live "X viewing" |
 | Variants (size/color/SKU) | ✅ | ❌ | Single price/stock per product |
 | Product video | ✅ | ❌ | |
 | Photo/video reviews | ✅ | ❌ | Text reviews only |
@@ -105,8 +105,8 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 
 | Status | Count (approx) | Examples |
 |---|---|---|
-| ✅ Matched | ~34 | catalog, coupons, cart/wishlist, save-for-later, lifecycle, returns, accounts, card payments, refunds, notifications, order emails, web push |
-| 🟡 Partial | ~5 | tracking, wallets, social proof, homepage banners |
+| ✅ Matched | ~35 | catalog, coupons, cart/wishlist, save-for-later, social proof, lifecycle, returns, accounts, payments, refunds, notifications, order emails, web push |
+| 🟡 Partial | ~4 | tracking, wallets, homepage banners |
 | ❌ Not matched | ~21 | tax, variants, multi-vendor, gamification, social login, i18n, BNPL |
 
 ## Recommended next gaps (impact order)

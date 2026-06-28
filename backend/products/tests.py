@@ -11,6 +11,58 @@ from wishlist.models import WishlistItem
 User = get_user_model()
 
 
+class SoldCountTests(APITestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()  # bestsellers caches its response; isolate from other tests
+        self.cat = Category.objects.create(name="Gear")
+        self.widget = Product.objects.create(
+            name="Widget", price=Decimal("10"), stock=100, category=self.cat
+        )
+        self.user = User.objects.create_user(
+            username="u", email="u@example.com", password="pw-123456"
+        )
+
+    def _sale(self, status, qty):
+        order = Order.objects.create(user=self.user, shipping_address="x", status=status)
+        OrderItem.objects.create(
+            order=order, product=self.widget, quantity=qty, unit_price=self.widget.price
+        )
+
+    def _sold_count(self):
+        res = self.client.get(f"/api/products/{self.widget.slug}/")
+        self.assertEqual(res.status_code, 200)
+        return res.data["sold_count"]
+
+    def test_zero_when_no_sales(self):
+        self.assertEqual(self._sold_count(), 0)
+
+    def test_counts_paid_shipped_delivered_and_refunded(self):
+        self._sale(Order.Status.PAID, 2)
+        self._sale(Order.Status.SHIPPED, 3)
+        self._sale(Order.Status.DELIVERED, 1)
+        self._sale(Order.Status.PARTIALLY_REFUNDED, 1)
+        self.assertEqual(self._sold_count(), 7)
+
+    def test_excludes_pending_and_cancelled(self):
+        self._sale(Order.Status.PAID, 4)
+        self._sale(Order.Status.PENDING, 5)
+        self._sale(Order.Status.CANCELLED, 6)
+        self.assertEqual(self._sold_count(), 4)
+
+    def test_bestsellers_ranks_by_units_sold(self):
+        hot = Product.objects.create(
+            name="Hot", price=Decimal("10"), stock=100, category=self.cat
+        )
+        order = Order.objects.create(
+            user=self.user, shipping_address="x", status=Order.Status.DELIVERED
+        )
+        OrderItem.objects.create(order=order, product=hot, quantity=50, unit_price=hot.price)
+        res = self.client.get("/api/products/bestsellers/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data[0]["id"], hot.id)
+
+
 class RecommendedTests(APITestCase):
     def setUp(self):
         self.electronics = Category.objects.create(name="Electronics")

@@ -6,6 +6,7 @@ import { useCart } from "@/lib/cart";
 import { useToast } from "@/lib/useToast";
 import { useWishlist } from "@/lib/useWishlist";
 import RatingStars from "@/components/RatingStars";
+import { formatSold } from "@/lib/format";
 
 function HeartIcon({ filled }: { filled: boolean }) {
   return (
@@ -69,6 +70,12 @@ export default function PurchasePanel({ product }: { product: Product }) {
       {product.rating_count > 0 && (
         <div className="mt-2">
           <RatingStars value={product.rating_avg} count={product.rating_count} size="md" />
+        </div>
+      )}
+
+      {typeof product.sold_count === "number" && product.sold_count > 0 && (
+        <div className="mt-1 text-sm text-zinc-500">
+          {formatSold(product.sold_count)} sold
         </div>
       )}
 

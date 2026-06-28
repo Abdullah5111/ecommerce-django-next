@@ -63,12 +63,13 @@ class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     is_on_sale = serializers.BooleanField(read_only=True)
     discount_percent = serializers.IntegerField(read_only=True)
+    sold_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = (
             "id", "name", "slug", "description", "price", "compare_at_price",
-            "rating_avg", "rating_count", "stock",
+            "rating_avg", "rating_count", "stock", "sold_count",
             "image_url", "images", "is_on_sale", "discount_percent",
             "is_active", "is_featured", "specifications",
             "category", "category_id",
@@ -78,6 +79,12 @@ class ProductSerializer(serializers.ModelSerializer):
             "slug", "created_at", "updated_at",
             "rating_avg", "rating_count", "specifications",
         )
+
+    def get_sold_count(self, obj):
+        # Present only where the queryset annotated it (product list/detail,
+        # featured, related, bestsellers). Null elsewhere (cart, orders, etc.),
+        # which the frontend treats as "hide the badge".
+        return getattr(obj, "sold_count", None)
 
 
 class ReviewSerializer(serializers.ModelSerializer):

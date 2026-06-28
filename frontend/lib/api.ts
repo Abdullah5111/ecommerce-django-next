@@ -56,6 +56,7 @@ export type Product = {
   compare_at_price: string | null;
   rating_avg: string;
   rating_count: number;
+  sold_count?: number | null;
   images: ProductImage[];
   is_on_sale: boolean;
   discount_percent: number;

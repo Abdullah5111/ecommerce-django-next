@@ -35,6 +35,7 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - Related products rail ("More from {category}") and recently viewed rail (localStorage)
 - Wishlist heart icon; saved items shown at `/wishlist` (server-backed when logged in)
 - Contextual stock urgency ("Only 3 left — order soon", "Selling fast")
+- **"X sold" social proof** on product cards and detail, aggregated from real order data (paid-and-not-cancelled), compacted as `1.2k sold`; also powers the bestsellers ranking
 - Mobile sticky bottom-bar with quantity stepper + Add to cart
 
 ### Cart & checkout

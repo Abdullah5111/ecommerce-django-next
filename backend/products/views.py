@@ -16,6 +16,17 @@ from .serializers import (
     ReviewSerializer,
 )
 
+# Order statuses that count as a completed sale (an order that was paid and not
+# cancelled — cancellation restocks, so it must not count). Used for "X sold".
+SOLD_STATUSES = ("paid", "shipped", "delivered", "partially_refunded", "refunded")
+
+
+def _sold_annotation():
+    return Coalesce(
+        Sum("orderitem__quantity", filter=Q(orderitem__order__status__in=SOLD_STATUSES)),
+        0,
+    )
+
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Category.objects.all()
@@ -93,7 +104,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
                     .filter(rank__gt=0)
                     .order_by("-rank")
                 )
-        return qs
+        return qs.annotate(sold_count=_sold_annotation())
 
     @action(detail=False, methods=["get"], url_path="featured")
     def featured(self, request):
@@ -211,19 +222,8 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         cache_key = "products:bestsellers:v1"
         data = cache.get(cache_key)
         if data is None:
-            qs = (
-                self.get_queryset()
-                .annotate(
-                    sales=Coalesce(
-                        Sum(
-                            "orderitem__quantity",
-                            filter=Q(orderitem__order__status="paid"),
-                        ),
-                        0,
-                    )
-                )
-                .order_by("-sales", "-created_at")[:12]
-            )
+            # get_queryset already annotates sold_count for every product.
+            qs = self.get_queryset().order_by("-sold_count", "-created_at")[:12]
             data = self.get_serializer(qs, many=True).data
             cache.set(cache_key, data, timeout=300)
         return Response(data)

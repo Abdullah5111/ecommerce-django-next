@@ -6,6 +6,7 @@ import type { Product } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { useToast } from "@/lib/useToast";
 import RatingStars from "./RatingStars";
+import { formatSold } from "@/lib/format";
 
 function Badge({
   children,
@@ -144,6 +145,9 @@ export default function ProductCard({ product }: { product: Product }) {
           <div className="mt-1">
             <RatingStars value={product.rating_avg} count={product.rating_count} />
           </div>
+        )}
+        {typeof product.sold_count === "number" && product.sold_count > 0 && (
+          <div className="mt-0.5 text-xs text-zinc-500">{formatSold(product.sold_count)} sold</div>
         )}
         <div className="mt-2 font-semibold flex items-baseline gap-2">
           {product.is_on_sale && product.compare_at_price ? (
