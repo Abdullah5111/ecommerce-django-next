@@ -1,5 +1,6 @@
 import hmac
 import logging
+import re
 import secrets
 
 from django.conf import settings
@@ -16,6 +17,7 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import Address
@@ -112,6 +114,68 @@ class GoogleConfigView(APIView):
         from . import google
 
         return Response({"enabled": google.is_enabled(), "client_id": google.client_id()})
+
+
+def _unique_username(base):
+    base = re.sub(r"[^a-zA-Z0-9_.-]", "", base) or "user"
+    username = base[:140]
+    n = 1
+    while User.objects.filter(username=username).exists():
+        n += 1
+        username = f"{base[:135]}{n}"
+    return username
+
+
+def _get_or_link_google_user(claims):
+    """Find a user by email (linking an existing password account) or create one.
+
+    Google has verified the email, so we trust it: a returning password user with
+    the same email is logged in, and new users get an unusable password (they sign
+    in via Google, or set one through password reset).
+    """
+    email = claims["email"]
+    user = User.objects.filter(email__iexact=email).first()
+    if user is not None:
+        if not user.email_verified:
+            user.email_verified = True
+            user.save(update_fields=["email_verified"])
+        return user
+
+    user = User.objects.create(
+        username=_unique_username(email.split("@")[0]),
+        email=email,
+        first_name=(claims.get("given_name") or "")[:150],
+        last_name=(claims.get("family_name") or "")[:150],
+        display_name=(claims.get("name") or "")[:60],
+        email_verified=True,
+    )
+    user.set_unusable_password()
+    user.save(update_fields=["password"])
+    return user
+
+
+class GoogleLoginView(APIView):
+    """Exchange a verified Google ID token for our own JWT pair."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        from . import google
+
+        credential = request.data.get("credential") or request.data.get("id_token") or ""
+        try:
+            claims = google.verify_id_token(credential)
+        except google.GoogleAuthError as exc:
+            status_code = (
+                status.HTTP_503_SERVICE_UNAVAILABLE
+                if not google.is_enabled()
+                else status.HTTP_400_BAD_REQUEST
+            )
+            return Response({"detail": str(exc)}, status=status_code)
+
+        user = _get_or_link_google_user(claims)
+        refresh = RefreshToken.for_user(user)
+        return Response({"access": str(refresh.access_token), "refresh": str(refresh)})
 
 
 def _get_user_from_uid(uid):

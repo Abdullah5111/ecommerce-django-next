@@ -222,3 +222,58 @@ class GoogleConfigTests(APITestCase):
         res = self.client.get("/api/auth/google/config/")
         self.assertTrue(res.data["enabled"])
         self.assertEqual(res.data["client_id"], "test-client-id.apps.googleusercontent.com")
+
+
+class GoogleLoginEndpointTests(APITestCase):
+    def _post(self, credential="tok"):
+        return self.client.post("/api/auth/google/", {"credential": credential}, format="json")
+
+    def test_disabled_returns_503(self):
+        res = self._post()
+        self.assertEqual(res.status_code, 503)
+
+    @override_settings(**GOOGLE_ENABLED)
+    def test_creates_new_user_and_returns_jwt(self):
+        with patch("google.oauth2.id_token.verify_oauth2_token", return_value=VALID_CLAIMS):
+            res = self._post()
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("access", res.data)
+        self.assertIn("refresh", res.data)
+        user = User.objects.get(email="ada@example.com")
+        self.assertTrue(user.email_verified)
+        self.assertFalse(user.has_usable_password())
+        self.assertEqual(user.display_name, "Ada Lovelace")
+
+    @override_settings(**GOOGLE_ENABLED)
+    def test_links_existing_account_by_email(self):
+        existing = User.objects.create_user(
+            username="ada_pw", email="ada@example.com", password="pw-123456"
+        )
+        with patch("google.oauth2.id_token.verify_oauth2_token", return_value=VALID_CLAIMS):
+            res = self._post()
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(User.objects.filter(email__iexact="ada@example.com").count(), 1)
+        existing.refresh_from_db()
+        self.assertTrue(existing.email_verified)
+        self.assertTrue(existing.has_usable_password())  # password preserved
+
+    @override_settings(**GOOGLE_ENABLED)
+    def test_returning_google_user_is_reused(self):
+        with patch("google.oauth2.id_token.verify_oauth2_token", return_value=VALID_CLAIMS):
+            self._post()
+            self._post()
+        self.assertEqual(User.objects.filter(email__iexact="ada@example.com").count(), 1)
+
+    @override_settings(**GOOGLE_ENABLED)
+    def test_username_collision_gets_suffixed(self):
+        User.objects.create_user(username="ada", email="other@example.com", password="pw-123456")
+        with patch("google.oauth2.id_token.verify_oauth2_token", return_value=VALID_CLAIMS):
+            self._post()
+        new_user = User.objects.get(email="ada@example.com")
+        self.assertNotEqual(new_user.username, "ada")
+
+    @override_settings(**GOOGLE_ENABLED)
+    def test_invalid_credential_returns_400(self):
+        with patch("google.oauth2.id_token.verify_oauth2_token", side_effect=ValueError("bad")):
+            res = self._post("bad")
+        self.assertEqual(res.status_code, 400)
