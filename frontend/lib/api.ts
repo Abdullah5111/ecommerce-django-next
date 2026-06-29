@@ -181,6 +181,8 @@ export type AppNotification = {
 
 export type PushConfig = { enabled: boolean; public_key: string };
 
+export type GoogleConfig = { enabled: boolean; client_id: string };
+
 export type Address = {
   id: number;
   label: string;
@@ -348,6 +350,12 @@ export const api = {
     request<{ access: string; refresh: string }>(`/auth/token/`, {
       method: "POST",
       body: JSON.stringify({ username, password }),
+    }),
+  getGoogleConfig: () => request<GoogleConfig>(`/auth/google/config/`, {}),
+  googleLogin: (credential: string) =>
+    request<{ access: string; refresh: string }>(`/auth/google/`, {
+      method: "POST",
+      body: JSON.stringify({ credential }),
     }),
   register: (data: { username: string; email: string; password: string }) =>
     request<unknown>(`/auth/register/`, { method: "POST", body: JSON.stringify(data) }),
