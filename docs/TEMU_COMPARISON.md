@@ -84,7 +84,7 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 | Profile + avatar | ✅ | ✅ | |
 | Phone verification | ✅ | ✅ | OTP flow |
 | Wishlist / favorites | ✅ | ✅ | Server-backed |
-| Social login (Google/Apple/FB) | ✅ | ❌ | |
+| Social login (Google/Apple/FB) | ✅ | 🟡 | Google sign-in (ID-token verify → JWT, email-linked); Apple/FB not done |
 | Notification center | ✅ | ✅ | In-app feed + header bell with unread badge; per-event notifications |
 
 ## Engagement, marketplace & platform
@@ -106,8 +106,8 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 | Status | Count (approx) | Examples |
 |---|---|---|
 | ✅ Matched | ~35 | catalog, coupons, cart/wishlist, save-for-later, social proof, lifecycle, returns, accounts, payments, refunds, notifications, order emails, web push |
-| 🟡 Partial | ~4 | tracking, wallets, homepage banners |
-| ❌ Not matched | ~21 | tax, variants, multi-vendor, gamification, social login, i18n, BNPL |
+| 🟡 Partial | ~5 | google login (no Apple/FB), tracking, wallets, homepage banners |
+| ❌ Not matched | ~20 | tax, variants, multi-vendor, gamification, i18n, BNPL |
 
 ## Recommended next gaps (impact order)
 

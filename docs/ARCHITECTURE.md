@@ -195,6 +195,7 @@ Highlights:
 - **Refresh rotation + blacklist** — `ROTATE_REFRESH_TOKENS=True`, `BLACKLIST_AFTER_ROTATION=True`. Logout blacklists the current refresh via `TokenBlacklistView`.
 - **Auto-refresh on 401** — implemented in the `request<T>` wrapper. Existing callers don't need to know.
 - **Verification + password reset** use Django's `default_token_generator` + `urlsafe_base64_*` for stateless, signed tokens that don't need a DB row.
+- **Google sign-in** — the frontend gets a Google ID token via Google Identity Services and POSTs it to `/api/auth/google/`; `accounts/google.py` verifies the token's signature, audience, and issuer with `google-auth`, then we get-or-link a user **by verified email** and mint our own SimpleJWT pair (so the rest of the app is auth-method-agnostic). New Google users get an unusable password. Enabled only when `GOOGLE_OAUTH_CLIENT_ID` is set — the frontend feature-detects via `/api/auth/google/config/` and hides the button otherwise.
 
 ## Checkout flow
 

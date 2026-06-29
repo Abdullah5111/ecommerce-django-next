@@ -62,6 +62,7 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 
 ### Auth & profile
 - Register, login (by username **or** email), logout (server-side refresh-token blacklist)
+- **Google sign-in** (Google Identity Services): the frontend gets a Google ID token, the backend verifies it against Google's keys and issues our own JWT; accounts link by email (a Google login into an existing password account just signs in). **Hidden gracefully when no client ID is configured**
 - JWT with auto-refresh on 401 and global redirect when both tokens expire
 - Email verification (`/verify-email?uid&token`) with verified badge on the account page
 - Forgot / reset password (`/forgot-password`, `/reset-password?uid&token`) via Django's password-reset token generator
@@ -156,6 +157,20 @@ VAPID_ADMIN_EMAIL=you@example.com
 The public key is served to the frontend via `/api/push/config/`; the subscribe
 toggle then appears at `/account/notifications`. Without keys, push stays hidden.
 
+### Enabling Google sign-in (optional)
+
+Login/signup work with username + password out of the box. To add **Google
+sign-in**, create an OAuth 2.0 Client ID (Web application) in the Google Cloud
+console, add your frontend origin to *Authorized JavaScript origins*, and set it
+in `backend/.env`:
+
+```bash
+GOOGLE_OAUTH_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
+```
+
+The frontend fetches the client ID from `/api/auth/google/config/`, so there's no
+frontend env to set. Without it, the Google button simply doesn't render.
+
 ## API reference
 
 ### Auth
@@ -166,6 +181,8 @@ toggle then appears at `/account/notifications`. Without keys, push stays hidden
 | POST     | /api/auth/token/                           | —    | Login (JWT); `username` accepts username OR email |
 | POST     | /api/auth/token/refresh/                   | —    | Rotate access token (refresh tokens rotate too)   |
 | POST     | /api/auth/logout/                          | —    | Blacklist refresh token                           |
+| GET      | /api/auth/google/config/                   | —    | `{enabled, client_id}` — whether Google sign-in is on |
+| POST     | /api/auth/google/                          | —    | Exchange a Google ID token `{credential}` for our JWT pair |
 | GET/PUT/PATCH | /api/auth/me/                         | JWT  | Current user; PATCH updates editable profile fields |
 | POST/DELETE | /api/auth/me/avatar/                    | JWT  | Upload (multipart `avatar`) or remove profile photo |
 | POST     | /api/auth/phone/send-code/                 | JWT  | `{phone}` → issue a one-time verification code     |
