@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -38,6 +39,7 @@ export default function LoginPage() {
         <button className="w-full bg-black text-white py-3 rounded font-medium">Sign in</button>
       </form>
       {error && <p className="text-red-600 mt-4">{error}</p>}
+      <GoogleSignInButton next={next} />
       <p className="mt-4 text-sm">
         <Link href="/forgot-password" className="underline text-zinc-600">Forgot password?</Link>
       </p>

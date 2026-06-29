@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 function Hint({ ok, label }: { ok: boolean; label: string }) {
   return (
@@ -55,6 +56,7 @@ export default function SignupPage() {
         <button className="w-full bg-black text-white py-3 rounded font-medium">Sign up</button>
       </form>
       {error && <p className="text-red-600 mt-4">{error}</p>}
+      <GoogleSignInButton next="/" />
     </div>
   );
 }
