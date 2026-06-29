@@ -160,3 +160,65 @@ class PhoneVerificationTests(APITestCase):
         self.assertEqual(res.status_code, 400)
         self.user.refresh_from_db()
         self.assertFalse(self.user.phone_verified)
+
+
+from unittest.mock import patch
+
+from accounts import google
+
+GOOGLE_ENABLED = dict(GOOGLE_OAUTH_CLIENT_ID="test-client-id.apps.googleusercontent.com")
+
+VALID_CLAIMS = {
+    "iss": "https://accounts.google.com",
+    "email": "ada@example.com",
+    "email_verified": True,
+    "name": "Ada Lovelace",
+    "sub": "google-uid-1",
+}
+
+
+class GoogleVerifyTests(APITestCase):
+    def test_disabled_when_no_client_id(self):
+        self.assertFalse(google.is_enabled())
+        with self.assertRaises(google.GoogleAuthError):
+            google.verify_id_token("anything")
+
+    @override_settings(**GOOGLE_ENABLED)
+    def test_valid_token_returns_claims(self):
+        with patch("google.oauth2.id_token.verify_oauth2_token", return_value=VALID_CLAIMS):
+            claims = google.verify_id_token("good-token")
+        self.assertEqual(claims["email"], "ada@example.com")
+
+    @override_settings(**GOOGLE_ENABLED)
+    def test_invalid_token_raises(self):
+        with patch("google.oauth2.id_token.verify_oauth2_token", side_effect=ValueError("bad")):
+            with self.assertRaises(google.GoogleAuthError):
+                google.verify_id_token("bad-token")
+
+    @override_settings(**GOOGLE_ENABLED)
+    def test_untrusted_issuer_rejected(self):
+        bad = {**VALID_CLAIMS, "iss": "evil.example.com"}
+        with patch("google.oauth2.id_token.verify_oauth2_token", return_value=bad):
+            with self.assertRaises(google.GoogleAuthError):
+                google.verify_id_token("token")
+
+    @override_settings(**GOOGLE_ENABLED)
+    def test_unverified_email_rejected(self):
+        bad = {**VALID_CLAIMS, "email_verified": False}
+        with patch("google.oauth2.id_token.verify_oauth2_token", return_value=bad):
+            with self.assertRaises(google.GoogleAuthError):
+                google.verify_id_token("token")
+
+
+class GoogleConfigTests(APITestCase):
+    def test_config_disabled_by_default(self):
+        res = self.client.get("/api/auth/google/config/")
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data["enabled"])
+        self.assertEqual(res.data["client_id"], "")
+
+    @override_settings(**GOOGLE_ENABLED)
+    def test_config_enabled_exposes_client_id(self):
+        res = self.client.get("/api/auth/google/config/")
+        self.assertTrue(res.data["enabled"])
+        self.assertEqual(res.data["client_id"], "test-client-id.apps.googleusercontent.com")

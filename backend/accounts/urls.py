@@ -6,6 +6,7 @@ from .views import (
     AddressViewSet,
     AvatarView,
     ForgotPasswordView,
+    GoogleConfigView,
     MeView,
     PhoneSendCodeView,
     PhoneVerifyView,
@@ -27,5 +28,6 @@ urlpatterns = [
     path("reset-password/", ResetPasswordView.as_view(), name="reset_password"),
     path("phone/send-code/", PhoneSendCodeView.as_view(), name="phone_send_code"),
     path("phone/verify/", PhoneVerifyView.as_view(), name="phone_verify"),
+    path("google/config/", GoogleConfigView.as_view(), name="google_config"),
     path("", include(router.urls)),
 ]

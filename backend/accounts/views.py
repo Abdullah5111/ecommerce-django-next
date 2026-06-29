@@ -103,6 +103,17 @@ class EmailOrUsernameTokenObtainPairView(TokenObtainPairView):
     serializer_class = EmailOrUsernameTokenObtainPairSerializer
 
 
+class GoogleConfigView(APIView):
+    """Tell the frontend whether Google sign-in is available, and its client id."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        from . import google
+
+        return Response({"enabled": google.is_enabled(), "client_id": google.client_id()})
+
+
 def _get_user_from_uid(uid):
     try:
         pk = force_str(urlsafe_base64_decode(uid))
