@@ -72,6 +72,23 @@ echo -n "whsec_..."     | gcloud secrets create stripe-webhook-secret --data-fil
 Then point a Stripe webhook endpoint at `https://<backend-url>/api/payments/webhook/`
 and use its signing secret for `STRIPE_WEBHOOK_SECRET`.
 
+**Web Push (optional).** Leave unset and in-app notifications + emails still work;
+the browser-push subscribe UI just hides. To enable it, generate a VAPID keypair
+(`python -m py_vapid --gen`) and expose `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+and `VAPID_ADMIN_EMAIL` to the backend (store the private key as a secret):
+
+```bash
+echo -n "<vapid-private-key>" | gcloud secrets create vapid-private-key --data-file=-
+# public key + admin email are not sensitive; pass them as plain env vars
+```
+
+**Google sign-in (optional).** Leave unset and the Google button hides. To enable
+it, create an OAuth 2.0 Client ID (Web application) in the Google Cloud console,
+add the deployed frontend origin to *Authorized JavaScript origins*, and pass the
+client ID to the backend as `GOOGLE_OAUTH_CLIENT_ID` (not sensitive — a plain env
+var). The frontend reads it from `/api/auth/google/config/`, so no frontend env
+is needed.
+
 ## 6. Deploy backend
 
 The pipeline in [`backend/cloudbuild.yaml`](../backend/cloudbuild.yaml) builds the image and deploys to Cloud Run.
