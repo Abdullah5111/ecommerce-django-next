@@ -129,27 +129,33 @@ frontend/
 │   ├── page.tsx                          # home: featured rail + chip categories + product grid
 │   ├── products/[id]/                    # product detail — SSR + JSON-LD + tabs
 │   ├── c/[...slug]/                      # hierarchical category landing pages (catch-all)
-│   ├── cart/, checkout/                  # cart + checkout (saved-address picker)
+│   ├── cart/, checkout/                  # cart (+ save-for-later) + checkout (Stripe Elements / mock)
 │   ├── orders/                           # per-user order history (structured shipping)
 │   ├── account/                          # account hub (card grid) + shared layout
 │   ├── account/profile/                  # profile editor: avatar, name, bio, DOB, gender, phone verify
 │   ├── account/security/                 # email/phone status + change-password entry
-│   ├── account/payment/, notifications/  # roadmap stubs
+│   ├── account/notifications/            # in-app notification feed + browser-push toggle
+│   ├── account/payment/                  # roadmap stub
 │   ├── account/addresses/                # address book CRUD
 │   ├── wishlist/                         # saved-products grid
-│   ├── login/, signup/                   # auth forms (login accepts username OR email)
+│   ├── login/, signup/                   # auth forms (username/email + Google sign-in)
 │   ├── forgot-password/, reset-password/, verify-email/
 │   └── globals.css
 ├── components/
-│   ├── Header.tsx, MegaMenu.tsx          # nav (with cart + wishlist counts)
-│   ├── ProductCard.tsx, RailCard.tsx     # product surfaces
+│   ├── Header.tsx, MegaMenu.tsx          # nav (cart + wishlist counts, notification bell)
+│   ├── NotificationBell.tsx              # unread badge + dropdown (polls unread count)
+│   ├── ProductCard.tsx, RailCard.tsx     # product surfaces ("X sold" social proof)
+│   ├── RecommendedRail.tsx               # personalized rail (logged-in)
+│   ├── StripePaymentForm.tsx             # Stripe Elements card form (live mode)
+│   ├── GoogleSignInButton.tsx            # Google Identity Services button (feature-detected)
+│   ├── PushToggle.tsx                    # browser-push opt-in (hidden without VAPID)
 │   ├── Breadcrumbs.tsx, CategoryFilters.tsx, SortDropdown.tsx, ActiveFilters.tsx
 │   ├── Pagination.tsx, Skeletons.tsx
 │   ├── AddressForm.tsx
 │   ├── RatingStars.tsx, ToastContainer.tsx
 │   └── product-detail/
 │       ├── Gallery.tsx                   # thumbs + main image + lightbox
-│       ├── PurchasePanel.tsx             # qty stepper + add-to-cart + wishlist + stock urgency
+│       ├── PurchasePanel.tsx             # qty stepper + add-to-cart + wishlist + stock urgency + "X sold"
 │       ├── Tabs.tsx                      # hash-driven Description / Specifications / Reviews
 │       ├── SpecsTable.tsx
 │       ├── ReviewsSection.tsx, ReviewCta.tsx, WriteReviewForm.tsx
@@ -160,10 +166,14 @@ frontend/
     ├── auth.ts                           # access + refresh tokens in localStorage
     ├── useAuth.tsx                       # AuthProvider, fetches /me on mount
     ├── useToast.tsx                      # ToastProvider
-    ├── useWishlist.tsx                   # WishlistProvider (localStorage)
+    ├── useWishlist.tsx                   # WishlistProvider (server-backed when authed; localStorage for guests)
+    ├── push.ts                           # Web Push: service-worker register + subscribe helpers
+    ├── format.ts                         # small formatters (e.g. "1.2k sold")
     ├── recentlyViewed.ts                 # localStorage queue helper
-    └── cart.tsx                          # CartContext (persisted to localStorage)
+    └── cart.tsx                          # CartContext (server-backed when authed; localStorage for guests)
 ```
+
+A service worker at `public/sw.js` handles `push` / `notificationclick` for Web Push.
 
 URL-driven UI: filters, sort, pagination, search, and the active category all live in search params so pages remain shareable, server-rendered, and free of client-side state drift.
 
@@ -172,7 +182,7 @@ URL-driven UI: filters, sort, pagination, search, and the active category all li
 - The page is a **server component** that fetches `getProduct`, `getCategoryByPath` (for breadcrumbs ancestors), `listReviews`, and `getRelated` in parallel via `Promise.allSettled`.
 - `generateMetadata` returns `<title>`, description, and an Open Graph image from the first product image.
 - `schema.org Product` JSON-LD is embedded inline. `aggregateRating` is included only when `rating_count > 0`.
-- Interactive pieces are extracted into client islands under `components/product-detail/` (Gallery, PurchasePanel, Tabs, WriteReviewForm, etc.). Recently viewed and wishlist toggles use `localStorage` and never touch the server.
+- Interactive pieces are extracted into client islands under `components/product-detail/` (Gallery, PurchasePanel, Tabs, WriteReviewForm, etc.). Recently viewed stays in `localStorage`; the wishlist toggle is server-backed when signed in and falls back to `localStorage` for guests (merged on login).
 
 ## Auth flow
 
