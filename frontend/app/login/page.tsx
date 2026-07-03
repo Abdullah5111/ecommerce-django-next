@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
@@ -8,7 +8,7 @@ import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
 
-export default function LoginPage() {
+function LoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -47,5 +47,19 @@ export default function LoginPage() {
         No account? <Link href="/signup" className="underline">Sign up</Link>
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-sm mx-auto">
+          <h1 className="text-2xl font-bold mb-6">Login</h1>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

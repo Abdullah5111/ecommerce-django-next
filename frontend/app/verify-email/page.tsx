@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 
 type State = "verifying" | "success" | "error";
 
-export default function VerifyEmailPage() {
+function VerifyEmailInner() {
   const params = useSearchParams();
   const uid = params.get("uid") || "";
   const token = params.get("token") || "";
@@ -49,5 +49,19 @@ export default function VerifyEmailPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-sm mx-auto">
+          <h1 className="text-2xl font-bold mb-6">Email verification</h1>
+        </div>
+      }
+    >
+      <VerifyEmailInner />
+    </Suspense>
   );
 }

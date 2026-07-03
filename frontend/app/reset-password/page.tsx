@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const params = useSearchParams();
   const uid = params.get("uid") || "";
   const token = params.get("token") || "";
@@ -94,5 +94,19 @@ export default function ResetPasswordPage() {
         <Link href="/login" className="underline">Back to login</Link>
       </p>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-sm mx-auto">
+          <h1 className="text-2xl font-bold mb-6">Reset password</h1>
+        </div>
+      }
+    >
+      <ResetPasswordForm />
+    </Suspense>
   );
 }
