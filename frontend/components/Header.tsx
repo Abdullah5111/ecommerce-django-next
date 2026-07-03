@@ -38,10 +38,10 @@ export default function Header() {
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
             <span className="hidden sm:inline">Wishlist</span>
-            {wishCount > 0 && <span className="ml-1 bg-black text-white rounded-full px-2 text-xs">{wishCount}</span>}
+            {wishCount > 0 && <span className="ml-1 bg-brand text-brand-fg rounded-full px-2 text-xs">{wishCount}</span>}
           </Link>
           <Link href="/cart" className="hover:underline">
-            Cart {count > 0 && <span className="ml-1 bg-black text-white rounded-full px-2 text-xs">{count}</span>}
+            Cart {count > 0 && <span className="ml-1 bg-brand text-brand-fg rounded-full px-2 text-xs">{count}</span>}
           </Link>
           {loading ? null : user ? (
             <div className="flex items-center gap-3">

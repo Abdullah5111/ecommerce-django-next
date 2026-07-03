@@ -2,6 +2,9 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Header from "@/components/Header";
+import TopBar from "@/components/TopBar";
+import Footer from "@/components/Footer";
+import MobileTabBar from "@/components/MobileTabBar";
 import { CartProvider } from "@/lib/cart";
 import { AuthProvider } from "@/lib/useAuth";
 import { ToastProvider } from "@/lib/useToast";
@@ -23,8 +26,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <CartProvider>
             <WishlistProvider>
               <ToastProvider>
+                <TopBar />
                 <Header />
-                <main className="max-w-6xl mx-auto px-4 py-8">{children}</main>
+                <main className="max-w-6xl mx-auto px-4 py-8 min-h-[60vh] pb-24 md:pb-8">
+                  {children}
+                </main>
+                <Footer />
+                <MobileTabBar />
                 <ToastContainer />
               </ToastProvider>
             </WishlistProvider>
