@@ -111,7 +111,7 @@ export default async function CategoryPage({
       <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
         <h1 className="text-3xl font-bold">{category.name}</h1>
         <span className="text-sm text-zinc-500">
-          {products.length} product{products.length === 1 ? "" : "s"}
+          {totalCount} product{totalCount === 1 ? "" : "s"}
         </span>
       </div>
 
@@ -132,7 +132,7 @@ export default async function CategoryPage({
       )}
 
       <div className="flex flex-col md:flex-row gap-6">
-        <div className="md:w-64 shrink-0">
+        <div className="md:w-64 shrink-0 md:sticky md:top-4 md:self-start">
           <CategoryFilters />
         </div>
 
@@ -158,7 +158,7 @@ export default async function CategoryPage({
             </p>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                 {products.map((p) => (
                   <ProductCard key={p.id} product={p} />
                 ))}
