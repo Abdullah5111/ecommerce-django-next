@@ -125,8 +125,9 @@ Address book (auth):
 ```
 frontend/
 ├── app/                                  # Next.js App Router
-│   ├── layout.tsx                        # AuthProvider, CartProvider, WishlistProvider, ToastProvider
-│   ├── page.tsx                          # home: featured rail + chip categories + product grid
+│   ├── layout.tsx                        # Inter font + providers + TopBar, Footer, MobileTabBar
+│   ├── page.tsx                          # home: hero + category tiles + rails + product grid
+│   ├── loading.tsx                       # route-level skeleton on navigation
 │   ├── products/[id]/                    # product detail — SSR + JSON-LD + tabs
 │   ├── c/[...slug]/                      # hierarchical category landing pages (catch-all)
 │   ├── cart/, checkout/                  # cart (+ save-for-later) + checkout (Stripe Elements / mock)
@@ -142,9 +143,13 @@ frontend/
 │   ├── forgot-password/, reset-password/, verify-email/
 │   └── globals.css
 ├── components/
+│   ├── ui/                               # design-system primitives: Button, Badge, Price
+│   ├── TopBar.tsx, Footer.tsx           # global chrome (trust bar + footer)
+│   ├── MobileTabBar.tsx                  # mobile bottom tab nav (Home/Wishlist/Cart/Account)
+│   ├── home/                             # Hero, CategoryTiles (homepage-only)
 │   ├── Header.tsx, MegaMenu.tsx          # nav (cart + wishlist counts, notification bell)
 │   ├── NotificationBell.tsx              # unread badge + dropdown (polls unread count)
-│   ├── ProductCard.tsx, RailCard.tsx     # product surfaces ("X sold" social proof)
+│   ├── ProductCard.tsx, RailCard.tsx     # price-forward card, wishlist heart, urgency, "X sold"
 │   ├── RecommendedRail.tsx               # personalized rail (logged-in)
 │   ├── StripePaymentForm.tsx             # Stripe Elements card form (live mode)
 │   ├── GoogleSignInButton.tsx            # Google Identity Services button (feature-detected)
@@ -155,7 +160,7 @@ frontend/
 │   ├── RatingStars.tsx, ToastContainer.tsx
 │   └── product-detail/
 │       ├── Gallery.tsx                   # thumbs + main image + lightbox
-│       ├── PurchasePanel.tsx             # qty stepper + add-to-cart + wishlist + stock urgency + "X sold"
+│       ├── PurchasePanel.tsx             # buy box: dual CTA (Add/Buy now), delivery est., trust badges
 │       ├── Tabs.tsx                      # hash-driven Description / Specifications / Reviews
 │       ├── SpecsTable.tsx
 │       ├── ReviewsSection.tsx, ReviewCta.tsx, WriteReviewForm.tsx
@@ -169,9 +174,22 @@ frontend/
     ├── useWishlist.tsx                   # WishlistProvider (server-backed when authed; localStorage for guests)
     ├── push.ts                           # Web Push: service-worker register + subscribe helpers
     ├── format.ts                         # small formatters (e.g. "1.2k sold")
+    ├── cn.ts                             # tiny classnames helper
+    ├── constants.ts                      # FREE_SHIPPING_THRESHOLD (mirrors backend)
     ├── recentlyViewed.ts                 # localStorage queue helper
     └── cart.tsx                          # CartContext (server-backed when authed; localStorage for guests)
 ```
+
+### Design system
+
+Tokens live in `tailwind.config.ts` — **brand** (indigo) for CTAs/links/trust and
+**deal** (amber) for prices/%-off/urgency, plus semantic colors, `card`/`card-hover`
+shadows, and a `shimmer` keyframe. `globals.css` sets the Inter font, a consistent
+`:focus-visible` ring, and a `.skeleton` shimmer utility (reduced-motion respected).
+Three primitives in `components/ui/` keep surfaces consistent: `Button`
+(primary/secondary/ghost/deal + a `buttonClasses` helper for links), `Badge`
+(soft/solid tones), and `Price` — the single price treatment (current + struck-through
+compare-at + %-off flag).
 
 A service worker at `public/sw.js` handles `push` / `notificationclick` for Web Push.
 
