@@ -5,6 +5,8 @@ import RailCard from "@/components/RailCard";
 import RecommendedRail from "@/components/RecommendedRail";
 import SearchBar from "@/components/SearchBar";
 import Pagination from "@/components/Pagination";
+import Hero from "@/components/home/Hero";
+import CategoryTiles from "@/components/home/CategoryTiles";
 
 const PAGE_SIZE = 12;
 
@@ -61,11 +63,19 @@ export default async function HomePage({
       : "Featured products";
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const browse = !query && !category && pageNum === 1;
+  const topCategories = categories.filter((c) => c.level === 0);
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-6">{heading}</h1>
+      {browse ? (
+        <Hero />
+      ) : (
+        <h1 className="text-3xl font-bold mb-6">{heading}</h1>
+      )}
       <SearchBar />
+
+      {browse && <CategoryTiles categories={topCategories} />}
 
       <RecommendedRail />
 
@@ -80,26 +90,26 @@ export default async function HomePage({
         </section>
       )}
 
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div id="catalog" className="flex flex-wrap gap-2 mb-6 scroll-mt-4">
         <Link
           href={buildHomeHref({ search: query })}
-          className={`px-3 py-1 rounded-full text-sm border ${
-            !category ? "bg-black text-white border-black" : "bg-white hover:border-zinc-400"
+          className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+            !category
+              ? "bg-brand text-brand-fg border-brand"
+              : "bg-white border-zinc-300 hover:border-brand hover:text-brand"
           }`}
         >
           All
         </Link>
-        {categories
-          .filter((c) => c.level === 0)
-          .map((c) => (
-            <Link
-              key={c.id}
-              href={`/c/${c.full_slug}`}
-              className="px-3 py-1 rounded-full text-sm border bg-white hover:border-zinc-400"
-            >
-              {c.name}
-            </Link>
-          ))}
+        {topCategories.map((c) => (
+          <Link
+            key={c.id}
+            href={`/c/${c.full_slug}`}
+            className="px-3 py-1 rounded-full text-sm border bg-white border-zinc-300 hover:border-brand hover:text-brand transition-colors"
+          >
+            {c.name}
+          </Link>
+        ))}
       </div>
 
       {products.length === 0 ? (
