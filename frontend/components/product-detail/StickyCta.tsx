@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Product } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { useToast } from "@/lib/useToast";
+import Price from "@/components/ui/Price";
 
 export default function StickyCta({ product }: { product: Product }) {
   const [qty, setQty] = useState(1);
@@ -22,18 +23,8 @@ export default function StickyCta({ product }: { product: Product }) {
 
   return (
     <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-zinc-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] px-4 py-3 flex items-center gap-3">
-      <div className="flex flex-col">
-        {product.is_on_sale && product.compare_at_price ? (
-          <>
-            <span className="text-red-600 font-semibold leading-tight">${product.price}</span>
-            <span className="text-xs text-zinc-400 line-through leading-tight">
-              ${product.compare_at_price}
-            </span>
-          </>
-        ) : (
-          <span className="font-semibold">${product.price}</span>
-        )}
-      </div>
+      <Price price={product.price} compareAt={product.compare_at_price} size="sm" showPercent={false} />
+
       {!outOfStock && (
         <div className="inline-flex items-center border rounded">
           <button
@@ -60,7 +51,7 @@ export default function StickyCta({ product }: { product: Product }) {
       <button
         onClick={handleAdd}
         disabled={outOfStock}
-        className="flex-1 bg-black text-white px-4 py-2.5 rounded font-medium disabled:bg-zinc-300"
+        className="flex-1 bg-brand text-brand-fg px-4 py-2.5 rounded-lg font-medium hover:bg-brand-dark disabled:bg-zinc-300"
       >
         {outOfStock ? "Out of stock" : "Add to cart"}
       </button>

@@ -1,152 +1,175 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Product } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { useToast } from "@/lib/useToast";
 import { useWishlist } from "@/lib/useWishlist";
-import RatingStars from "@/components/RatingStars";
 import { formatSold } from "@/lib/format";
+import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
+import RatingStars from "@/components/RatingStars";
+import Button from "@/components/ui/Button";
+import Price from "@/components/ui/Price";
 
-function HeartIcon({ filled }: { filled: boolean }) {
+function Trust({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill={filled ? "#dc2626" : "none"}
-      stroke={filled ? "#dc2626" : "currentColor"}
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-    </svg>
+    <li className="flex items-center gap-2 text-sm text-zinc-600">
+      <span className="text-zinc-400" aria-hidden>
+        {icon}
+      </span>
+      {children}
+    </li>
   );
 }
 
 export default function PurchasePanel({ product }: { product: Product }) {
   const [qty, setQty] = useState(1);
+  const [deliveryBy, setDeliveryBy] = useState<string | null>(null);
   const { add } = useCart();
   const { toast } = useToast();
   const { has, toggle } = useWishlist();
+  const router = useRouter();
+
+  // Compute the delivery estimate on the client only, to avoid an SSR/CSR
+  // hydration mismatch around the date boundary.
+  useEffect(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 4);
+    setDeliveryBy(d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }));
+  }, []);
 
   const inWishlist = has(product.id);
   const maxQty = Math.max(1, product.stock);
-  const dec = () => setQty((q) => Math.max(1, q - 1));
-  const inc = () => setQty((q) => Math.min(maxQty, q + 1));
+  const inStock = product.stock > 0;
+  const freeShip = Number(product.price) >= FREE_SHIPPING_THRESHOLD;
+  const saved =
+    product.is_on_sale && product.compare_at_price
+      ? Number(product.compare_at_price) - Number(product.price)
+      : 0;
 
   const handleAdd = () => {
     add(product, qty);
     toast("Added to cart", "success");
   };
 
-  const handleWishlist = () => {
-    toggle(product);
-    toast(inWishlist ? "Removed from wishlist" : "Added to wishlist", "success");
+  const handleBuyNow = () => {
+    add(product, qty);
+    router.push("/checkout");
   };
 
-  let stockMessage: React.ReactNode = null;
-  if (product.stock > 0 && product.stock < 5) {
-    stockMessage = (
-      <div className="text-sm text-red-600 mt-3 font-medium">
-        Only {product.stock} left — order soon
-      </div>
-    );
-  } else if (product.stock >= 5 && product.stock < 10) {
-    stockMessage = (
-      <div className="text-sm text-amber-700 mt-3 font-medium">
-        Selling fast — {product.stock} in stock
-      </div>
-    );
-  }
+  const handleWishlist = () => {
+    toggle(product);
+    toast(inWishlist ? "Removed from wishlist" : "Saved to wishlist", "success");
+  };
 
   return (
-    <div>
-      <div className="text-sm text-zinc-500 uppercase">{product.category.name}</div>
-      <h1 className="text-3xl font-bold mt-1">{product.name}</h1>
+    <div className="md:sticky md:top-4 md:self-start">
+      <div className="text-sm text-zinc-500 uppercase tracking-wide">{product.category.name}</div>
+      <h1 className="text-2xl md:text-3xl font-bold mt-1">{product.name}</h1>
 
-      {product.rating_count > 0 && (
-        <div className="mt-2">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+        {product.rating_count > 0 && (
           <RatingStars value={product.rating_avg} count={product.rating_count} size="md" />
-        </div>
-      )}
-
-      {typeof product.sold_count === "number" && product.sold_count > 0 && (
-        <div className="mt-1 text-sm text-zinc-500">
-          {formatSold(product.sold_count)} sold
-        </div>
-      )}
-
-      <div className="mt-4 flex items-center gap-4">
-        <div className="text-2xl font-semibold flex items-baseline gap-3">
-          {product.is_on_sale && product.compare_at_price ? (
-            <>
-              <span className="text-red-600">${product.price}</span>
-              <span className="text-base text-zinc-400 line-through font-normal">
-                ${product.compare_at_price}
-              </span>
-              {product.discount_percent > 0 && (
-                <span className="text-sm bg-red-600 text-white px-2 py-0.5 rounded font-medium">
-                  -{product.discount_percent}%
-                </span>
-              )}
-            </>
-          ) : (
-            <span>${product.price}</span>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={handleWishlist}
-          aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"}
-          aria-pressed={inWishlist}
-          className="ml-auto w-10 h-10 rounded-full border border-zinc-300 hover:bg-zinc-50 flex items-center justify-center"
-        >
-          <HeartIcon filled={inWishlist} />
-        </button>
+        )}
+        {typeof product.sold_count === "number" && product.sold_count > 0 && (
+          <span className="text-sm text-zinc-500">{formatSold(product.sold_count)} sold</span>
+        )}
       </div>
 
-      <p className="text-zinc-700 mt-4 leading-relaxed whitespace-pre-line">
-        {product.description}
-      </p>
+      {/* Buy box */}
+      <div className="mt-4 rounded-card border border-zinc-200 bg-white shadow-card p-5">
+        <Price price={product.price} compareAt={product.compare_at_price} size="lg" />
+        {saved > 0 && (
+          <div className="mt-1 text-sm font-medium text-success">You save ${saved.toFixed(2)}</div>
+        )}
 
-      {stockMessage}
+        <ul className="mt-4 space-y-2 border-t border-zinc-100 pt-4">
+          {deliveryBy && (
+            <Trust
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM18.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" /></svg>
+              }
+            >
+              Get it by <span className="font-medium text-ink">{deliveryBy}</span>
+              {freeShip && <span className="text-success font-medium"> · Free shipping</span>}
+            </Trust>
+          )}
+          {inStock ? (
+            product.stock <= 5 ? (
+              <li className="text-sm font-medium text-danger">Only {product.stock} left — order soon</li>
+            ) : product.stock < 10 ? (
+              <li className="text-sm font-medium text-deal-dark">Selling fast — {product.stock} in stock</li>
+            ) : (
+              <li className="text-sm text-success">In stock</li>
+            )
+          ) : (
+            <li className="text-sm font-medium text-zinc-500">Currently out of stock</li>
+          )}
+        </ul>
 
-      {product.stock > 0 && (
-        <div className="mt-6 flex items-center gap-3">
-          <div className="inline-flex items-center border rounded">
-            <button
-              type="button"
-              onClick={dec}
-              disabled={qty <= 1}
-              className="px-3 py-2 disabled:text-zinc-300 hover:bg-zinc-50"
-              aria-label="Decrease quantity"
-            >
-              -
-            </button>
-            <span className="px-4 py-2 min-w-[2rem] text-center select-none">{qty}</span>
-            <button
-              type="button"
-              onClick={inc}
-              disabled={qty >= maxQty}
-              className="px-3 py-2 disabled:text-zinc-300 hover:bg-zinc-50"
-              aria-label="Increase quantity"
-            >
-              +
-            </button>
+        {inStock && (
+          <div className="mt-4 flex items-center gap-3">
+            <span className="text-sm text-zinc-600">Quantity</span>
+            <div className="inline-flex items-center border border-zinc-300 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setQty((q) => Math.max(1, q - 1))}
+                disabled={qty <= 1}
+                className="px-3 py-2 disabled:text-zinc-300 hover:bg-zinc-50 rounded-l-lg"
+                aria-label="Decrease quantity"
+              >
+                −
+              </button>
+              <span className="px-4 py-2 min-w-[2.5rem] text-center select-none tabular-nums">{qty}</span>
+              <button
+                type="button"
+                onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
+                disabled={qty >= maxQty}
+                className="px-3 py-2 disabled:text-zinc-300 hover:bg-zinc-50 rounded-r-lg"
+                aria-label="Increase quantity"
+              >
+                +
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <button
-        onClick={handleAdd}
-        className="mt-6 bg-black text-white px-6 py-3 rounded font-medium hover:bg-zinc-800 disabled:bg-zinc-300 disabled:cursor-not-allowed"
-        disabled={product.stock === 0}
-      >
-        {product.stock > 0 ? "Add to cart" : "Out of stock"}
-      </button>
+        <div className="mt-5 space-y-2">
+          <Button onClick={handleAdd} disabled={!inStock} fullWidth size="lg">
+            {inStock ? "Add to cart" : "Out of stock"}
+          </Button>
+          {inStock && (
+            <Button onClick={handleBuyNow} variant="deal" fullWidth size="lg">
+              Buy now
+            </Button>
+          )}
+          <Button onClick={handleWishlist} variant="ghost" fullWidth aria-pressed={inWishlist}>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              className={inWishlist ? "fill-danger stroke-danger" : "fill-none stroke-current"}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+            {inWishlist ? "Saved" : "Save for later"}
+          </Button>
+        </div>
+
+        <ul className="mt-5 space-y-2 border-t border-zinc-100 pt-4">
+          <Trust icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-9 9zM9 12l2 2 4-4" /></svg>}>
+            Free 30-day returns
+          </Trust>
+          <Trust icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>}>
+            Secure checkout
+          </Trust>
+        </ul>
+      </div>
     </div>
   );
 }
