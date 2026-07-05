@@ -11,7 +11,6 @@ import { formatSold } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import Badge from "@/components/ui/Badge";
 import Price from "@/components/ui/Price";
-import RatingStars from "./RatingStars";
 
 export default function ProductCard({ product }: { product: Product }) {
   const { add } = useCart();
@@ -24,6 +23,7 @@ export default function ProductCard({ product }: { product: Product }) {
   const lowStock = product.stock > 0 && product.stock <= 5;
   const freeShip = Number(product.price) >= FREE_SHIPPING_THRESHOLD;
   const saved = has(product.id);
+  const hasSold = typeof product.sold_count === "number" && product.sold_count > 0;
 
   // One corner flag, by priority: deal > new > featured. The price block already
   // carries the strikethrough, so the flag stays the single loud signal.
@@ -138,15 +138,19 @@ export default function ProductCard({ product }: { product: Product }) {
         </div>
         <h3 className="font-medium text-sm mt-0.5 line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
 
-        {(product.rating_count > 0 ||
-          (typeof product.sold_count === "number" && product.sold_count > 0)) && (
-          <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
+        {(product.rating_count > 0 || hasSold) && (
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-500 whitespace-nowrap overflow-hidden">
             {product.rating_count > 0 && (
-              <RatingStars value={product.rating_avg} count={product.rating_count} />
+              <span className="inline-flex items-center gap-0.5 shrink-0">
+                <svg width="12" height="12" viewBox="0 0 20 20" className="fill-amber-400" aria-hidden>
+                  <path d="M10 1.5l2.6 5.3 5.9.86-4.25 4.14 1 5.85L10 14.9 4.75 17.65l1-5.85L1.5 7.66l5.9-.86L10 1.5z" />
+                </svg>
+                <span className="font-medium text-zinc-700">{Number(product.rating_avg).toFixed(1)}</span>
+                <span>({product.rating_count})</span>
+              </span>
             )}
-            {typeof product.sold_count === "number" && product.sold_count > 0 && (
-              <span>{formatSold(product.sold_count)} sold</span>
-            )}
+            {product.rating_count > 0 && hasSold && <span className="text-zinc-300">·</span>}
+            {hasSold && <span className="truncate">{formatSold(product.sold_count!)} sold</span>}
           </div>
         )}
 
