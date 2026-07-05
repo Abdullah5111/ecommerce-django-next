@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Order } from "@/lib/api";
 import { auth } from "@/lib/auth";
+import EmptyState from "@/components/EmptyState";
 
 const STATUS_STYLES: Record<Order["status"], string> = {
   pending: "bg-yellow-100 text-yellow-800",
@@ -60,13 +61,15 @@ export default function OrdersPage() {
 
   if (orders.length === 0) {
     return (
-      <div className="text-center py-20">
-        <h1 className="text-2xl font-semibold">No orders yet</h1>
-        <p className="text-zinc-500 mt-2">When you place your first order, it'll show up here.</p>
-        <Link href="/" className="text-blue-600 underline mt-4 inline-block">
-          Browse products
-        </Link>
-      </div>
+      <EmptyState
+        icon={
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2l1.5 3h9L18 2M3 6h18l-1.5 13.5a2 2 0 0 1-2 1.5H6.5a2 2 0 0 1-2-1.5zM9 11h6" /></svg>
+        }
+        title="No orders yet"
+        message="When you place your first order, it'll show up here with live status."
+        ctaHref="/"
+        ctaLabel="Browse products"
+      />
     );
   }
 

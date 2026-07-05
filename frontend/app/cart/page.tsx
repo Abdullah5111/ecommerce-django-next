@@ -6,6 +6,7 @@ import { useCart } from "@/lib/cart";
 import { useWishlist } from "@/lib/useWishlist";
 import type { Product } from "@/lib/api";
 import FreeShippingBar from "@/components/FreeShippingBar";
+import EmptyState from "@/components/EmptyState";
 
 export default function CartPage() {
   const { items, add, update, remove, total } = useCart();
@@ -26,12 +27,15 @@ export default function CartPage() {
 
   if (items.length === 0 && saved.length === 0) {
     return (
-      <div className="text-center py-20">
-        <h2 className="text-2xl font-semibold">Your cart is empty</h2>
-        <Link href="/" className="text-blue-600 underline mt-4 inline-block">
-          Continue shopping
-        </Link>
-      </div>
+      <EmptyState
+        icon={
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6h15l-1.5 9h-12zM6 6L5 3H2M9 20a1 1 0 1 0 0 .01M18 20a1 1 0 1 0 0 .01" /></svg>
+        }
+        title="Your cart is empty"
+        message="Browse the catalog and add something you love — free shipping over $50."
+        ctaHref="/"
+        ctaLabel="Start shopping"
+      />
     );
   }
 
