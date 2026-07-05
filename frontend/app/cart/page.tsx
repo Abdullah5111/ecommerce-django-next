@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCart } from "@/lib/cart";
 import { useWishlist } from "@/lib/useWishlist";
 import type { Product } from "@/lib/api";
+import FreeShippingBar from "@/components/FreeShippingBar";
 
 export default function CartPage() {
   const { items, add, update, remove, total } = useCart();
@@ -124,12 +125,16 @@ export default function CartPage() {
       </div>
 
       {items.length > 0 && (
-        <aside className="bg-white p-6 rounded border h-fit">
-          <div className="flex justify-between mb-4">
+        <aside className="bg-white p-6 rounded-card border border-zinc-200 shadow-card h-fit md:sticky md:top-4">
+          <FreeShippingBar subtotal={total} />
+          <div className="flex justify-between mb-4 pt-4 border-t border-zinc-100">
             <span>Subtotal</span>
-            <span className="font-semibold">${total.toFixed(2)}</span>
+            <span className="font-semibold tabular-nums">${total.toFixed(2)}</span>
           </div>
-          <Link href="/checkout" className="block text-center bg-black text-white py-3 rounded font-medium hover:bg-zinc-800">
+          <Link
+            href="/checkout"
+            className="block text-center bg-brand text-brand-fg py-3 rounded-lg font-medium hover:bg-brand-dark transition-colors"
+          >
             Checkout
           </Link>
         </aside>
