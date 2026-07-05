@@ -126,7 +126,7 @@ Address book (auth):
 frontend/
 ├── app/                                  # Next.js App Router
 │   ├── layout.tsx                        # Inter font + providers + TopBar, Footer, MobileTabBar
-│   ├── page.tsx                          # home: hero + category tiles + rails + product grid
+│   ├── page.tsx                          # home: hero + category tiles + deals rail + product grid
 │   ├── loading.tsx                       # route-level skeleton on navigation
 │   ├── products/[id]/                    # product detail — SSR + JSON-LD + tabs
 │   ├── c/[...slug]/                      # hierarchical category landing pages (catch-all)
@@ -146,8 +146,11 @@ frontend/
 │   ├── ui/                               # design-system primitives: Button, Badge, Price
 │   ├── TopBar.tsx, Footer.tsx           # global chrome (trust bar + footer)
 │   ├── MobileTabBar.tsx                  # mobile bottom tab nav (Home/Wishlist/Cart/Account)
-│   ├── home/                             # Hero, CategoryTiles (homepage-only)
-│   ├── Header.tsx, MegaMenu.tsx          # nav (cart + wishlist counts, notification bell)
+│   ├── home/                             # Hero, CategoryTiles, DealsRail (homepage-only)
+│   ├── CountdownTimer.tsx                # client countdown to midnight (deals rail)
+│   ├── FreeShippingBar.tsx              # cart progress toward free shipping
+│   ├── EmptyState.tsx                    # reusable empty state (icon + copy + CTA)
+│   ├── Header.tsx, MegaMenu.tsx          # nav; primary links desktop-only (mobile uses bottom nav)
 │   ├── NotificationBell.tsx              # unread badge + dropdown (polls unread count)
 │   ├── ProductCard.tsx, RailCard.tsx     # price-forward card, wishlist heart, urgency, "X sold"
 │   ├── RecommendedRail.tsx               # personalized rail (logged-in)

@@ -1,6 +1,6 @@
 # E-commerce — Django + Next.js
 
-A full-stack e-commerce app built as a portfolio piece. Django REST Framework backend, Next.js 14 (App Router) frontend, PostgreSQL, JWT auth with email verification and password reset, hierarchical categories with faceted search, server-rendered product pages with reviews and structured data, saved-address book with immutable shipping snapshots on orders, server-persisted cart & wishlist with guest-merge on login, personalized product recommendations, Stripe payments, multi-channel order notifications (in-app, email, web push), and a scale-aware data layer (DB indexes, Postgres full-text search, atomic stock decrement, cached featured/bestsellers/related endpoints). Containerised and ready to deploy to Google Cloud Run.
+A full-stack e-commerce app built as a portfolio piece. Django REST Framework backend, Next.js 14 (App Router) frontend, PostgreSQL, JWT auth with email verification and password reset, hierarchical categories with faceted search, server-rendered product pages with reviews and structured data, saved-address book with immutable shipping snapshots on orders, server-persisted cart & wishlist with guest-merge on login, personalized product recommendations, Stripe payments, multi-channel order notifications (in-app, email, web push), a polished conversion-focused storefront UI (token-based design system, price-forward cards, a product buy box, deals rail, and a mobile bottom nav), and a scale-aware data layer (DB indexes, Postgres full-text search, atomic stock decrement, cached featured/bestsellers/related endpoints). Containerised and ready to deploy to Google Cloud Run.
 
 ## Stack
 
@@ -15,6 +15,15 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 | Deploy       | Google Cloud Run + Cloud SQL + Artifact Registry              |
 
 ## Features
+
+### Design & UX
+- **Design system**: Indigo (brand) + Amber (deal) token palette in `tailwind.config.ts`, Inter via `next/font`, elevation/`shimmer` tokens, and shared primitives (`Button`, `Badge`, `Price`) so surfaces stay consistent
+- **Price-forward product cards**: big price + struck-through compare-at + %-off flag, wishlist heart, "Only N left" urgency, free-shipping tag, and a compact "★ 4.5 (10) · 120 sold" meta line
+- **Buy box** on product detail: delivery-date estimate, dual CTA (Add to cart + Buy now), quantity, and trust badges — sticky on desktop
+- **Homepage**: gradient hero, shop-by-category tiles, and a **"Deals of the day" rail with a live countdown**
+- **Mobile-first chrome**: trust top-bar, mobile bottom tab nav (Home / Wishlist / Cart / Account), and a real footer
+- **Free-shipping progress nudge** in the cart ("Add $X more for free shipping")
+- Dense 2-col mobile grids, route-level skeletons on navigation, and rich empty states (cart / wishlist / orders)
 
 ### Catalog
 - Hierarchical categories (multi-level, with parent / `full_slug` / `level`)
