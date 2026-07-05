@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { Product } from "@/lib/api";
+import Price from "@/components/ui/Price";
 
 export default function RailCard({ product }: { product: Product }) {
   const image = product.images?.[0]?.url || product.image_url;
@@ -8,7 +9,7 @@ export default function RailCard({ product }: { product: Product }) {
   return (
     <Link
       href={`/products/${product.slug}`}
-      className="group snap-start shrink-0 w-64 bg-white rounded-lg overflow-hidden border hover:shadow-md transition"
+      className="group snap-start shrink-0 w-56 sm:w-64 bg-white rounded-card overflow-hidden border border-zinc-200 shadow-card hover:shadow-card-hover hover:-translate-y-0.5 transition-all"
     >
       <div className="relative aspect-square bg-zinc-100 overflow-hidden">
         {image ? (
@@ -26,17 +27,8 @@ export default function RailCard({ product }: { product: Product }) {
           {product.category?.name}
         </div>
         <h3 className="font-medium mt-1 line-clamp-1">{product.name}</h3>
-        <div className="mt-1 font-semibold flex items-baseline gap-2">
-          {product.is_on_sale && product.compare_at_price ? (
-            <>
-              <span className="text-red-600">${product.price}</span>
-              <span className="text-xs text-zinc-400 line-through font-normal">
-                ${product.compare_at_price}
-              </span>
-            </>
-          ) : (
-            <span>${product.price}</span>
-          )}
+        <div className="mt-1">
+          <Price price={product.price} compareAt={product.compare_at_price} size="md" showPercent={false} />
         </div>
       </div>
     </Link>

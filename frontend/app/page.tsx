@@ -7,6 +7,7 @@ import SearchBar from "@/components/SearchBar";
 import Pagination from "@/components/Pagination";
 import Hero from "@/components/home/Hero";
 import CategoryTiles from "@/components/home/CategoryTiles";
+import DealsRail from "@/components/home/DealsRail";
 
 const PAGE_SIZE = 12;
 
@@ -30,8 +31,9 @@ export default async function HomePage({
   let totalCount = 0;
   let categories: { id: number; name: string; slug: string; full_slug: string; level: number; parent: number | null }[] = [];
   let featured: Product[] = [];
+  let deals: Product[] = [];
   try {
-    const [productsData, categoriesData, featuredResult] = await Promise.all([
+    const [productsData, categoriesData, featuredResult, bestsellersResult] = await Promise.all([
       api.listProducts({
         search: query || undefined,
         category: category || undefined,
@@ -39,11 +41,17 @@ export default async function HomePage({
       }),
       api.listCategories(),
       api.getFeatured().catch(() => [] as Product[]),
+      api.getBestsellers().catch(() => [] as Product[]),
     ]);
     products = productsData.results;
     totalCount = productsData.count;
     categories = categoriesData.results;
     featured = featuredResult;
+    // Deals = on-sale products, drawn from bestsellers first then featured.
+    const seen = new Set<number>();
+    deals = [...bestsellersResult, ...featuredResult]
+      .filter((p) => p.is_on_sale && !seen.has(p.id) && seen.add(p.id))
+      .slice(0, 10);
   } catch (e) {
     return (
       <div className="text-center py-20">
@@ -76,6 +84,8 @@ export default async function HomePage({
       <SearchBar />
 
       {browse && <CategoryTiles categories={topCategories} />}
+
+      {browse && <DealsRail products={deals} />}
 
       <RecommendedRail />
 
