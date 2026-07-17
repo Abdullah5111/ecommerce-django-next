@@ -1,6 +1,6 @@
 # E-commerce — Django + Next.js
 
-A full-stack e-commerce app built as a portfolio piece. Django REST Framework backend, Next.js 14 (App Router) frontend, PostgreSQL, JWT auth with email verification and password reset, hierarchical categories with faceted search, server-rendered product pages with reviews and structured data, saved-address book with immutable shipping snapshots on orders, server-persisted cart & wishlist with guest-merge on login, personalized product recommendations, Stripe payments, multi-channel order notifications (in-app, email, web push), a polished conversion-focused storefront UI (token-based design system, price-forward cards, a product buy box, deals rail, and a mobile bottom nav), and a scale-aware data layer (DB indexes, Postgres full-text search, atomic stock decrement, cached featured/bestsellers/related endpoints). Containerised and ready to deploy to Google Cloud Run.
+A full-stack e-commerce app built as a portfolio piece. Django REST Framework backend, Next.js 14 (App Router) frontend, PostgreSQL, JWT auth with email verification and password reset, hierarchical categories with faceted search, server-rendered product pages with structured data and rich reviews (verified-purchase badges, reviewer photos, helpful votes), saved-address book with immutable shipping snapshots on orders, server-persisted cart & wishlist with guest-merge on login, personalized product recommendations, Stripe payments, multi-channel order notifications (in-app, email, web push), a polished conversion-focused storefront UI (token-based design system, price-forward cards, a product buy box, deals rail, and a mobile bottom nav), and a scale-aware data layer (DB indexes, Postgres full-text search, atomic stock decrement, cached featured/bestsellers/related endpoints). Containerised and ready to deploy to Google Cloud Run.
 
 ## Stack
 
@@ -41,6 +41,9 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - Hash-driven tabs (`#description`, `#specifications`, `#reviews`) — shareable, scrollable on deep link
 - Specifications table from `Product.specifications` (flat key→value)
 - Reviews block with summary number, 5-bar rating histogram, review list, and "Write a review" form (auth-gated)
+- **Verified-purchase badge** on reviews from buyers who actually ordered the product — snapshotted at write time from real order data, so a later cancellation doesn't retract it
+- **Photo reviews**: attach up to 5 photos when writing a review (previews + per-photo remove on the form); reviewers' photos render as a thumbnail strip that opens a fullscreen lightbox (click / Escape / arrow keys)
+- **"Helpful" votes** on reviews — one per user, optimistic count with rollback on failure, self-voting disallowed; reviews can be sorted most-helpful-first
 - Related products rail ("More from {category}") and recently viewed rail (localStorage)
 - Wishlist heart icon; saved items shown at `/wishlist` (server-backed when logged in)
 - Contextual stock urgency ("Only 3 left — order soon", "Selling fast")
@@ -213,7 +216,8 @@ frontend env to set. Without it, the Google button simply doesn't render.
 | GET        | /api/products/bestsellers/                    | —    | Top by paid-order quantity (cached 5 min)                        |
 | GET        | /api/products/recommended/                    | —/JWT | Personalized picks from purchase/wishlist/cart affinity; featured fallback for guests/new users |
 | GET        | /api/products/{slug}/related/                 | —    | Up to 8 sibling products in same category (cached 5 min)         |
-| GET/POST   | /api/products/{slug}/reviews/                 | —/JWT | List reviews (paginated) / create one (one per user per product) |
+| GET/POST   | /api/products/{slug}/reviews/                 | —/JWT | List reviews (paginated; `?ordering=helpful` for most-helpful-first) / create one (one per user per product). POST accepts JSON, or multipart with up to 5 `images` files. Each review returns `verified_purchase`, `helpful_count`, `helpful_by_me`, `is_mine`, `images[]` |
+| POST/DELETE | /api/reviews/{id}/helpful/                   | JWT  | Toggle your "helpful" vote → `{helpful_count, helpful_by_me}`; 400 on your own review |
 | GET        | /api/categories/                              | —    | Flat list                                                        |
 | GET        | /api/categories/{slug}/                       | —    | By direct slug                                                   |
 | GET        | /api/categories/tree/                         | —    | Full nested tree (roots → children)                              |

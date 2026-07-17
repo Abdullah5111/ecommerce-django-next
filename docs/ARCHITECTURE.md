@@ -29,9 +29,9 @@ backend/
 ├── core/                  # project settings, root urls, wsgi/asgi
 ├── accounts/              # custom User + Address + auth views
 ├── products/
-│   ├── models.py          # Category (self-FK), Product, ProductImage, Review
+│   ├── models.py          # Category (self-FK), Product, ProductImage, Review, ReviewImage, ReviewVote
 │   ├── signals.py         # Review post_save/post_delete → rating recompute
-│   ├── views.py           # ViewSets + tree/by-path/featured/bestsellers/reviews/related
+│   ├── views.py           # ViewSets + tree/by-path/featured/bestsellers/reviews/related/helpful
 │   ├── pagination.py      # ProductCursorPagination (opt-in)
 │   └── migrations/
 ├── orders/                # Order, OrderItem + create/list/pay (with shipping snapshot)
@@ -50,6 +50,8 @@ User ─< Address                                Category (self-FK: parent/child
                               │
                               ├─< ProductImage
                               └─< Review
+                                    ├─< ReviewImage
+                                    └─< ReviewVote >─ User
 ```
 
 - **`User`** — custom model on `accounts.User` (extends `AbstractUser`), with `email` (unique), `email_verified`, and profile fields: `avatar` (ImageField → MEDIA, GCS in prod), `display_name`, `bio`, `date_of_birth`, `gender`, plus `phone` + `phone_verified`. Defined upfront so swapping later doesn't require a painful migration. `phone`/`phone_verified` are read-only via `me` and only set through the phone-verification flow; legacy `address` text kept for backward compat (new code uses the address book).
@@ -57,7 +59,11 @@ User ─< Address                                Category (self-FK: parent/child
 - **`Category`** — self-referential. `parent`, computed `full_slug` (e.g. `electronics/audio`), `level`. `save()` keeps the latter two coherent on writes. Indexed on the unique `full_slug` for fast path lookups.
 - **`Product`** — `category` FK, pricing (`price`, `compare_at_price`, computed `is_on_sale`/`discount_percent`), `stock`, `rating_avg`/`rating_count` (denormalised — driven by Review signals), `specifications` (JSONField, flat key→value), `is_featured`, `is_active`. Has many `ProductImage`s and `Review`s; keeps a legacy `image_url` for backward compat.
 - **`ProductImage`** — `url`, `alt`, `sort_order`. Ordered.
-- **`Review`** — `product` FK, `user` FK (nullable for seeded/anonymous reviews; `author_name` snapshot for survivability), `rating` (1-5, CHECK constraint), `title`, `body`, `created_at`. Partial unique on `(product, user)` when `user IS NOT NULL`. Indexed on `(product, -created_at)`.
+- **`Review`** — `product` FK, `user` FK (nullable for seeded/anonymous reviews; `author_name` snapshot for survivability), `rating` (1-5, CHECK constraint), `title`, `body`, `created_at`, plus `verified_purchase` and `helpful_count`. Partial unique on `(product, user)` when `user IS NOT NULL`. Indexed on `(product, -created_at)` and `(product, -helpful_count)`.
+  - `verified_purchase` is **snapshotted at write time** from whether the reviewer has an order for the product in `SOLD_STATUSES` — the same definition that powers the "X sold" badge. Frozen deliberately: a later cancellation must not retract the badge.
+  - `helpful_count` is denormalised from `ReviewVote` and mutated with `F()` expressions, so concurrent votes can't lose an increment.
+- **`ReviewImage`** — `review` FK, `image` (ImageField → MEDIA, same storage as avatars), `sort_order`. Ordered. Capped at 5 per review by the view.
+- **`ReviewVote`** — `review` FK, `user` FK, `created_at`. Unique on `(review, user)`, which is what makes the helpful toggle idempotent.
 - **`Order`** — `user` FK, `status` (`pending`/`paid`/`shipped`/`delivered`/`cancelled`), `shipping_address` (composed text for backward compat), plus structured `ship_*` snapshot fields (`recipient`, `phone`, `line1/2`, `city`, `state`, `postal_code`, `country`) populated from the chosen Address at create time. **Immutable thereafter** — editing the Address row later does not mutate past orders.
 - **`Order.total`** — denormalised, recalculated on item changes (`recalculate_total`).
 - **Stock decrement** — done with an atomic conditional UPDATE (`Product.objects.filter(stock__gte=qty).update(stock=F("stock") - qty)`) inside `OrderSerializer.create`'s `@transaction.atomic`, eliminating the read-then-write oversell race.
@@ -98,8 +104,9 @@ Aggregate / cached endpoints:
 
 Product-detail companions:
 
-- `GET /api/products/{slug}/reviews/` — paginated review list.
-- `POST /api/products/{slug}/reviews/` — auth required. One review per user per product; 400 on duplicate.
+- `GET /api/products/{slug}/reviews/` — paginated review list. `?ordering=helpful` sorts by `-helpful_count` (default is `-created_at`). For signed-in callers the viewer's own vote is resolved with an `Exists()` annotation, so `helpful_by_me` costs no extra query per row; `is_mine` lets the UI hide the helpful control on your own review.
+- `POST /api/products/{slug}/reviews/` — auth required. One review per user per product; 400 on duplicate. Accepts JSON, or **multipart** with up to 5 `images` files (`ReviewImage` rows written in the same transaction as the review). `verified_purchase` is computed server-side here.
+- `POST|DELETE /api/reviews/{id}/helpful/` — auth required. Toggles the caller's helpful vote and returns `{helpful_count, helpful_by_me}`. Voting on your own review is rejected with 400.
 
 Category-tree helpers:
 
@@ -167,6 +174,8 @@ frontend/
 │       ├── Tabs.tsx                      # hash-driven Description / Specifications / Reviews
 │       ├── SpecsTable.tsx
 │       ├── ReviewsSection.tsx, ReviewCta.tsx, WriteReviewForm.tsx
+│       ├── HelpfulButton.tsx             # optimistic helpful vote, rolls back on failure
+│       ├── ReviewPhotos.tsx              # reviewer photo strip + fullscreen lightbox
 │       ├── RelatedRail.tsx, RecentlyViewedRail.tsx
 │       └── StickyCta.tsx                 # md:hidden bottom CTA bar
 └── lib/

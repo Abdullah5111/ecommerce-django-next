@@ -31,8 +31,8 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 | Stock urgency / social proof ("X left") | ✅ | ✅ | "X sold" from order data + stock-urgency hints; no live "X viewing" |
 | Variants (size/color/SKU) | ✅ | ❌ | Single price/stock per product |
 | Product video | ✅ | ❌ | |
-| Photo/video reviews | ✅ | ❌ | Text reviews only |
-| Verified-purchase badge / helpful votes | ✅ | ❌ | |
+| Photo/video reviews | ✅ | 🟡 | Reviewer photos (up to 5, lightbox); no video |
+| Verified-purchase badge / helpful votes | ✅ | ✅ | Badge snapshotted from real order data; one helpful vote per user, sortable |
 | Q&A | ✅ | ❌ | |
 | Frequently-bought-together / bundles | ✅ | ❌ | |
 
@@ -105,20 +105,21 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 
 | Status | Count (approx) | Examples |
 |---|---|---|
-| ✅ Matched | ~35 | catalog, coupons, cart/wishlist, save-for-later, social proof, lifecycle, returns, accounts, payments, refunds, notifications, order emails, web push |
-| 🟡 Partial | ~5 | google login (no Apple/FB), tracking, wallets, homepage banners |
-| ❌ Not matched | ~20 | tax, variants, multi-vendor, gamification, i18n, BNPL |
+| ✅ Matched | ~36 | catalog, coupons, cart/wishlist, save-for-later, social proof, lifecycle, returns, accounts, payments, refunds, notifications, order emails, web push, verified-purchase + helpful votes |
+| 🟡 Partial | ~6 | google login (no Apple/FB), tracking, wallets, homepage banners, review photos (no video) |
+| ❌ Not matched | ~19 | tax, variants, multi-vendor, gamification, i18n, BNPL |
 
 ## Recommended next gaps (impact order)
 
 1. **Tax** in the totals breakdown (structure already supports it)
 2. **Product variants** (size/color/SKU)
-3. **Review enhancements** (photos, verified-purchase badge, helpful votes)
+3. **Q&A** on product detail, and **frequently-bought-together** bundles
 
 Recently shipped:
 - ~~Real payments (Stripe)~~ — PaymentIntent + Elements + webhook, real refunds, keyless mock fallback.
 - ~~Order-confirmation / shipping emails~~ — emails on every order lifecycle event.
 - ~~Push notifications~~ — in-app notification center + bell, plus Web Push (VAPID), keyless-disabled by default.
+- ~~Review enhancements~~ — verified-purchase badge (snapshotted from order data), reviewer photos with a lightbox, and one-per-user helpful votes with most-helpful sorting. Video reviews remain out.
 
 Marketplace-scale items (multi-vendor, gamification, BNPL, i18n) are realistically
 out of scope for this portfolio piece.
