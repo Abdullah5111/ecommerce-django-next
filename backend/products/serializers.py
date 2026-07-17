@@ -1,5 +1,11 @@
+from django.core.validators import FileExtensionValidator
 from rest_framework import serializers
 from .models import Category, Product, ProductImage, Review, ReviewImage
+
+MAX_REVIEW_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB per photo
+# Kept narrow on purpose. SVG is excluded: it is a real image to a browser but
+# can carry <script>, and MEDIA is served from our own origin.
+ALLOWED_REVIEW_IMAGE_EXTENSIONS = ("jpg", "jpeg", "png", "webp", "gif")
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -100,6 +106,27 @@ class ReviewImageSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         url = obj.image.url
         return request.build_absolute_uri(url) if request else url
+
+
+class ReviewImageUploadSerializer(serializers.Serializer):
+    """Validates one uploaded review photo.
+
+    ReviewImage rows are written straight from request.FILES, and a model
+    ImageField only validates under full_clean(), which the API path never
+    calls — so without this, any file of any size would be accepted. ImageField
+    makes Pillow prove the bytes are an image; the extension allowlist stops a
+    real image being stored under a name that MEDIA would serve as script.
+    """
+
+    image = serializers.ImageField(
+        validators=[FileExtensionValidator(ALLOWED_REVIEW_IMAGE_EXTENSIONS)]
+    )
+
+    def validate_image(self, value):
+        if value.size > MAX_REVIEW_IMAGE_BYTES:
+            mb = MAX_REVIEW_IMAGE_BYTES // (1024 * 1024)
+            raise serializers.ValidationError(f"Each photo must be under {mb} MB.")
+        return value
 
 
 class ReviewSerializer(serializers.ModelSerializer):

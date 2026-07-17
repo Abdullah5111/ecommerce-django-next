@@ -14,6 +14,7 @@ from .serializers import (
     CategoryTreeSerializer,
     CategoryDetailSerializer,
     ProductSerializer,
+    ReviewImageUploadSerializer,
     ReviewSerializer,
 )
 
@@ -177,6 +178,12 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             return Response(
                 {"detail": f"At most {MAX_REVIEW_IMAGES} images per review."},
                 status=400,
+            )
+        # Prove every upload is a real, allowed, size-capped image before
+        # anything is written — a rejected photo must not leave a review behind.
+        for upload in images:
+            ReviewImageUploadSerializer(data={"image": upload}).is_valid(
+                raise_exception=True
             )
 
         ser = ReviewSerializer(data=request.data, context={"request": request})

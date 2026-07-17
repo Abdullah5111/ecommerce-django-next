@@ -42,7 +42,7 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - Specifications table from `Product.specifications` (flat key→value)
 - Reviews block with summary number, 5-bar rating histogram, review list, and "Write a review" form (auth-gated)
 - **Verified-purchase badge** on reviews from buyers who actually ordered the product — snapshotted at write time from real order data, so a later cancellation doesn't retract it
-- **Photo reviews**: attach up to 5 photos when writing a review (previews + per-photo remove on the form); reviewers' photos render as a thumbnail strip that opens a fullscreen lightbox (click / Escape / arrow keys)
+- **Photo reviews**: attach up to 5 photos when writing a review (previews + per-photo remove on the form); reviewers' photos render as a thumbnail strip that opens a fullscreen lightbox (click / Escape / arrow keys). Uploads are validated server-side — real image bytes (Pillow), jpg/jpeg/png/webp/gif only (no SVG, which can carry script), 5 MB each
 - **"Helpful" votes** on reviews — one per user, optimistic count with rollback on failure, self-voting disallowed; reviews can be sorted most-helpful-first
 - Related products rail ("More from {category}") and recently viewed rail (localStorage)
 - Wishlist heart icon; saved items shown at `/wishlist` (server-backed when logged in)

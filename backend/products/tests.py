@@ -331,3 +331,56 @@ class ReviewImageTests(APITestCase):
         )
         self.assertEqual(res.status_code, 400)
         self.assertEqual(Review.objects.count(), 0)  # nothing partially written
+
+    def test_non_image_file_rejected(self):
+        bad = SimpleUploadedFile(
+            "payload.png", b"<html><script>alert(1)</script></html>",
+            content_type="image/png",
+        )
+        res = self.client.post(
+            f"/api/products/{self.widget.slug}/reviews/",
+            {"rating": 5, "images": [bad]},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(Review.objects.count(), 0)
+        self.assertEqual(ReviewImage.objects.count(), 0)
+
+    def test_disallowed_extension_rejected(self):
+        # Real image bytes under an .svg name: Pillow would be satisfied, but
+        # MEDIA would serve it as image/svg+xml from our own origin, where an
+        # embedded <script> executes.
+        sneaky = SimpleUploadedFile(
+            "x.svg", ONE_PX_GIF, content_type="image/svg+xml"
+        )
+        res = self.client.post(
+            f"/api/products/{self.widget.slug}/reviews/",
+            {"rating": 5, "images": [sneaky]},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(ReviewImage.objects.count(), 0)
+
+    def test_oversized_photo_rejected(self):
+        huge = SimpleUploadedFile(
+            "big.gif", ONE_PX_GIF + b"\x00" * (5 * 1024 * 1024),
+            content_type="image/gif",
+        )
+        res = self.client.post(
+            f"/api/products/{self.widget.slug}/reviews/",
+            {"rating": 5, "images": [huge]},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(Review.objects.count(), 0)
+
+    def test_one_bad_photo_rejects_the_whole_review(self):
+        bad = SimpleUploadedFile("nope.png", b"still not an image")
+        res = self.client.post(
+            f"/api/products/{self.widget.slug}/reviews/",
+            {"rating": 5, "images": [self._gif("ok.gif"), bad]},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(Review.objects.count(), 0)
+        self.assertEqual(ReviewImage.objects.count(), 0)

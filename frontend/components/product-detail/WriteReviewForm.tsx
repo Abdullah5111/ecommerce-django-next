@@ -6,8 +6,12 @@ import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { useToast } from "@/lib/useToast";
 
-// Mirrors MAX_REVIEW_IMAGES on the server, which rejects anything above this.
+// These mirror the server's limits (MAX_REVIEW_IMAGES / MAX_REVIEW_IMAGE_BYTES
+// / ALLOWED_REVIEW_IMAGE_EXTENSIONS). Checking here only saves the user a
+// failed upload — the server is still the one that enforces them.
 const MAX_PHOTOS = 5;
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const ACCEPTED_TYPES = "image/jpeg,image/png,image/webp,image/gif";
 
 function StarInput({
   value,
@@ -65,11 +69,19 @@ export default function WriteReviewForm({ slug }: { slug: string }) {
     const picked = Array.from(e.target.files ?? []);
     if (!picked.length) return;
     setError(null);
-    const next = [...photos, ...picked].slice(0, MAX_PHOTOS);
-    if (photos.length + picked.length > MAX_PHOTOS) {
+
+    const tooBig = picked.filter((f) => f.size > MAX_PHOTO_BYTES);
+    const usable = picked.filter((f) => f.size <= MAX_PHOTO_BYTES);
+    if (tooBig.length) {
+      setError(
+        `${tooBig.length === 1 ? "That photo is" : "Those photos are"} over ` +
+          `${MAX_PHOTO_BYTES / (1024 * 1024)} MB and were skipped.`
+      );
+    } else if (photos.length + usable.length > MAX_PHOTOS) {
       setError(`You can attach up to ${MAX_PHOTOS} photos.`);
     }
-    setPhotos(next);
+
+    setPhotos([...photos, ...usable].slice(0, MAX_PHOTOS));
     // Reset so picking the same file again still fires onChange.
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -179,7 +191,7 @@ export default function WriteReviewForm({ slug }: { slug: string }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept={ACCEPTED_TYPES}
             multiple
             onChange={onPickPhotos}
             className="block w-full text-sm text-zinc-600 file:mr-3 file:rounded file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-zinc-200"
