@@ -65,12 +65,23 @@ export type Product = {
   specifications?: Record<string, string>;
 };
 
+export type ReviewImage = {
+  id: number;
+  image: string;
+  sort_order: number;
+};
+
 export type Review = {
   id: number;
   rating: number;
   title: string;
   body: string;
   author_name: string;
+  verified_purchase: boolean;
+  helpful_count: number;
+  helpful_by_me: boolean;
+  is_mine: boolean;
+  images: ReviewImage[];
   created_at: string;
 };
 
@@ -320,20 +331,52 @@ export const api = {
     return request<Paginated<Product>>(`/products/${suffix ? `?${suffix}` : ""}`);
   },
   getProduct: (slug: string) => request<Product>(`/products/${slug}/`),
-  listReviews: (slug: string, page?: number) => {
-    const qs = page && page > 1 ? `?page=${page}` : "";
-    return request<Paginated<Review>>(`/products/${slug}/reviews/${qs}`);
+  listReviews: (slug: string, page?: number, ordering?: "helpful") => {
+    const qs = new URLSearchParams();
+    if (page && page > 1) qs.set("page", String(page));
+    if (ordering) qs.set("ordering", ordering);
+    const suffix = qs.toString();
+    return request<Paginated<Review>>(
+      `/products/${slug}/reviews/${suffix ? `?${suffix}` : ""}`
+    );
   },
-  postReview: (
+  postReview: async (
     token: string,
     slug: string,
-    payload: { rating: number; title?: string; body?: string }
-  ) =>
-    request<Review>(`/products/${slug}/reviews/`, {
+    payload: { rating: number; title?: string; body?: string; images?: File[] }
+  ): Promise<Review> => {
+    const { images, ...fields } = payload;
+    if (!images?.length) {
+      return request<Review>(`/products/${slug}/reviews/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify(fields),
+      });
+    }
+    // Photos force multipart, which means bypassing the JSON `request` helper
+    // so the browser can set the boundary itself (same as uploadAvatar).
+    const fd = new FormData();
+    fd.append("rating", String(fields.rating));
+    if (fields.title) fd.append("title", fields.title);
+    if (fields.body) fd.append("body", fields.body);
+    images.forEach((f) => fd.append("images", f));
+    const res = await fetch(`${API_URL}/products/${slug}/reviews/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify(payload),
-    }),
+      body: fd,
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+    return (await res.json()) as Review;
+  },
+  voteHelpful: (token: string, reviewId: number, helpful: boolean) =>
+    request<{ helpful_count: number; helpful_by_me: boolean }>(
+      `/reviews/${reviewId}/helpful/`,
+      {
+        method: helpful ? "POST" : "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    ),
   getRelated: (slug: string) => request<Product[]>(`/products/${slug}/related/`),
   getFeatured: () => request<Product[]>(`/products/featured/`),
   getBestsellers: () => request<Product[]>(`/products/bestsellers/`),
