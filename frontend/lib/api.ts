@@ -331,13 +331,22 @@ export const api = {
     return request<Paginated<Product>>(`/products/${suffix ? `?${suffix}` : ""}`);
   },
   getProduct: (slug: string) => request<Product>(`/products/${slug}/`),
-  listReviews: (slug: string, page?: number, ordering?: "helpful") => {
+  // `token` is optional because the product page lists reviews from a server
+  // component, where there is no token. Pass it from the client to resolve the
+  // per-viewer fields (helpful_by_me, is_mine), which are false without auth.
+  listReviews: (
+    slug: string,
+    page?: number,
+    ordering?: "helpful",
+    token?: string
+  ) => {
     const qs = new URLSearchParams();
     if (page && page > 1) qs.set("page", String(page));
     if (ordering) qs.set("ordering", ordering);
     const suffix = qs.toString();
     return request<Paginated<Review>>(
-      `/products/${slug}/reviews/${suffix ? `?${suffix}` : ""}`
+      `/products/${slug}/reviews/${suffix ? `?${suffix}` : ""}`,
+      token ? { headers: { Authorization: `Bearer ${token}` } } : {}
     );
   },
   postReview: async (

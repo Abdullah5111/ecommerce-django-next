@@ -4,6 +4,7 @@ import RatingStars from "@/components/RatingStars";
 import HelpfulButton from "./HelpfulButton";
 import ReviewCta from "./ReviewCta";
 import ReviewPhotos from "./ReviewPhotos";
+import ReviewViewerState from "./ReviewViewerState";
 
 type Props = {
   slug: string;
@@ -96,38 +97,37 @@ export default function ReviewsSection({
       </div>
 
       {reviews.length > 0 ? (
-        <ul className="mt-8 space-y-6">
-          {reviews.map((r) => (
-            <li key={r.id} className="border-b pb-6 last:border-0">
-              <StarRow rating={r.rating} />
-              {r.title && <div className="font-semibold mt-1">{r.title}</div>}
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 mt-1">
-                <span>
-                  {r.author_name} · {fmtDate(r.created_at)}
-                </span>
-                {r.verified_purchase && (
-                  <Badge tone="success" className="normal-case tracking-normal">
-                    ✓ Verified purchase
-                  </Badge>
+        // The list itself stays server-rendered (SEO); the provider resolves
+        // only the per-viewer bits the server can't know, in one request.
+        <ReviewViewerState slug={slug}>
+          <ul className="mt-8 space-y-6">
+            {reviews.map((r) => (
+              <li key={r.id} className="border-b pb-6 last:border-0">
+                <StarRow rating={r.rating} />
+                {r.title && <div className="font-semibold mt-1">{r.title}</div>}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 mt-1">
+                  <span>
+                    {r.author_name} · {fmtDate(r.created_at)}
+                  </span>
+                  {r.verified_purchase && (
+                    <Badge tone="success" className="normal-case tracking-normal">
+                      ✓ Verified purchase
+                    </Badge>
+                  )}
+                </div>
+                {r.body && (
+                  <p className="text-sm text-zinc-700 mt-2 whitespace-pre-line leading-relaxed">
+                    {r.body}
+                  </p>
                 )}
-              </div>
-              {r.body && (
-                <p className="text-sm text-zinc-700 mt-2 whitespace-pre-line leading-relaxed">
-                  {r.body}
-                </p>
-              )}
-              {r.images.length > 0 && <ReviewPhotos images={r.images} />}
-              <div className="mt-3">
-                <HelpfulButton
-                  reviewId={r.id}
-                  initialCount={r.helpful_count}
-                  initialVoted={r.helpful_by_me}
-                  isOwnReview={r.is_mine}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
+                {r.images.length > 0 && <ReviewPhotos images={r.images} />}
+                <div className="mt-3">
+                  <HelpfulButton reviewId={r.id} initialCount={r.helpful_count} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </ReviewViewerState>
       ) : (
         <p className="mt-8 text-sm text-zinc-500">
           Be the first to review this product.

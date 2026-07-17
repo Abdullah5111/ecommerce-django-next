@@ -1,30 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { useToast } from "@/lib/useToast";
+import { useReviewViewer } from "./ReviewViewerState";
 
 export default function HelpfulButton({
   reviewId,
   initialCount,
-  initialVoted,
-  isOwnReview = false,
 }: {
   reviewId: number;
+  /** Server-rendered helpful_count — not viewer-specific, so it's accurate. */
   initialCount: number;
-  initialVoted: boolean;
-  isOwnReview?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const viewer = useReviewViewer();
   const [count, setCount] = useState(initialCount);
-  const [voted, setVoted] = useState(initialVoted);
-  const [pending, setPending] = useState(false);
+  const [voted, setVoted] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  // You can't vote on your own review — show the tally without the control.
+  // Whether this is my own review is only knowable once the authenticated
+  // lookup lands — the server-rendered payload always says "not mine".
+  const isOwnReview = viewer.mineIds.has(reviewId);
+
+  useEffect(() => {
+    // Adopt the real vote state when it arrives, unless the viewer has already
+    // clicked (their optimistic state is newer than the in-flight lookup).
+    if (!viewer.pending && !touched) {
+      setVoted(viewer.votedIds.has(reviewId));
+    }
+  }, [viewer.pending, viewer.votedIds, reviewId, touched]);
+
   if (isOwnReview) {
     return (
       <span className="text-xs text-zinc-500">
@@ -36,17 +47,16 @@ export default function HelpfulButton({
   const onClick = async () => {
     const token = auth.get();
     if (!token) {
-      router.push(
-        "/login?next=" + encodeURIComponent(window.location.pathname)
-      );
+      router.push("/login?next=" + encodeURIComponent(window.location.pathname));
       return;
     }
 
     const next = !voted;
+    setTouched(true);
     // Optimistic: flip immediately, roll back if the request fails.
     setVoted(next);
     setCount((c) => c + (next ? 1 : -1));
-    setPending(true);
+    setSubmitting(true);
     try {
       const res = await api.voteHelpful(token, reviewId, next);
       setCount(res.helpful_count);
@@ -56,22 +66,26 @@ export default function HelpfulButton({
       setCount((c) => c + (next ? -1 : 1));
       toast("Could not save your vote. Please try again.", "error");
     } finally {
-      setPending(false);
+      setSubmitting(false);
     }
   };
+
+  // Stay disabled until the lookup settles: until then we can't rule out that
+  // this is the viewer's own review, and clicking would 400.
+  const disabled = submitting || viewer.pending;
 
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={pending}
+      disabled={disabled}
       aria-pressed={voted}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
         voted
           ? "border-brand bg-brand-light text-brand"
           : "border-zinc-300 text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50",
-        pending && "opacity-60",
+        disabled && "opacity-60",
       )}
     >
       <svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor">
