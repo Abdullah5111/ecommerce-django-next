@@ -1,14 +1,24 @@
+import shutil
+import tempfile
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from rest_framework.test import APITestCase
 
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderItem
-from products.models import Category, Product
+from products.models import Category, Product, Review, ReviewImage, ReviewVote
 from wishlist.models import WishlistItem
 
 User = get_user_model()
+
+# Smallest valid GIF — enough for ImageField to accept the upload.
+ONE_PX_GIF = (
+    b"GIF87a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff,"
+    b"\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
+)
 
 
 class SoldCountTests(APITestCase):
@@ -120,3 +130,204 @@ class RecommendedTests(APITestCase):
         res = self.client.get("/api/products/recommended/")
         self.assertEqual(res.status_code, 200)
         self.assertGreaterEqual(len(res.data), 1)  # no signals → fallback list
+
+
+class VerifiedPurchaseTests(APITestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.widget = Product.objects.create(
+            name="Widget", price=Decimal("10"), stock=100, category=self.cat
+        )
+        self.user = User.objects.create_user(
+            username="u", email="u@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def _order(self, status):
+        order = Order.objects.create(
+            user=self.user, shipping_address="x", status=status
+        )
+        OrderItem.objects.create(
+            order=order, product=self.widget, quantity=1, unit_price=self.widget.price
+        )
+
+    def _post_review(self):
+        return self.client.post(
+            f"/api/products/{self.widget.slug}/reviews/", {"rating": 5}
+        )
+
+    def test_flag_set_when_user_bought_the_product(self):
+        self._order(Order.Status.DELIVERED)
+        res = self._post_review()
+        self.assertEqual(res.status_code, 201)
+        self.assertTrue(res.data["verified_purchase"])
+
+    def test_flag_unset_without_a_purchase(self):
+        res = self._post_review()
+        self.assertEqual(res.status_code, 201)
+        self.assertFalse(res.data["verified_purchase"])
+
+    def test_pending_and_cancelled_orders_do_not_verify(self):
+        self._order(Order.Status.PENDING)
+        self._order(Order.Status.CANCELLED)
+        res = self._post_review()
+        self.assertFalse(res.data["verified_purchase"])
+
+    def test_another_users_purchase_does_not_verify(self):
+        buyer = User.objects.create_user(username="buyer", password="pw-123456")
+        order = Order.objects.create(
+            user=buyer, shipping_address="x", status=Order.Status.DELIVERED
+        )
+        OrderItem.objects.create(
+            order=order, product=self.widget, quantity=1, unit_price=self.widget.price
+        )
+        res = self._post_review()
+        self.assertFalse(res.data["verified_purchase"])
+
+    def test_badge_is_frozen_at_write_time(self):
+        # Cancelling later would fail a live recompute (cancelled is not a sold
+        # status) — the snapshot must still report the purchase as verified.
+        self._order(Order.Status.DELIVERED)
+        self._post_review()
+        Order.objects.filter(user=self.user).update(status=Order.Status.CANCELLED)
+        res = self.client.get(f"/api/products/{self.widget.slug}/reviews/")
+        self.assertTrue(res.data["results"][0]["verified_purchase"])
+
+
+class HelpfulVoteTests(APITestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.widget = Product.objects.create(
+            name="Widget", price=Decimal("10"), stock=100, category=self.cat
+        )
+        self.author = User.objects.create_user(username="author", password="pw-123456")
+        self.voter = User.objects.create_user(username="voter", password="pw-123456")
+        self.review = Review.objects.create(
+            product=self.widget, user=self.author, rating=5, body="Great"
+        )
+
+    def test_vote_requires_auth(self):
+        res = self.client.post(f"/api/reviews/{self.review.id}/helpful/")
+        self.assertEqual(res.status_code, 401)
+
+    def test_vote_increments_count(self):
+        self.client.force_authenticate(self.voter)
+        res = self.client.post(f"/api/reviews/{self.review.id}/helpful/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["helpful_count"], 1)
+        self.assertTrue(res.data["helpful_by_me"])
+
+    def test_voting_twice_is_idempotent(self):
+        self.client.force_authenticate(self.voter)
+        self.client.post(f"/api/reviews/{self.review.id}/helpful/")
+        res = self.client.post(f"/api/reviews/{self.review.id}/helpful/")
+        self.assertEqual(res.data["helpful_count"], 1)
+        self.assertEqual(ReviewVote.objects.filter(review=self.review).count(), 1)
+
+    def test_unvote_decrements(self):
+        self.client.force_authenticate(self.voter)
+        self.client.post(f"/api/reviews/{self.review.id}/helpful/")
+        res = self.client.delete(f"/api/reviews/{self.review.id}/helpful/")
+        self.assertEqual(res.data["helpful_count"], 0)
+        self.assertFalse(res.data["helpful_by_me"])
+
+    def test_unvote_never_goes_negative(self):
+        self.client.force_authenticate(self.voter)
+        res = self.client.delete(f"/api/reviews/{self.review.id}/helpful/")
+        self.assertEqual(res.data["helpful_count"], 0)
+
+    def test_cannot_vote_on_own_review(self):
+        self.client.force_authenticate(self.author)
+        res = self.client.post(f"/api/reviews/{self.review.id}/helpful/")
+        self.assertEqual(res.status_code, 400)
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.helpful_count, 0)
+
+    def test_helpful_by_me_is_per_viewer(self):
+        self.client.force_authenticate(self.voter)
+        self.client.post(f"/api/reviews/{self.review.id}/helpful/")
+
+        res = self.client.get(f"/api/products/{self.widget.slug}/reviews/")
+        self.assertTrue(res.data["results"][0]["helpful_by_me"])
+
+        other = User.objects.create_user(username="other", password="pw-123456")
+        self.client.force_authenticate(other)
+        res = self.client.get(f"/api/products/{self.widget.slug}/reviews/")
+        self.assertFalse(res.data["results"][0]["helpful_by_me"])
+
+    def test_guest_sees_false_helpful_by_me(self):
+        res = self.client.get(f"/api/products/{self.widget.slug}/reviews/")
+        self.assertFalse(res.data["results"][0]["helpful_by_me"])
+
+    def test_is_mine_marks_the_viewers_own_review(self):
+        self.client.force_authenticate(self.author)
+        res = self.client.get(f"/api/products/{self.widget.slug}/reviews/")
+        self.assertTrue(res.data["results"][0]["is_mine"])
+
+        self.client.force_authenticate(self.voter)
+        res = self.client.get(f"/api/products/{self.widget.slug}/reviews/")
+        self.assertFalse(res.data["results"][0]["is_mine"])
+
+    def test_guest_sees_false_is_mine(self):
+        res = self.client.get(f"/api/products/{self.widget.slug}/reviews/")
+        self.assertFalse(res.data["results"][0]["is_mine"])
+
+    def test_ordering_by_helpful(self):
+        popular = Review.objects.create(
+            product=self.widget, user=self.voter, rating=4, body="Also good"
+        )
+        self.client.force_authenticate(self.author)
+        self.client.post(f"/api/reviews/{popular.id}/helpful/")
+
+        res = self.client.get(
+            f"/api/products/{self.widget.slug}/reviews/?ordering=helpful"
+        )
+        self.assertEqual(res.data["results"][0]["id"], popular.id)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class ReviewImageTests(APITestCase):
+    @classmethod
+    def tearDownClass(cls):
+        from django.conf import settings
+
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        super().tearDownClass()
+
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.widget = Product.objects.create(
+            name="Widget", price=Decimal("10"), stock=100, category=self.cat
+        )
+        self.user = User.objects.create_user(username="u", password="pw-123456")
+        self.client.force_authenticate(self.user)
+
+    def _gif(self, name="p.gif"):
+        return SimpleUploadedFile(name, ONE_PX_GIF, content_type="image/gif")
+
+    def test_review_photos_are_attached_and_returned(self):
+        res = self.client.post(
+            f"/api/products/{self.widget.slug}/reviews/",
+            {"rating": 5, "images": [self._gif("a.gif"), self._gif("b.gif")]},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(len(res.data["images"]), 2)
+        self.assertEqual(ReviewImage.objects.count(), 2)
+        self.assertTrue(res.data["images"][0]["image"].startswith("http"))
+
+    def test_review_without_photos_still_works(self):
+        res = self.client.post(
+            f"/api/products/{self.widget.slug}/reviews/", {"rating": 4}
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["images"], [])
+
+    def test_too_many_photos_rejected(self):
+        res = self.client.post(
+            f"/api/products/{self.widget.slug}/reviews/",
+            {"rating": 5, "images": [self._gif(f"{i}.gif") for i in range(6)]},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(Review.objects.count(), 0)  # nothing partially written

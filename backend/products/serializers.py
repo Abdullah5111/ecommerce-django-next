@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Product, ProductImage, Review
+from .models import Category, Product, ProductImage, Review, ReviewImage
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -87,13 +87,58 @@ class ProductSerializer(serializers.ModelSerializer):
         return getattr(obj, "sold_count", None)
 
 
+class ReviewImageSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ReviewImage
+        fields = ("id", "image", "sort_order")
+
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        request = self.context.get("request")
+        url = obj.image.url
+        return request.build_absolute_uri(url) if request else url
+
+
 class ReviewSerializer(serializers.ModelSerializer):
+    images = ReviewImageSerializer(many=True, read_only=True)
+    helpful_by_me = serializers.SerializerMethodField()
+    is_mine = serializers.SerializerMethodField()
+
     class Meta:
         model = Review
-        fields = ("id", "rating", "title", "body", "author_name", "created_at")
-        read_only_fields = ("id", "author_name", "created_at")
+        fields = (
+            "id", "rating", "title", "body", "author_name",
+            "verified_purchase", "helpful_count", "helpful_by_me", "is_mine",
+            "images", "created_at",
+        )
+        read_only_fields = (
+            "id", "author_name", "created_at",
+            "verified_purchase", "helpful_count",
+        )
 
     def validate_rating(self, value):
         if not 1 <= value <= 5:
             raise serializers.ValidationError("Rating must be 1-5.")
         return value
+
+    def get_helpful_by_me(self, obj):
+        # Anonymous callers get False rather than null — the UI only needs to
+        # know whether *this* viewer's vote is already cast.
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        voted = getattr(obj, "voted_by_me", None)
+        if voted is not None:
+            return bool(voted)  # annotated by the list view; no extra query
+        return obj.votes.filter(user=request.user).exists()
+
+    def get_is_mine(self, obj):
+        # Lets the UI hide the helpful control on your own review, matching the
+        # self-vote rule the endpoint enforces.
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        return obj.user_id == request.user.id

@@ -109,6 +109,12 @@ class Review(models.Model):
     rating = models.PositiveSmallIntegerField()  # 1-5
     title = models.CharField(max_length=200, blank=True)
     body = models.TextField(blank=True)
+    # Snapshot at write time: whether the reviewer had actually bought the
+    # product. Frozen on purpose — a later refund shouldn't retract the badge.
+    verified_purchase = models.BooleanField(default=False)
+    # Denormalized count of ReviewVote rows, kept in sync by the vote endpoint
+    # so listing reviews never needs a per-row aggregate.
+    helpful_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -126,6 +132,11 @@ class Review(models.Model):
         ]
         indexes = [
             models.Index(fields=["product", "-created_at"]),
+            # Backs the "most helpful first" ordering on the reviews list.
+            models.Index(
+                fields=["product", "-helpful_count"],
+                name="review_product_helpful_idx",
+            ),
         ]
 
     def save(self, *args, **kwargs):
@@ -135,3 +146,35 @@ class Review(models.Model):
 
     def __str__(self):
         return f"Review {self.rating} on {self.product_id} by {self.author_name or 'anon'}"
+
+
+class ReviewImage(models.Model):
+    review = models.ForeignKey(Review, on_delete=models.CASCADE, related_name="images")
+    image = models.ImageField(upload_to="reviews/")
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return f"Image #{self.sort_order} on review {self.review_id}"
+
+
+class ReviewVote(models.Model):
+    """One 'helpful' vote by one user on one review."""
+
+    review = models.ForeignKey(Review, on_delete=models.CASCADE, related_name="votes")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="review_votes"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["review", "user"], name="uniq_vote_per_user_review"
+            ),
+        ]
+
+    def __str__(self):
+        return f"Helpful vote on review {self.review_id} by {self.user_id}"

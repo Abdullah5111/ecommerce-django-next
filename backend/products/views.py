@@ -1,13 +1,14 @@
 import django_filters
 from django.core.cache import cache
-from django.db import IntegrityError, connection
-from django.db.models import Q, Sum
+from django.db import IntegrityError, connection, transaction
+from django.db.models import Exists, F, OuterRef, Q, Sum
 from django.db.models.functions import Coalesce
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
-from .models import Category, Product
+from .models import Category, Product, Review, ReviewImage, ReviewVote
 from .serializers import (
     CategorySerializer,
     CategoryTreeSerializer,
@@ -15,6 +16,9 @@ from .serializers import (
     ProductSerializer,
     ReviewSerializer,
 )
+
+# Cap on photos per review — keeps a single upload from filling the disk.
+MAX_REVIEW_IMAGES = 5
 
 # Order statuses that count as a completed sale (an order that was paid and not
 # cancelled — cancellation restocks, so it must not count). Used for "X sold".
@@ -26,6 +30,17 @@ def _sold_annotation():
         Sum("orderitem__quantity", filter=Q(orderitem__order__status__in=SOLD_STATUSES)),
         0,
     )
+
+
+def _has_purchased(user, product) -> bool:
+    """Whether `user` has a completed order containing `product`.
+
+    Reuses SOLD_STATUSES so "bought it" means the same thing here as it does
+    for the "X sold" badge.
+    """
+    return product.orderitem_set.filter(
+        order__user=user, order__status__in=SOLD_STATUSES
+    ).exists()
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -85,6 +100,8 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = ProductFilter
     search_fields = ["name", "description"]
     ordering_fields = ["price", "created_at"]
+    # Reviews accept multipart (photo uploads) as well as plain JSON.
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def get_queryset(self):
         qs = Product.objects.filter(is_active=True).select_related("category")
@@ -125,9 +142,26 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     def reviews(self, request, slug=None):
         product = self.get_object()
         if request.method == "GET":
-            qs = product.reviews.all().order_by("-created_at")
+            qs = product.reviews.all().prefetch_related("images")
+            if request.user.is_authenticated:
+                # Resolve the viewer's own vote in the same query the list runs.
+                qs = qs.annotate(
+                    voted_by_me=Exists(
+                        ReviewVote.objects.filter(
+                            review=OuterRef("pk"), user=request.user
+                        )
+                    )
+                )
+            if request.query_params.get("ordering") == "helpful":
+                qs = qs.order_by("-helpful_count", "-created_at")
+            else:
+                qs = qs.order_by("-created_at")
             page = self.paginate_queryset(qs)
-            ser = ReviewSerializer(page if page is not None else qs, many=True)
+            ser = ReviewSerializer(
+                page if page is not None else qs,
+                many=True,
+                context={"request": request},
+            )
             return (
                 self.get_paginated_response(ser.data)
                 if page is not None
@@ -137,15 +171,32 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         # POST — require auth
         if not request.user.is_authenticated:
             return Response({"detail": "Authentication required."}, status=401)
-        ser = ReviewSerializer(data=request.data)
+
+        images = request.FILES.getlist("images")
+        if len(images) > MAX_REVIEW_IMAGES:
+            return Response(
+                {"detail": f"At most {MAX_REVIEW_IMAGES} images per review."},
+                status=400,
+            )
+
+        ser = ReviewSerializer(data=request.data, context={"request": request})
         ser.is_valid(raise_exception=True)
         try:
-            review = ser.save(product=product, user=request.user)
+            with transaction.atomic():
+                review = ser.save(
+                    product=product,
+                    user=request.user,
+                    verified_purchase=_has_purchased(request.user, product),
+                )
+                for i, upload in enumerate(images):
+                    ReviewImage.objects.create(review=review, image=upload, sort_order=i)
         except IntegrityError:
             return Response(
                 {"detail": "You already reviewed this product."}, status=400
             )
-        return Response(ReviewSerializer(review).data, status=201)
+        return Response(
+            ReviewSerializer(review, context={"request": request}).data, status=201
+        )
 
     @action(
         detail=True,
@@ -227,3 +278,43 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             data = self.get_serializer(qs, many=True).data
             cache.set(cache_key, data, timeout=300)
         return Response(data)
+
+
+class ReviewViewSet(viewsets.GenericViewSet):
+    """Actions that target a single review by id, independent of its product."""
+
+    queryset = Review.objects.all()
+    serializer_class = ReviewSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=True, methods=["post", "delete"], url_path="helpful")
+    def helpful(self, request, pk=None):
+        review = self.get_object()
+        if review.user_id == request.user.id:
+            return Response(
+                {"detail": "You cannot vote on your own review."}, status=400
+            )
+
+        if request.method == "POST":
+            _, created = ReviewVote.objects.get_or_create(
+                review=review, user=request.user
+            )
+            if created:
+                # F() keeps the counter correct under concurrent votes.
+                Review.objects.filter(pk=review.pk).update(
+                    helpful_count=F("helpful_count") + 1
+                )
+            voted = True
+        else:
+            deleted, _ = ReviewVote.objects.filter(
+                review=review, user=request.user
+            ).delete()
+            if deleted:
+                # Guard against ever dipping below zero on a double-delete race.
+                Review.objects.filter(pk=review.pk, helpful_count__gt=0).update(
+                    helpful_count=F("helpful_count") - 1
+                )
+            voted = False
+
+        review.refresh_from_db(fields=["helpful_count"])
+        return Response({"helpful_count": review.helpful_count, "helpful_by_me": voted})
