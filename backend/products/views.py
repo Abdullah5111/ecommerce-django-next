@@ -1,7 +1,7 @@
 import django_filters
 from django.core.cache import cache
 from django.db import IntegrityError, connection, transaction
-from django.db.models import Exists, F, OuterRef, Q, Sum
+from django.db.models import Exists, OuterRef, Q, Sum
 from django.db.models.functions import Coalesce
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
@@ -302,25 +302,14 @@ class ReviewViewSet(viewsets.GenericViewSet):
                 {"detail": "You cannot vote on your own review."}, status=400
             )
 
+        # helpful_count is maintained by the post_save/post_delete receivers on
+        # ReviewVote (products/signals.py), the same way Review drives the
+        # product's rating fields. Writing the vote row is the whole job here.
         if request.method == "POST":
-            _, created = ReviewVote.objects.get_or_create(
-                review=review, user=request.user
-            )
-            if created:
-                # F() keeps the counter correct under concurrent votes.
-                Review.objects.filter(pk=review.pk).update(
-                    helpful_count=F("helpful_count") + 1
-                )
+            ReviewVote.objects.get_or_create(review=review, user=request.user)
             voted = True
         else:
-            deleted, _ = ReviewVote.objects.filter(
-                review=review, user=request.user
-            ).delete()
-            if deleted:
-                # Guard against ever dipping below zero on a double-delete race.
-                Review.objects.filter(pk=review.pk, helpful_count__gt=0).update(
-                    helpful_count=F("helpful_count") - 1
-                )
+            ReviewVote.objects.filter(review=review, user=request.user).delete()
             voted = False
 
         review.refresh_from_db(fields=["helpful_count"])

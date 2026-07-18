@@ -272,6 +272,39 @@ class HelpfulVoteTests(APITestCase):
         res = self.client.get(f"/api/products/{self.widget.slug}/reviews/")
         self.assertFalse(res.data["results"][0]["is_mine"])
 
+    def test_count_survives_voter_deletion(self):
+        # The vote rows cascade when the user goes; a hand-maintained counter
+        # would stay inflated forever, so this is the drift regression.
+        self.client.force_authenticate(self.voter)
+        self.client.post(f"/api/reviews/{self.review.id}/helpful/")
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.helpful_count, 1)
+
+        self.voter.delete()
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.helpful_count, 0)
+
+    def test_count_tracks_votes_deleted_outside_the_endpoint(self):
+        self.client.force_authenticate(self.voter)
+        self.client.post(f"/api/reviews/{self.review.id}/helpful/")
+
+        ReviewVote.objects.filter(review=self.review).delete()
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.helpful_count, 0)
+
+    def test_count_tracks_votes_created_outside_the_endpoint(self):
+        other = User.objects.create_user(username="direct", password="pw-123456")
+        ReviewVote.objects.create(review=self.review, user=other)
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.helpful_count, 1)
+
+    def test_deleting_a_review_with_votes_is_clean(self):
+        self.client.force_authenticate(self.voter)
+        self.client.post(f"/api/reviews/{self.review.id}/helpful/")
+        # Votes cascade; the recompute must not blow up on the gone review.
+        self.review.delete()
+        self.assertEqual(ReviewVote.objects.count(), 0)
+
     def test_ordering_by_helpful(self):
         popular = Review.objects.create(
             product=self.widget, user=self.voter, rating=4, body="Also good"
