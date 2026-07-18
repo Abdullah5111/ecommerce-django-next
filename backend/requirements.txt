@@ -11,3 +11,6 @@ whitenoise==6.6.0
 stripe==11.6.0
 pywebpush==2.0.0
 google-auth==2.49.0
+# Only imported when GS_BUCKET_NAME is set; local disk needs neither.
+django-storages==1.14.4
+google-cloud-storage==2.18.2

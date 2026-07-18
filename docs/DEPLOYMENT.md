@@ -89,6 +89,24 @@ client ID to the backend as `GOOGLE_OAUTH_CLIENT_ID` (not sensitive — a plain 
 var). The frontend reads it from `/api/auth/google/config/`, so no frontend env
 is needed.
 
+**Media bucket (required for uploads).** Unlike the options above, this one is not
+safe to skip: user uploads (profile avatars, review photos) go to local disk
+without it, and **Cloud Run's filesystem is ephemeral and per-instance** — so
+uploads disappear on the next redeploy and are invisible to other instances while
+they last. Create a bucket and grant the runtime service account write access:
+
+```bash
+gcloud storage buckets create gs://$PROJECT_ID-media --location=$REGION
+gcloud storage buckets add-iam-policy-binding gs://$PROJECT_ID-media \
+  --member="serviceAccount:$(gcloud projects describe $PROJECT_ID \
+      --format='value(projectNumber)')-compute@developer.gserviceaccount.com" \
+  --role=roles/storage.objectAdmin
+```
+
+Then pass `GS_BUCKET_NAME=$PROJECT_ID-media` to the backend (a plain env var —
+credentials come from the runtime service account, so there is no key to store).
+Objects are written with a public-read ACL and stable, unguessable URLs.
+
 ## 6. Deploy backend
 
 The pipeline in [`backend/cloudbuild.yaml`](../backend/cloudbuild.yaml) builds the image and deploys to Cloud Run.

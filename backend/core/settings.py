@@ -100,10 +100,37 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Uploaded media (avatars, review photos). Local disk by default so the dev
+# path needs no setup; set GS_BUCKET_NAME to store them in Google Cloud Storage
+# instead. That is required on Cloud Run, whose filesystem is ephemeral and
+# per-instance — without a bucket, uploads vanish on redeploy and are invisible
+# to other instances.
+GS_BUCKET_NAME = config("GS_BUCKET_NAME", default="")
+
+# NOTE: STORAGES and the legacy STATICFILES_STORAGE/DEFAULT_FILE_STORAGE
+# settings are mutually exclusive (Django raises ImproperlyConfigured), so
+# whitenoise is configured here rather than as STATICFILES_STORAGE.
+STORAGES = {
+    "default": {
+        "BACKEND": (
+            "storages.backends.gcloud.GoogleCloudStorage"
+            if GS_BUCKET_NAME
+            else "django.core.files.storage.FileSystemStorage"
+        ),
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
+if GS_BUCKET_NAME:
+    GS_DEFAULT_ACL = "publicRead"     # media is public; URLs are unguessable
+    GS_QUERYSTRING_AUTH = False       # stable URLs, no expiring signatures
+    GS_FILE_OVERWRITE = False         # keep Django's uniquifying suffixes
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
