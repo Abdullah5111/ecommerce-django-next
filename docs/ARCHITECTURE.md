@@ -108,6 +108,8 @@ Product-detail companions:
 - `POST /api/products/{slug}/reviews/` — auth required. One review per user per product; 400 on duplicate. Accepts JSON, or **multipart** with up to 5 `images` files (`ReviewImage` rows written in the same transaction as the review). `verified_purchase` is computed server-side here.
 - `POST|DELETE /api/reviews/{id}/helpful/` — auth required. Toggles the caller's helpful vote and returns `{helpful_count, helpful_by_me}`. Voting on your own review is rejected with 400.
 
+Both review writes are throttled per user (`review-write` 10/hour, `review-vote` 60/hour) via `products/throttling.py`. The classes skip safe methods, because the public review `GET` shares a route with the authenticated `POST` and browsing must not be rate-limited. Throttle state lives in the cache, so under the default per-process `LocMemCache` the limits are per-instance — point `CACHE_BACKEND` at Redis to make them cluster-wide.
+
 Category-tree helpers:
 
 - `GET /api/categories/tree/` — nested top-level → children recursive.

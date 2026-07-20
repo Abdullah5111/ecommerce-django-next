@@ -17,6 +17,7 @@ from .serializers import (
     ReviewImageUploadSerializer,
     ReviewSerializer,
 )
+from .throttling import ReviewVoteThrottle, ReviewWriteThrottle
 
 # Cap on photos per review — keeps a single upload from filling the disk.
 MAX_REVIEW_IMAGES = 5
@@ -139,6 +140,8 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         methods=["get", "post"],
         url_path="reviews",
         permission_classes=[permissions.AllowAny],
+        # Write-only throttle: the public GET on this route stays unlimited.
+        throttle_classes=[ReviewWriteThrottle],
     )
     def reviews(self, request, slug=None):
         product = self.get_object()
@@ -294,7 +297,12 @@ class ReviewViewSet(viewsets.GenericViewSet):
     serializer_class = ReviewSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    @action(detail=True, methods=["post", "delete"], url_path="helpful")
+    @action(
+        detail=True,
+        methods=["post", "delete"],
+        url_path="helpful",
+        throttle_classes=[ReviewVoteThrottle],
+    )
     def helpful(self, request, pk=None):
         review = self.get_object()
         if review.user_id == request.user.id:

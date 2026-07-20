@@ -3,7 +3,9 @@ import shutil
 import tempfile
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from rest_framework.test import APITestCase
@@ -135,6 +137,10 @@ class RecommendedTests(APITestCase):
 
 class VerifiedPurchaseTests(APITestCase):
     def setUp(self):
+        # Throttle history lives in the cache, which TestCase does not roll
+        # back — without this, review POSTs accumulate across tests and later
+        # ones start 429ing.
+        cache.clear()
         self.cat = Category.objects.create(name="Gear")
         self.widget = Product.objects.create(
             name="Widget", price=Decimal("10"), stock=100, category=self.cat
@@ -197,6 +203,7 @@ class VerifiedPurchaseTests(APITestCase):
 
 class HelpfulVoteTests(APITestCase):
     def setUp(self):
+        cache.clear()  # vote throttle history persists across tests
         self.cat = Category.objects.create(name="Gear")
         self.widget = Product.objects.create(
             name="Widget", price=Decimal("10"), stock=100, category=self.cat
@@ -319,6 +326,65 @@ class HelpfulVoteTests(APITestCase):
         self.assertEqual(res.data["results"][0]["id"], popular.id)
 
 
+# Same DRF config as production, with the review rates dialled down so the
+# limits are reachable in a test without hammering.
+THROTTLED_REST_FRAMEWORK = {
+    **settings.REST_FRAMEWORK,
+    "DEFAULT_THROTTLE_RATES": {"review-write": "2/hour", "review-vote": "2/hour"},
+}
+
+
+@override_settings(REST_FRAMEWORK=THROTTLED_REST_FRAMEWORK)
+class ReviewThrottleTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.cat = Category.objects.create(name="Gear")
+        self.widget = Product.objects.create(
+            name="Widget", price=Decimal("10"), stock=100, category=self.cat
+        )
+        self.author = User.objects.create_user(username="author", password="pw-123456")
+        self.voter = User.objects.create_user(username="voter", password="pw-123456")
+
+    def test_public_review_listing_is_never_throttled(self):
+        # The GET shares a route with the throttled POST; browsing reviews must
+        # not be rate-limited.
+        for _ in range(10):
+            res = self.client.get(f"/api/products/{self.widget.slug}/reviews/")
+            self.assertEqual(res.status_code, 200)
+
+    def test_posting_reviews_is_throttled(self):
+        self.client.force_authenticate(self.author)
+        url = f"/api/products/{self.widget.slug}/reviews/"
+        # Rate is 2/hour. The duplicate-review 400s still consume the budget,
+        # because throttling runs before the view body.
+        self.client.post(url, {"rating": 5})
+        self.client.post(url, {"rating": 4})
+        res = self.client.post(url, {"rating": 3})
+        self.assertEqual(res.status_code, 429)
+
+    def test_helpful_votes_are_throttled(self):
+        review = Review.objects.create(
+            product=self.widget, user=self.author, rating=5, body="Great"
+        )
+        self.client.force_authenticate(self.voter)
+        url = f"/api/reviews/{review.id}/helpful/"
+        self.client.post(url)
+        self.client.delete(url)
+        res = self.client.post(url)
+        self.assertEqual(res.status_code, 429)
+
+    def test_throttles_are_per_user(self):
+        url = f"/api/products/{self.widget.slug}/reviews/"
+        self.client.force_authenticate(self.author)
+        self.client.post(url, {"rating": 5})
+        self.client.post(url, {"rating": 5})
+        self.assertEqual(self.client.post(url, {"rating": 5}).status_code, 429)
+
+        # A different user starts with a fresh budget.
+        self.client.force_authenticate(self.voter)
+        self.assertEqual(self.client.post(url, {"rating": 4}).status_code, 201)
+
+
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class ReviewImageTests(APITestCase):
     @classmethod
@@ -329,6 +395,7 @@ class ReviewImageTests(APITestCase):
         super().tearDownClass()
 
     def setUp(self):
+        cache.clear()  # review-write throttle history persists across tests
         self.cat = Category.objects.create(name="Gear")
         self.widget = Product.objects.create(
             name="Widget", price=Decimal("10"), stock=100, category=self.cat

@@ -155,6 +155,13 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 12,
+    # Applied per-view via throttle_classes, not globally. Throttle state lives
+    # in the cache, so with the default per-process LocMemCache these limits are
+    # per-instance — point CACHE_BACKEND at Redis to make them cluster-wide.
+    "DEFAULT_THROTTLE_RATES": {
+        "review-write": "10/hour",
+        "review-vote": "60/hour",
+    },
 }
 
 SIMPLE_JWT = {
