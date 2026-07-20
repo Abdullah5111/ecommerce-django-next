@@ -2,8 +2,8 @@ import os
 import shutil
 import tempfile
 from decimal import Decimal
+from unittest.mock import patch
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -13,6 +13,7 @@ from rest_framework.test import APITestCase
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderItem
 from products.models import Category, Product, Review, ReviewImage, ReviewVote
+from products.throttling import ReviewWriteThrottle
 from wishlist.models import WishlistItem
 
 User = get_user_model()
@@ -336,18 +337,21 @@ class HelpfulVoteTests(APITestCase):
         self.assertEqual(res.data["results"][0]["id"], popular.id)
 
 
-# Same DRF config as production, with the review rates dialled down so the
-# limits are reachable in a test without hammering.
-THROTTLED_REST_FRAMEWORK = {
-    **settings.REST_FRAMEWORK,
-    "DEFAULT_THROTTLE_RATES": {"review-write": "2/hour", "review-vote": "2/hour"},
-}
-
-
-@override_settings(REST_FRAMEWORK=THROTTLED_REST_FRAMEWORK)
 class ReviewThrottleTests(APITestCase):
     def setUp(self):
         cache.clear()
+        # Dial the limits down so they're reachable without hammering.
+        # override_settings(REST_FRAMEWORK=...) does NOT work here:
+        # SimpleRateThrottle.THROTTLE_RATES is bound to the settings dict at
+        # class-definition time, so replacing the setting leaves the class
+        # pointing at the original dict. Patching the dict itself is what the
+        # throttle actually reads.
+        rates = patch.dict(
+            ReviewWriteThrottle.THROTTLE_RATES,
+            {"review-write": "2/hour", "review-vote": "2/hour"},
+        )
+        rates.start()
+        self.addCleanup(rates.stop)
         self.cat = Category.objects.create(name="Gear")
         self.widget = Product.objects.create(
             name="Widget", price=Decimal("10"), stock=100, category=self.cat
