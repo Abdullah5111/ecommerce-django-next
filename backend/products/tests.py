@@ -1,3 +1,4 @@
+import os
 import shutil
 import tempfile
 from decimal import Decimal
@@ -406,6 +407,45 @@ class ReviewImageTests(APITestCase):
         )
         self.assertEqual(res.status_code, 400)
         self.assertEqual(Review.objects.count(), 0)
+
+    def test_file_is_removed_when_the_image_row_is_deleted(self):
+        self.client.post(
+            f"/api/products/{self.widget.slug}/reviews/",
+            {"rating": 5, "images": [self._gif()]},
+            format="multipart",
+        )
+        img = ReviewImage.objects.get()
+        path = img.image.path
+        self.assertTrue(os.path.exists(path))
+
+        img.delete()
+        self.assertFalse(os.path.exists(path))
+
+    def test_files_are_removed_when_the_review_is_deleted(self):
+        # The cascade is the case that actually leaks: rows vanish, files stay.
+        self.client.post(
+            f"/api/products/{self.widget.slug}/reviews/",
+            {"rating": 5, "images": [self._gif("a.gif"), self._gif("b.gif")]},
+            format="multipart",
+        )
+        paths = [i.image.path for i in ReviewImage.objects.all()]
+        self.assertEqual(len(paths), 2)
+        self.assertTrue(all(os.path.exists(p) for p in paths))
+
+        Review.objects.get().delete()
+        self.assertEqual(ReviewImage.objects.count(), 0)
+        self.assertFalse(any(os.path.exists(p) for p in paths))
+
+    def test_deleting_an_image_whose_file_is_already_gone_is_safe(self):
+        self.client.post(
+            f"/api/products/{self.widget.slug}/reviews/",
+            {"rating": 5, "images": [self._gif()]},
+            format="multipart",
+        )
+        img = ReviewImage.objects.get()
+        os.remove(img.image.path)  # simulate out-of-band cleanup
+        img.delete()  # must not raise
+        self.assertEqual(ReviewImage.objects.count(), 0)
 
     def test_one_bad_photo_rejects_the_whole_review(self):
         bad = SimpleUploadedFile("nope.png", b"still not an image")

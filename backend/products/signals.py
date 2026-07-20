@@ -2,7 +2,7 @@ from django.db.models import Avg, Count
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from .models import Review, ReviewVote
+from .models import Review, ReviewImage, ReviewVote
 
 
 def _recompute(product):
@@ -44,3 +44,20 @@ def review_vote_deleted(sender, instance, **kwargs):
     # Deleting a Review cascades its votes; the .update() simply matches no
     # rows in that case, so the vanished review needs no special handling.
     _recompute_helpful(instance.review_id)
+
+
+@receiver(post_delete, sender=ReviewImage)
+def review_image_deleted(sender, instance, **kwargs):
+    """Drop the stored file when its row goes.
+
+    Deleting a Review cascades its ReviewImage rows, and without this the
+    files outlive them forever — on local disk that is clutter, but with
+    GS_BUCKET_NAME set it is unbounded paid storage nobody can reach.
+    Mirrors the explicit avatar.delete() in accounts/views.py.
+    """
+    if not instance.image:
+        return
+    # save=False: the row is already gone, so there is nothing to write back.
+    # Storage backends ignore an already-missing file, so this is safe to
+    # re-run and safe if the file was cleaned up out of band.
+    instance.image.delete(save=False)
