@@ -181,7 +181,9 @@ class VerifiedPurchaseTests(APITestCase):
         self.assertFalse(res.data["verified_purchase"])
 
     def test_another_users_purchase_does_not_verify(self):
-        buyer = User.objects.create_user(username="buyer", password="pw-123456")
+        buyer = User.objects.create_user(
+            username="buyer", email="buyer@example.com", password="pw-123456"
+        )
         order = Order.objects.create(
             user=buyer, shipping_address="x", status=Order.Status.DELIVERED
         )
@@ -208,8 +210,12 @@ class HelpfulVoteTests(APITestCase):
         self.widget = Product.objects.create(
             name="Widget", price=Decimal("10"), stock=100, category=self.cat
         )
-        self.author = User.objects.create_user(username="author", password="pw-123456")
-        self.voter = User.objects.create_user(username="voter", password="pw-123456")
+        self.author = User.objects.create_user(
+            username="author", email="author@example.com", password="pw-123456"
+        )
+        self.voter = User.objects.create_user(
+            username="voter", email="voter@example.com", password="pw-123456"
+        )
         self.review = Review.objects.create(
             product=self.widget, user=self.author, rating=5, body="Great"
         )
@@ -258,7 +264,9 @@ class HelpfulVoteTests(APITestCase):
         res = self.client.get(f"/api/products/{self.widget.slug}/reviews/")
         self.assertTrue(res.data["results"][0]["helpful_by_me"])
 
-        other = User.objects.create_user(username="other", password="pw-123456")
+        other = User.objects.create_user(
+            username="other", email="other@example.com", password="pw-123456"
+        )
         self.client.force_authenticate(other)
         res = self.client.get(f"/api/products/{self.widget.slug}/reviews/")
         self.assertFalse(res.data["results"][0]["helpful_by_me"])
@@ -301,7 +309,9 @@ class HelpfulVoteTests(APITestCase):
         self.assertEqual(self.review.helpful_count, 0)
 
     def test_count_tracks_votes_created_outside_the_endpoint(self):
-        other = User.objects.create_user(username="direct", password="pw-123456")
+        other = User.objects.create_user(
+            username="direct", email="direct@example.com", password="pw-123456"
+        )
         ReviewVote.objects.create(review=self.review, user=other)
         self.review.refresh_from_db()
         self.assertEqual(self.review.helpful_count, 1)
@@ -342,8 +352,12 @@ class ReviewThrottleTests(APITestCase):
         self.widget = Product.objects.create(
             name="Widget", price=Decimal("10"), stock=100, category=self.cat
         )
-        self.author = User.objects.create_user(username="author", password="pw-123456")
-        self.voter = User.objects.create_user(username="voter", password="pw-123456")
+        self.author = User.objects.create_user(
+            username="author", email="author@example.com", password="pw-123456"
+        )
+        self.voter = User.objects.create_user(
+            username="voter", email="voter@example.com", password="pw-123456"
+        )
 
     def test_public_review_listing_is_never_throttled(self):
         # The GET shares a route with the throttled POST; browsing reviews must
@@ -400,7 +414,9 @@ class ReviewImageTests(APITestCase):
         self.widget = Product.objects.create(
             name="Widget", price=Decimal("10"), stock=100, category=self.cat
         )
-        self.user = User.objects.create_user(username="u", password="pw-123456")
+        self.user = User.objects.create_user(
+            username="u", email="u@example.com", password="pw-123456"
+        )
         self.client.force_authenticate(self.user)
 
     def _gif(self, name="p.gif"):
