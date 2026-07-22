@@ -53,7 +53,7 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 | Order summary (subtotal/discount/shipping/total) | ✅ | ✅ | |
 | Guest cart | ✅ | ✅ | localStorage, merges on login |
 | Save for later | ✅ | ✅ | "Save for later" on cart lines ↔ "Move to cart" from a saved section (wishlist-backed) |
-| Tax in totals | ✅ | ❌ | Explicitly deferred |
+| Tax in totals | ✅ | ✅ | Configurable `TAX_RATE` on discounted merchandise; own line, snapshotted on the order, tax-aware refunds |
 | Express / one-click checkout | ✅ | ❌ | |
 
 ## Payments
@@ -105,21 +105,22 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 
 | Status | Count (approx) | Examples |
 |---|---|---|
-| ✅ Matched | ~36 | catalog, coupons, cart/wishlist, save-for-later, social proof, lifecycle, returns, accounts, payments, refunds, notifications, order emails, web push, verified-purchase + helpful votes |
+| ✅ Matched | ~37 | catalog, coupons, cart/wishlist, save-for-later, social proof, lifecycle, returns, accounts, payments, refunds, notifications, order emails, web push, verified-purchase + helpful votes, tax |
 | 🟡 Partial | ~6 | google login (no Apple/FB), tracking, wallets, homepage banners, review photos (no video) |
-| ❌ Not matched | ~19 | tax, variants, multi-vendor, gamification, i18n, BNPL |
+| ❌ Not matched | ~18 | variants, multi-vendor, gamification, i18n, BNPL |
 
 ## Recommended next gaps (impact order)
 
-1. **Tax** in the totals breakdown (structure already supports it)
-2. **Product variants** (size/color/SKU)
-3. **Q&A** on product detail, and **frequently-bought-together** bundles
+1. **Product variants** (size/color/SKU)
+2. **Q&A** on product detail, and **frequently-bought-together** bundles
+3. **New-user / referral discounts**
 
 Recently shipped:
 - ~~Real payments (Stripe)~~ — PaymentIntent + Elements + webhook, real refunds, keyless mock fallback.
 - ~~Order-confirmation / shipping emails~~ — emails on every order lifecycle event.
 - ~~Push notifications~~ — in-app notification center + bell, plus Web Push (VAPID), keyless-disabled by default.
 - ~~Review enhancements~~ — verified-purchase badge (snapshotted from order data), reviewer photos with a lightbox, and one-per-user helpful votes with most-helpful sorting. Video reviews remain out.
+- ~~Tax~~ — configurable `TAX_RATE` applied to discounted merchandise, its own line in the breakdown, snapshotted on the order, with tax-aware refunds. Off by default (0%).
 
 Marketplace-scale items (multi-vendor, gamification, BNPL, i18n) are realistically
 out of scope for this portfolio piece.
