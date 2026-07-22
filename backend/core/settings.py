@@ -193,6 +193,10 @@ CSRF_TRUSTED_ORIGINS = config(
 SHIPPING_FLAT_FEE = Decimal(config("SHIPPING_FLAT_FEE", default="5.00"))
 FREE_SHIPPING_THRESHOLD = Decimal(config("FREE_SHIPPING_THRESHOLD", default="50.00"))
 
+# Sales tax as a percent applied to discounted merchandise (8.25 → 8.25%).
+# Defaults to 0 (no tax line) so nothing changes until a rate is configured.
+TAX_RATE = Decimal(config("TAX_RATE", default="0"))
+
 RETURN_WINDOW_DAYS = config("RETURN_WINDOW_DAYS", default=30, cast=int)
 
 # Stripe payments. Leave the secret key blank to run checkout in mock mode

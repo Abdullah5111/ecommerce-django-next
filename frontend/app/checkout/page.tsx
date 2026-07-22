@@ -383,6 +383,12 @@ export default function CheckoutPage() {
                         : `$${quote.shipping_total}`}
                   </span>
                 </div>
+                {quote && Number(quote.tax_total) > 0 && (
+                  <div className="flex justify-between">
+                    <span>Tax</span>
+                    <span>${quote.tax_total}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-lg font-semibold border-t pt-2 mt-2">
                   <span>Total</span>
                   <span>${quote ? quote.grand_total : total.toFixed(2)}</span>

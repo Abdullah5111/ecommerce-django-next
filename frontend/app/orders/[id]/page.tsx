@@ -132,6 +132,9 @@ export default function OrderDetailPage() {
             <div className="flex justify-between text-green-700"><span>Discount</span><span>−${order.discount_total}</span></div>
           )}
           <div className="flex justify-between"><span>Shipping</span><span>{Number(order.shipping_total) === 0 ? "Free" : `$${order.shipping_total}`}</span></div>
+          {Number(order.tax_total) > 0 && (
+            <div className="flex justify-between"><span>Tax</span><span>${order.tax_total}</span></div>
+          )}
           <div className="flex justify-between font-semibold border-t pt-1"><span>Total</span><span>${order.total}</span></div>
           {Number(order.refunded_total) > 0 && (
             <div className="flex justify-between text-rose-700"><span>Refunded</span><span>−${order.refunded_total}</span></div>

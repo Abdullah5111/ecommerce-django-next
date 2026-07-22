@@ -12,6 +12,7 @@ def quote_to_dict(q):
     return {
         "subtotal": str(q.subtotal),
         "discount_total": str(q.discount_total),
+        "tax_total": str(q.tax_total),
         "shipping_total": str(q.shipping_total),
         "grand_total": str(q.grand_total),
         "coupon_code": q.coupon_code,

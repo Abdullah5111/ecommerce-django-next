@@ -209,3 +209,74 @@ class OrderLifecycleTests(APITestCase):
         self.client.force_authenticate(other)
         res = self.client.get(f"/api/orders/{order.id}/")
         self.assertEqual(res.status_code, 404)
+
+
+@override_settings(
+    SHIPPING_FLAT_FEE=Decimal("5.00"),
+    FREE_SHIPPING_THRESHOLD=Decimal("50.00"),
+    TAX_RATE=Decimal("10"),  # 10% keeps the arithmetic easy to read
+)
+class TaxPricingTests(TestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.a = _product("A", "20.00", self.cat)
+        self.b = _product("B", "30.00", self.cat)
+
+    def test_tax_on_plain_subtotal(self):
+        q = quote([(self.a, 1)])  # subtotal 20, tax 2.00, shipping 5
+        self.assertEqual(q.tax_total, Decimal("2.00"))
+        self.assertEqual(q.grand_total, Decimal("27.00"))  # 20 + 2 + 5
+
+    def test_tax_applies_after_discount(self):
+        Coupon.objects.create(code="TEN", kind=Coupon.Kind.PERCENT, value=Decimal("10"))
+        coupon = Coupon.objects.get(code="TEN")
+        q = quote([(self.a, 1)], coupon)  # subtotal 20, disc 2, taxable 18, tax 1.80
+        self.assertEqual(q.discount_total, Decimal("2.00"))
+        self.assertEqual(q.tax_total, Decimal("1.80"))
+        self.assertEqual(q.grand_total, Decimal("24.80"))  # 20 - 2 + 1.80 + 5
+
+    def test_free_shipping_threshold_uses_pretax_subtotal(self):
+        q = quote([(self.a, 1), (self.b, 1)])  # subtotal 50 -> free ship, tax 5.00
+        self.assertEqual(q.shipping_total, Decimal("0.00"))
+        self.assertEqual(q.tax_total, Decimal("5.00"))
+        self.assertEqual(q.grand_total, Decimal("55.00"))  # 50 + 5 + 0
+
+    def test_tax_never_negative_when_discount_exceeds_subtotal(self):
+        Coupon.objects.create(code="BIG", kind=Coupon.Kind.FIXED, value=Decimal("999"))
+        coupon = Coupon.objects.get(code="BIG")
+        q = quote([(self.a, 1)], coupon)  # discount capped at subtotal -> taxable 0
+        self.assertEqual(q.tax_total, Decimal("0.00"))
+
+
+@override_settings(SHIPPING_FLAT_FEE=Decimal("5.00"), FREE_SHIPPING_THRESHOLD=Decimal("50.00"))
+class TaxDefaultsOffTests(TestCase):
+    def test_no_tax_line_without_a_configured_rate(self):
+        cat = Category.objects.create(name="Gear")
+        q = quote([(_product("A", "20.00", cat), 1)])  # TAX_RATE defaults to 0
+        self.assertEqual(q.tax_total, Decimal("0.00"))
+        self.assertEqual(q.grand_total, Decimal("25.00"))  # unchanged: 20 + 5
+
+
+@override_settings(
+    SHIPPING_FLAT_FEE=Decimal("5.00"),
+    FREE_SHIPPING_THRESHOLD=Decimal("50.00"),
+    TAX_RATE=Decimal("10"),
+)
+class OrderTaxTests(APITestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(name="Widget", price=Decimal("40.00"), stock=10, category=self.cat)
+        self.user = User.objects.create_user(username="buyer", email="buyer@example.com", password="pw-123456")
+        self.client.force_authenticate(self.user)
+
+    def test_order_snapshots_tax(self):
+        res = self.client.post(
+            "/api/orders/",
+            {"shipping_address": "123 Test St", "items": [{"product": self.p.id, "quantity": 1}]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        order = Order.objects.get(id=res.data["id"])
+        self.assertEqual(order.tax_total, Decimal("4.00"))          # 10% of 40
+        self.assertEqual(order.total, Decimal("49.00"))             # 40 + 4 + 5
+        self.assertEqual(res.data["tax_total"], "4.00")

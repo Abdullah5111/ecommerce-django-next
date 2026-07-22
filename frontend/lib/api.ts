@@ -148,6 +148,7 @@ export type Order = {
   total: string;
   subtotal: string;
   discount_total: string;
+  tax_total: string;
   shipping_total: string;
   coupon_code: string;
   items: OrderItem[];
@@ -165,6 +166,7 @@ export type Order = {
 export type QuoteResult = {
   subtotal: string;
   discount_total: string;
+  tax_total: string;
   shipping_total: string;
   grand_total: string;
   coupon_code: string | null;

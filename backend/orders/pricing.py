@@ -16,6 +16,7 @@ def money(value) -> Decimal:
 class PriceQuote:
     subtotal: Decimal
     discount_total: Decimal
+    tax_total: Decimal
     shipping_total: Decimal
     grand_total: Decimal
     coupon_code: str | None
@@ -62,6 +63,18 @@ def _shipping(subtotal, free_shipping) -> Decimal:
     return money(settings.SHIPPING_FLAT_FEE)
 
 
+def _tax(taxable) -> Decimal:
+    """Tax on the taxable base. TAX_RATE is a percent, so 8.25 → 8.25%.
+
+    Applied to merchandise after discount, not to shipping — the common
+    default, and it keeps the base independent of the shipping rules.
+    """
+    rate = settings.TAX_RATE
+    if rate <= 0 or taxable <= 0:
+        return Decimal("0.00")
+    return money(taxable * rate / Decimal("100"))
+
+
 def quote(items, coupon=None, user=None) -> PriceQuote:
     """Compute the authoritative price breakdown. Pure — no DB writes.
 
@@ -81,7 +94,13 @@ def quote(items, coupon=None, user=None) -> PriceQuote:
             free_shipping = coupon.kind == Coupon.Kind.FREE_SHIPPING
 
     shipping = _shipping(subtotal, free_shipping)
-    grand = subtotal - discount + shipping
+    # Tax the discounted merchandise. Floor the base at 0 so an over-large
+    # discount can't produce negative tax.
+    taxable = subtotal - discount
+    if taxable < 0:
+        taxable = Decimal("0.00")
+    tax = _tax(taxable)
+    grand = subtotal - discount + tax + shipping
     # Defensive floor: a misconfigured coupon (e.g. BOGO/percent value > 100)
     # could discount more than the cart is worth. Never bill a negative total.
     if grand < 0:
@@ -90,6 +109,7 @@ def quote(items, coupon=None, user=None) -> PriceQuote:
     return PriceQuote(
         subtotal=subtotal,
         discount_total=money(discount),
+        tax_total=tax,
         shipping_total=shipping,
         grand_total=money(grand),
         coupon_code=code,

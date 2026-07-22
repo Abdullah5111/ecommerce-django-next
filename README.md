@@ -60,10 +60,11 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - Per-user order history with the structured shipping snapshot rendered per order
 - Promo codes at checkout: percent, fixed-amount, free-shipping, and buy-X-get-Y; one per order, validated and priced server-side with a live breakdown
 - Flat-fee shipping ($5) waived over $50 subtotal or by a free-shipping coupon
+- Configurable **sales tax** (`TAX_RATE`) applied to discounted merchandise, shown as its own line in the breakdown and snapshotted on the order; off by default (0%), so the tax line only appears once a rate is set
 
 ### Orders & returns
 - Full order lifecycle: pay → ship (with tracking) → deliver, plus customer cancel (restock + coupon release), each recorded in a per-order audit timeline
-- Line-item returns/RMA: request specific items + reasons within a return window; staff approve → receive (restock) → refund (proportional to discount, shipping excluded — issued through Stripe when keys are set, mock otherwise); orders reflect partial/full refunded status
+- Line-item returns/RMA: request specific items + reasons within a return window; staff approve → receive (restock) → refund (proportional to discount, plus the tax charged on the returned items, shipping excluded — issued through Stripe when keys are set, mock otherwise); orders reflect partial/full refunded status
 
 ### Notifications & alerts
 - Every order lifecycle event (paid, shipped, delivered, cancelled, refunded) fans out to three channels from one `notify()` call: an in-app notification row, an email, and a browser push
@@ -232,7 +233,7 @@ Product list query params:
 | Method | Path                              | Auth | Purpose                                                                |
 |--------|-----------------------------------|------|------------------------------------------------------------------------|
 | GET    | /api/orders/                      | JWT  | List my orders (with structured shipping snapshot)                     |
-| POST   | /api/orders/                      | JWT  | Create order — body accepts `shipping_address_id` or legacy `shipping_address` text; optional `coupon_code` applies a promo; response includes `subtotal`, `discount_total`, `shipping_total`, and `coupon_code` |
+| POST   | /api/orders/                      | JWT  | Create order — body accepts `shipping_address_id` or legacy `shipping_address` text; optional `coupon_code` applies a promo; response includes `subtotal`, `discount_total`, `tax_total`, `shipping_total`, and `coupon_code` |
 | GET    | /api/orders/{id}/                 | JWT  | Order detail                                                           |
 | POST   | /api/orders/{id}/create-payment-intent/ | JWT  | Start payment for a pending order → `{client_secret, publishable_key, mock}` (Stripe when keyed, mock stub otherwise) |
 | POST   | /api/orders/{id}/pay/             | JWT  | Confirm payment → paid. Mock mode confirms immediately; live mode requires a succeeded PaymentIntent |
@@ -260,7 +261,7 @@ Order detail now includes per-status timestamps (`paid_at`, `shipped_at`, `deliv
 | POST     | /api/returns/{id}/receive/     | staff       | approved → received (restock)                                    |
 | POST     | /api/returns/{id}/refund/      | staff       | received → refunded (proportional, mock)                         |
 
-Return requests are accepted only on delivered orders within the return window (default 30 days, configurable via `RETURN_WINDOW_DAYS`). The refund is proportional to the line-item discount; shipping is not refunded. Quantities cannot exceed the original purchased quantity. Order status reflects `partially_refunded` or `refunded` once refunds are issued.
+Return requests are accepted only on delivered orders within the return window (default 30 days, configurable via `RETURN_WINDOW_DAYS`). The refund is proportional to the line-item discount and includes the tax charged on the returned items; shipping is not refunded. Quantities cannot exceed the original purchased quantity. Order status reflects `partially_refunded` or `refunded` once refunds are issued.
 
 ### Cart
 

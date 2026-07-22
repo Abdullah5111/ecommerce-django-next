@@ -30,6 +30,7 @@ class Order(models.Model):
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     discount_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    tax_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     shipping_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     coupon = models.ForeignKey(
         "coupons.Coupon", null=True, blank=True, on_delete=models.SET_NULL, related_name="orders"

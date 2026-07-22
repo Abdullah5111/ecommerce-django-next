@@ -144,3 +144,46 @@ class RefundMathTests(APITestCase):
         from returns.models import ReturnLine
         ReturnLine.objects.create(return_request=ret, order_item=oi, quantity=1, reason="other")
         self.assertEqual(refund_for(ret), Decimal("90.00"))
+
+
+@override_settings(
+    SHIPPING_FLAT_FEE=Decimal("5.00"),
+    FREE_SHIPPING_THRESHOLD=Decimal("50.00"),
+    RETURN_WINDOW_DAYS=30,
+    TAX_RATE=Decimal("10"),
+)
+class RefundWithTaxTests(APITestCase):
+    """A customer who paid tax must get it back proportionally on return."""
+
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(name="Widget", price=Decimal("40.00"), stock=10, category=self.cat)
+        self.user = User.objects.create_user(username="buyer", email="buyer@example.com", password="pw-123456")
+        self.staff = User.objects.create_user(username="staff", email="staff@example.com", password="pw-123456", is_staff=True)
+        self.client.force_authenticate(self.user)
+        body = {"shipping_address": "123 Test St", "items": [{"product": self.p.id, "quantity": 2}]}
+        self.order = Order.objects.get(id=self.client.post("/api/orders/", body, format="json").data["id"])
+        self.client.post(f"/api/orders/{self.order.id}/pay/")
+        self.client.force_authenticate(self.staff)
+        self.client.post(f"/api/orders/{self.order.id}/ship/", {}, format="json")
+        self.client.post(f"/api/orders/{self.order.id}/deliver/")
+        self.client.force_authenticate(self.user)
+        self.order.refresh_from_db()
+
+    def _return(self, qty):
+        return self.client.post(
+            "/api/returns/",
+            {"order": self.order.id, "lines": [{"order_item": self.order.items.first().id, "quantity": qty, "reason": "defective"}]},
+            format="json",
+        )
+
+    def test_refund_includes_proportional_tax(self):
+        # subtotal 80, tax 8.00. Returning one unit: net 40 + its 4.00 tax.
+        self.assertEqual(self.order.tax_total, Decimal("8.00"))
+        ret_id = self._return(qty=1).data["id"]
+        self.client.force_authenticate(self.staff)
+        self.client.post(f"/api/returns/{ret_id}/approve/")
+        self.client.post(f"/api/returns/{ret_id}/receive/")
+        self.client.post(f"/api/returns/{ret_id}/refund/")
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.refunded_total, Decimal("44.00"))
