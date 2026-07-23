@@ -4,19 +4,25 @@ from rest_framework import serializers
 
 from accounts.models import Address
 from coupons.models import Coupon, CouponRedemption
-from products.models import Product
+from products.models import Product, ProductVariant
 from .models import Order, OrderItem, OrderEvent
-from .pricing import quote
+from .pricing import Line, quote
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name", read_only=True)
     subtotal = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    variant = serializers.PrimaryKeyRelatedField(
+        queryset=ProductVariant.objects.all(), required=False, allow_null=True
+    )
 
     class Meta:
         model = OrderItem
-        fields = ("id", "product", "product_name", "quantity", "unit_price", "subtotal")
-        read_only_fields = ("unit_price",)
+        fields = (
+            "id", "product", "product_name", "variant", "variant_sku",
+            "variant_label", "quantity", "unit_price", "subtotal",
+        )
+        read_only_fields = ("unit_price", "variant_sku", "variant_label")
 
 
 class OrderEventSerializer(serializers.ModelSerializer):
@@ -107,9 +113,30 @@ class OrderSerializer(serializers.ModelSerializer):
         else:
             order_kwargs["shipping_address"] = validated_data.pop("shipping_address")
 
+        # Validate each variant belongs to its product, then build the priced
+        # lines (variant price wins when a variant is chosen).
+        lines = []
+        for it in items_data:
+            product = it["product"]
+            variant = it.get("variant")
+            if variant is not None:
+                if variant.product_id != product.id:
+                    raise serializers.ValidationError(
+                        {"items": f"Variant {variant.sku} does not belong to {product.name}."}
+                    )
+                if not variant.is_active:
+                    raise serializers.ValidationError(
+                        {"items": f"Variant {variant.sku} is not available."}
+                    )
+            elif product.variants.filter(is_active=True).exists():
+                # A variant product must be bought through a variant.
+                raise serializers.ValidationError(
+                    {"items": f"Select a variant for {product.name}."}
+                )
+            lines.append(Line(product, it["quantity"], variant))
+
         # Authoritative pricing (re-validates the coupon under the lock).
-        pairs = [(it["product"], it["quantity"]) for it in items_data]
-        price = quote(pairs, coupon, user)
+        price = quote(lines, coupon, user)
         if coupon is not None and price.coupon_error:
             raise serializers.ValidationError({"coupon_code": price.coupon_error})
 
@@ -126,18 +153,36 @@ class OrderSerializer(serializers.ModelSerializer):
             **validated_data,
         )
 
-        for item_data in items_data:
-            product = item_data["product"]
-            quantity = item_data["quantity"]
-            updated = Product.objects.filter(
-                pk=product.pk, stock__gte=quantity
-            ).update(stock=F("stock") - quantity)
-            if not updated:
-                raise serializers.ValidationError(
-                    {"items": f"Not enough stock for {product.name}."}
-                )
+        for line in lines:
+            product = line.product
+            variant = line.variant
+            quantity = line.quantity
+            if variant is not None:
+                # Atomic conditional decrement on the variant's own stock —
+                # same no-oversell guarantee as the product path.
+                updated = ProductVariant.objects.filter(
+                    pk=variant.pk, stock__gte=quantity
+                ).update(stock=F("stock") - quantity)
+                if not updated:
+                    raise serializers.ValidationError(
+                        {"items": f"Not enough stock for {product.name} ({variant.label})."}
+                    )
+            else:
+                updated = Product.objects.filter(
+                    pk=product.pk, stock__gte=quantity
+                ).update(stock=F("stock") - quantity)
+                if not updated:
+                    raise serializers.ValidationError(
+                        {"items": f"Not enough stock for {product.name}."}
+                    )
             OrderItem.objects.create(
-                order=order, product=product, quantity=quantity, unit_price=product.price,
+                order=order,
+                product=product,
+                variant=variant,
+                variant_sku=(variant.sku if variant else ""),
+                variant_label=(variant.label if variant else ""),
+                quantity=quantity,
+                unit_price=line.unit_price,
             )
 
         if coupon is not None:

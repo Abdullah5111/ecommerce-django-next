@@ -66,3 +66,58 @@ class CartTests(APITestCase):
         self.client.force_authenticate(other)
         res = self.client.get("/api/cart/")
         self.assertEqual(res.data["items"], [])
+
+
+class CartVariantTests(APITestCase):
+    def setUp(self):
+        from products.models import ProductVariant
+        self.cat = Category.objects.create(name="Apparel")
+        self.tee = Product.objects.create(
+            name="Tee", price=Decimal("20.00"), stock=0, category=self.cat
+        )
+        self.small = ProductVariant.objects.create(
+            product=self.tee, options={"Size": "S"}, sku="TEE-S", stock=5
+        )
+        self.large = ProductVariant.objects.create(
+            product=self.tee, options={"Size": "L"}, sku="TEE-L", stock=3,
+            price=Decimal("26.00"),
+        )
+        self.user = User.objects.create_user(
+            username="u", email="u@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_add_variant_line(self):
+        res = self.client.post(
+            "/api/cart/items/", {"product": self.tee.id, "variant": self.small.id, "quantity": 2},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        line = res.data["items"][0]
+        self.assertEqual(line["variant"]["sku"], "TEE-S")
+        self.assertEqual(line["quantity"], 2)
+
+    def test_two_variants_are_separate_lines(self):
+        self.client.post("/api/cart/items/", {"product": self.tee.id, "variant": self.small.id, "quantity": 1}, format="json")
+        res = self.client.post("/api/cart/items/", {"product": self.tee.id, "variant": self.large.id, "quantity": 1}, format="json")
+        self.assertEqual(len(res.data["items"]), 2)
+
+    def test_total_uses_variant_price(self):
+        self.client.post("/api/cart/items/", {"product": self.tee.id, "variant": self.large.id, "quantity": 2}, format="json")
+        res = self.client.get("/api/cart/")
+        self.assertEqual(res.data["total"], "52.00")  # 26 * 2
+
+    def test_add_capped_at_variant_stock(self):
+        res = self.client.post("/api/cart/items/", {"product": self.tee.id, "variant": self.large.id, "quantity": 99}, format="json")
+        self.assertEqual(res.data["items"][0]["quantity"], 3)  # capped at variant stock
+
+    def test_variant_product_rejects_variantless_add(self):
+        res = self.client.post("/api/cart/items/", {"product": self.tee.id, "quantity": 1}, format="json")
+        self.assertEqual(res.status_code, 400)
+
+    def test_delete_specific_variant_line(self):
+        self.client.post("/api/cart/items/", {"product": self.tee.id, "variant": self.small.id, "quantity": 1}, format="json")
+        self.client.post("/api/cart/items/", {"product": self.tee.id, "variant": self.large.id, "quantity": 1}, format="json")
+        res = self.client.delete(f"/api/cart/items/{self.tee.id}/?variant={self.small.id}")
+        skus = [i["variant"]["sku"] for i in res.data["items"]]
+        self.assertEqual(skus, ["TEE-L"])

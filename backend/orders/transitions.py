@@ -2,7 +2,7 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
-from products.models import Product
+from products.models import Product, ProductVariant
 from .models import Order, OrderEvent
 
 ALLOWED_TRANSITIONS = {
@@ -96,7 +96,14 @@ def cancel(order, actor=None):
     _check(order, Order.Status.CANCELLED)
     was_paid = order.status == Order.Status.PAID
     for item in order.items.all():
-        Product.objects.filter(pk=item.product_id).update(stock=F("stock") + item.quantity)
+        # Restock wherever the stock was taken from — the variant if the line
+        # had one, otherwise the product.
+        if item.variant_id is not None:
+            ProductVariant.objects.filter(pk=item.variant_id).update(
+                stock=F("stock") + item.quantity
+            )
+        else:
+            Product.objects.filter(pk=item.product_id).update(stock=F("stock") + item.quantity)
     from coupons.models import CouponRedemption
     CouponRedemption.objects.filter(order=order).delete()
     update_fields = ["status", "cancelled_at", "updated_at"]

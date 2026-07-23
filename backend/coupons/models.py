@@ -44,27 +44,27 @@ class Coupon(models.Model):
     def __str__(self):
         return self.code
 
-    def eligible_items(self, items):
-        """items: list of (product, quantity). Returns the in-scope subset.
+    def is_product_eligible(self, product) -> bool:
+        """Whether a single product is in this coupon's scope.
 
-        Empty product+category scope means the whole catalog is eligible.
-        A category in scope also matches its descendants (by full_slug).
+        Empty product+category scope means the whole catalog is eligible; a
+        category in scope also matches its descendants (by full_slug).
         """
         product_ids = set(self.products.values_list("id", flat=True))
         cats = list(self.categories.all())
         if not product_ids and not cats:
-            return list(items)
+            return True
         cat_ids = set()
         if cats:
             q = Q()
             for c in cats:
                 q |= Q(full_slug=c.full_slug) | Q(full_slug__startswith=f"{c.full_slug}/")
             cat_ids = set(Category.objects.filter(q).values_list("id", flat=True))
-        return [
-            (p, qty)
-            for (p, qty) in items
-            if p.id in product_ids or p.category_id in cat_ids
-        ]
+        return product.id in product_ids or product.category_id in cat_ids
+
+    def eligible_items(self, items):
+        """items: list of (product, quantity). Returns the in-scope subset."""
+        return [(p, qty) for (p, qty) in items if self.is_product_eligible(p)]
 
     def validate_for(self, user, items, subtotal):
         """Return the first failing reason as a string, or None if valid.

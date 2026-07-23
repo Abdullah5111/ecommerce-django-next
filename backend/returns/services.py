@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from orders.models import Order
 from orders.transitions import log_event
-from products.models import Product
+from products.models import Product, ProductVariant
 
 from .models import Return, ReturnLine
 from .refunds import refund_for
@@ -56,9 +56,16 @@ def receive(ret, actor=None):
     ret = Return.objects.select_for_update().get(pk=ret.pk)
     _check(ret, Return.Status.RECEIVED)
     for line in ret.lines.select_related("order_item"):
-        Product.objects.filter(pk=line.order_item.product_id).update(
-            stock=F("stock") + line.quantity
-        )
+        oi = line.order_item
+        # Restock the exact SKU sold: the variant when the line had one.
+        if oi.variant_id is not None:
+            ProductVariant.objects.filter(pk=oi.variant_id).update(
+                stock=F("stock") + line.quantity
+            )
+        else:
+            Product.objects.filter(pk=oi.product_id).update(
+                stock=F("stock") + line.quantity
+            )
     ret.status = Return.Status.RECEIVED
     ret.received_at = timezone.now()
     ret.save(update_fields=["status", "received_at"])

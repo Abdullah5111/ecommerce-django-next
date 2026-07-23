@@ -73,6 +73,14 @@ class OrderEvent(models.Model):
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    # Optional — null for products bought without variants. PROTECT so a sold
+    # variant can't be deleted out from under order history; the snapshot below
+    # is the belt-and-braces copy for display regardless.
+    variant = models.ForeignKey(
+        "products.ProductVariant", on_delete=models.PROTECT, null=True, blank=True
+    )
+    variant_sku = models.CharField(max_length=64, blank=True)
+    variant_label = models.CharField(max_length=200, blank=True)
     quantity = models.PositiveIntegerField(default=1)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
 

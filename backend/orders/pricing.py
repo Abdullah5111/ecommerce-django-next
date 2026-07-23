@@ -13,6 +13,37 @@ def money(value) -> Decimal:
 
 
 @dataclass
+class Line:
+    """One priced cart/order line. `variant` is optional; when set, its
+    effective price is what the line costs.
+    """
+
+    product: object
+    quantity: int
+    variant: object = None
+
+    @property
+    def unit_price(self) -> Decimal:
+        return self.variant.effective_price if self.variant is not None else self.product.price
+
+
+def _to_lines(items) -> list:
+    """Accept Line objects, 3-tuples (product, qty, variant) or legacy
+    2-tuples (product, qty). Keeps every existing caller working while letting
+    new ones pass a variant.
+    """
+    lines = []
+    for it in items:
+        if isinstance(it, Line):
+            lines.append(it)
+        elif len(it) == 3:
+            lines.append(Line(it[0], it[1], it[2]))
+        else:
+            lines.append(Line(it[0], it[1]))
+    return lines
+
+
+@dataclass
 class PriceQuote:
     subtotal: Decimal
     discount_total: Decimal
@@ -23,17 +54,17 @@ class PriceQuote:
     coupon_error: str | None
 
 
-def _subtotal(items) -> Decimal:
+def _subtotal(lines) -> Decimal:
     total = Decimal("0")
-    for product, qty in items:
-        total += product.price * Decimal(qty)
+    for line in lines:
+        total += line.unit_price * Decimal(line.quantity)
     return money(total)
 
 
 def _bogo_discount(coupon, eligible) -> Decimal:
     units = []
-    for product, qty in eligible:
-        units.extend([product.price] * qty)
+    for line in eligible:
+        units.extend([line.unit_price] * line.quantity)
     units.sort()  # cheapest first receive the discount
     buy = coupon.buy_quantity or 1
     get = coupon.get_quantity or 1
@@ -44,10 +75,12 @@ def _bogo_discount(coupon, eligible) -> Decimal:
     return money(total)
 
 
-def _discount(coupon, items, subtotal) -> Decimal:
-    eligible = coupon.eligible_items(items)
+def _discount(coupon, lines, subtotal) -> Decimal:
+    # Eligibility is by product/category; pricing uses each line's own unit
+    # price, so a variant override discounts correctly.
+    eligible = [line for line in lines if coupon.is_product_eligible(line.product)]
     if coupon.kind == Coupon.Kind.PERCENT:
-        elig_subtotal = sum((p.price * q for p, q in eligible), Decimal("0"))
+        elig_subtotal = sum((l.unit_price * l.quantity for l in eligible), Decimal("0"))
         return money(elig_subtotal * coupon.value / Decimal("100"))
     if coupon.kind == Coupon.Kind.FIXED:
         return money(min(coupon.value, subtotal))
@@ -78,19 +111,23 @@ def _tax(taxable) -> Decimal:
 def quote(items, coupon=None, user=None) -> PriceQuote:
     """Compute the authoritative price breakdown. Pure — no DB writes.
 
-    items: list of (product, quantity).
+    items: an iterable of Line, (product, quantity, variant) or (product,
+    quantity). Variant, when present, sets the line's unit price.
     """
-    subtotal = _subtotal(items)
+    lines = _to_lines(items)
+    subtotal = _subtotal(lines)
     discount = Decimal("0.00")
     code = None
     error = None
     free_shipping = False
 
     if coupon is not None:
-        error = coupon.validate_for(user, items, subtotal)
+        # validate_for only needs product identity + quantity for its checks.
+        pairs = [(l.product, l.quantity) for l in lines]
+        error = coupon.validate_for(user, pairs, subtotal)
         if error is None:
             code = coupon.code
-            discount = _discount(coupon, items, subtotal)
+            discount = _discount(coupon, lines, subtotal)
             free_shipping = coupon.kind == Coupon.Kind.FREE_SHIPPING
 
     shipping = _shipping(subtotal, free_shipping)

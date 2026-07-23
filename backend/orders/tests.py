@@ -280,3 +280,102 @@ class OrderTaxTests(APITestCase):
         self.assertEqual(order.tax_total, Decimal("4.00"))          # 10% of 40
         self.assertEqual(order.total, Decimal("49.00"))             # 40 + 4 + 5
         self.assertEqual(res.data["tax_total"], "4.00")
+
+
+@override_settings(SHIPPING_FLAT_FEE=Decimal("5.00"), FREE_SHIPPING_THRESHOLD=Decimal("50.00"))
+class VariantOrderTests(APITestCase):
+    def setUp(self):
+        from products.models import ProductVariant
+        self.cat = Category.objects.create(name="Apparel")
+        self.tee = Product.objects.create(
+            name="Tee", price=Decimal("20.00"), stock=0, category=self.cat
+        )
+        self.small = ProductVariant.objects.create(
+            product=self.tee, options={"Size": "S"}, sku="TEE-S", stock=5
+        )
+        self.large = ProductVariant.objects.create(
+            product=self.tee, options={"Size": "L"}, sku="TEE-L", stock=2,
+            price=Decimal("26.00"),
+        )
+        self.user = User.objects.create_user(
+            username="buyer", email="buyer@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def _order(self, variant, qty=1):
+        return self.client.post(
+            "/api/orders/",
+            {"shipping_address": "123 St", "items": [
+                {"product": self.tee.id, "variant": variant.id, "quantity": qty}
+            ]},
+            format="json",
+        )
+
+    def test_order_uses_variant_price_and_snapshots_it(self):
+        res = self._order(self.large, 1)
+        self.assertEqual(res.status_code, 201, res.data)
+        order = Order.objects.get(id=res.data["id"])
+        item = order.items.get()
+        self.assertEqual(item.unit_price, Decimal("26.00"))   # override, not 20
+        self.assertEqual(item.variant_sku, "TEE-L")
+        self.assertEqual(item.variant_label, "Size: L")
+        self.assertEqual(order.subtotal, Decimal("26.00"))
+
+    def test_variant_inherits_product_price_when_unset(self):
+        res = self._order(self.small, 1)
+        item = Order.objects.get(id=res.data["id"]).items.get()
+        self.assertEqual(item.unit_price, Decimal("20.00"))
+
+    def test_decrements_variant_stock_not_product(self):
+        self._order(self.large, 2)
+        self.large.refresh_from_db()
+        self.small.refresh_from_db()
+        self.assertEqual(self.large.stock, 0)   # 2 - 2
+        self.assertEqual(self.small.stock, 5)   # untouched
+
+    def test_oversell_on_variant_is_blocked(self):
+        res = self._order(self.large, 3)   # only 2 in stock
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(Order.objects.count(), 0)
+        self.large.refresh_from_db()
+        self.assertEqual(self.large.stock, 2)   # untouched
+
+    def test_variant_product_requires_a_variant(self):
+        res = self.client.post(
+            "/api/orders/",
+            {"shipping_address": "123 St", "items": [
+                {"product": self.tee.id, "quantity": 1}
+            ]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_variant_must_belong_to_the_product(self):
+        other = Product.objects.create(
+            name="Mug", price=Decimal("8"), stock=3, category=self.cat
+        )
+        res = self.client.post(
+            "/api/orders/",
+            {"shipping_address": "123 St", "items": [
+                {"product": other.id, "variant": self.small.id, "quantity": 1}
+            ]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_cancel_restocks_the_variant(self):
+        res = self._order(self.large, 2)
+        order = Order.objects.get(id=res.data["id"])
+        self.client.post(f"/api/orders/{order.id}/cancel/")
+        self.large.refresh_from_db()
+        self.assertEqual(self.large.stock, 2)   # restored
+
+    def test_percent_coupon_discounts_the_variant_price(self):
+        from orders.pricing import Line, quote
+        Coupon.objects.create(code="TEN", kind=Coupon.Kind.PERCENT, value=Decimal("10"))
+        coupon = Coupon.objects.get(code="TEN")
+        # Large overrides to 26.00; a 10% coupon must discount 2.60, not 2.00.
+        q = quote([Line(self.tee, 1, self.large)], coupon, self.user)
+        self.assertEqual(q.subtotal, Decimal("26.00"))
+        self.assertEqual(q.discount_total, Decimal("2.60"))
