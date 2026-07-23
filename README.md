@@ -91,15 +91,20 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 ### Scale & performance
 - DB indexes on `price`, `is_active`, `is_featured`, `stock`, plus compound `(category, is_active, -created_at)`
 - Postgres-conditional full-text search with `SearchVector` + `SearchRank`; SQLite gets the existing `icontains` fallback
-- Atomic stock decrement (`Product.objects.filter(stock__gte=q).update(stock=F("stock") - q)`) — no oversell race
+- Atomic stock decrement (`Product.objects.filter(stock__gte=q).update(stock=F("stock") - q)`, and the same against `ProductVariant`) — no oversell race
 - Featured + bestsellers + per-product `related` endpoints cached for 5 minutes (`CACHES` configurable per-env)
 - Reviews drive `Product.rating_avg` / `rating_count` via `post_save` / `post_delete` signals — single source of truth
+- Per-user **rate limiting** on the review-write and helpful-vote endpoints (DRF throttles; cache-backed, so point `CACHE_BACKEND` at Redis to make the limits cluster-wide)
 - Cursor-pagination class defined for opt-in use on large catalogs
 - All product images served via `next/image` (lazy loading, responsive `sizes`, AVIF/WebP)
 
 ### Admin
 - Django admin for products, categories (hierarchy-aware), orders, users, reviews, addresses, coupons, returns, carts, wishlists, notifications, push subscriptions
-- Inline `ProductImage` editing on products; order/return transitions exposed as admin actions
+- Inline `ProductImage` / `ProductVariant` editing on products; order/return transitions exposed as admin actions
+
+### Testing & CI
+- ~180 backend tests (DRF `APITestCase`) covering auth, catalog, variants, cart, orders, coupons, tax, returns, reviews, and notifications
+- **GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push and PR: a backend job on **Postgres 16** (so the full-text search path is exercised, not just SQLite) that runs `makemigrations --check` then the test suite, and a frontend job running `tsc --noEmit` + `next build`
 
 ## Quick start (local, with Docker)
 
