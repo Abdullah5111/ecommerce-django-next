@@ -5,6 +5,7 @@ from django.db.models import Exists, OuterRef, Q, Sum
 from django.db.models.functions import Coalesce
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
@@ -176,21 +177,31 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         if not request.user.is_authenticated:
             return Response({"detail": "Authentication required."}, status=401)
 
-        images = request.FILES.getlist("images")
-        if len(images) > MAX_REVIEW_IMAGES:
-            return Response(
-                {"detail": f"At most {MAX_REVIEW_IMAGES} images per review."},
-                status=400,
-            )
-        # Prove every upload is a real, allowed, size-capped image before
-        # anything is written — a rejected photo must not leave a review behind.
-        for upload in images:
-            ReviewImageUploadSerializer(data={"image": upload}).is_valid(
-                raise_exception=True
-            )
-
+        # Validate the review fields and the photos together, then raise once,
+        # so a request that's wrong in both ways (bad rating *and* bad images)
+        # reports both at once instead of making the user fix them one per
+        # round-trip. Nothing is written until every upload is proven a real,
+        # allowed, size-capped image — a rejected photo must not leave a review
+        # behind.
         ser = ReviewSerializer(data=request.data, context={"request": request})
-        ser.is_valid(raise_exception=True)
+        review_ok = ser.is_valid()
+
+        images = request.FILES.getlist("images")
+        image_errors = []
+        if len(images) > MAX_REVIEW_IMAGES:
+            image_errors.append(f"At most {MAX_REVIEW_IMAGES} images per review.")
+        else:
+            for upload in images:
+                img_ser = ReviewImageUploadSerializer(data={"image": upload})
+                if not img_ser.is_valid():
+                    image_errors.extend(img_ser.errors.get("image", []))
+
+        if not review_ok or image_errors:
+            errors = dict(ser.errors)
+            if image_errors:
+                errors["images"] = image_errors
+            raise ValidationError(errors)
+
         try:
             with transaction.atomic():
                 review = ser.save(

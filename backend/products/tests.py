@@ -453,6 +453,19 @@ class ReviewImageTests(APITestCase):
         self.assertEqual(res.status_code, 400)
         self.assertEqual(Review.objects.count(), 0)  # nothing partially written
 
+    def test_bad_rating_and_bad_image_are_reported_together(self):
+        # A request wrong in both ways should surface both errors at once,
+        # not make the user fix them one round-trip at a time.
+        res = self.client.post(
+            f"/api/products/{self.widget.slug}/reviews/",
+            {"rating": 9, "images": [SimpleUploadedFile("x.txt", b"nope")]},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("rating", res.data)
+        self.assertIn("images", res.data)
+        self.assertEqual(Review.objects.count(), 0)
+
     def test_non_image_file_rejected(self):
         bad = SimpleUploadedFile(
             "payload.png", b"<html><script>alert(1)</script></html>",
