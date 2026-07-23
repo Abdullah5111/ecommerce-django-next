@@ -18,10 +18,11 @@ class ReturnLineInputSerializer(serializers.Serializer):
 
 class ReturnLineSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="order_item.product.name", read_only=True)
+    variant_label = serializers.CharField(source="order_item.variant_label", read_only=True)
 
     class Meta:
         model = ReturnLine
-        fields = ("id", "order_item", "product_name", "quantity", "reason", "note")
+        fields = ("id", "order_item", "product_name", "variant_label", "quantity", "reason", "note")
 
 
 class ReturnSerializer(serializers.ModelSerializer):

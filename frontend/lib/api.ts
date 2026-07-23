@@ -126,6 +126,7 @@ export type ReturnLine = {
   id: number;
   order_item: number;
   product_name: string;
+  variant_label: string;
   quantity: number;
   reason: ReturnReason;
   note: string;

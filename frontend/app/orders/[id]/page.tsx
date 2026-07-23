@@ -172,7 +172,11 @@ export default function OrderDetailPage() {
                 </div>
                 <ul className="text-zinc-600 mt-1">
                   {r.lines.map((l) => (
-                    <li key={l.id}>{l.product_name} × {l.quantity} ({l.reason})</li>
+                    <li key={l.id}>
+                      {l.product_name}
+                      {l.variant_label && <span className="text-zinc-500"> ({l.variant_label})</span>}
+                      {" "}× {l.quantity} ({l.reason})
+                    </li>
                   ))}
                 </ul>
               </li>
@@ -199,7 +203,11 @@ export default function OrderDetailPage() {
           <h2 className="font-semibold">Request a return</h2>
           {order.items.map((it) => (
             <div key={it.id} className="flex items-center gap-3 text-sm">
-              <span className="flex-1">{it.product_name} (×{it.quantity})</span>
+              <span className="flex-1">
+                {it.product_name}
+                {it.variant_label && <span className="text-zinc-500"> ({it.variant_label})</span>}
+                {" "}(×{it.quantity})
+              </span>
               <input
                 type="number"
                 min={0}
