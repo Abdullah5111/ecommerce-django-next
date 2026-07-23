@@ -29,7 +29,7 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 | Specifications table | ✅ | ✅ | |
 | Ratings + reviews | ✅ | ✅ | Histogram + write-review |
 | Stock urgency / social proof ("X left") | ✅ | ✅ | "X sold" from order data + stock-urgency hints; no live "X viewing" |
-| Variants (size/color/SKU) | ✅ | ❌ | Single price/stock per product |
+| Variants (size/color/SKU) | ✅ | ✅ | Per-variant stock + optional price override; variant-aware cart, checkout, stock and refunds |
 | Product video | ✅ | ❌ | |
 | Photo/video reviews | ✅ | 🟡 | Reviewer photos (up to 5, lightbox); no video |
 | Verified-purchase badge / helpful votes | ✅ | ✅ | Badge snapshotted from real order data; one helpful vote per user, sortable |
@@ -105,15 +105,15 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 
 | Status | Count (approx) | Examples |
 |---|---|---|
-| ✅ Matched | ~37 | catalog, coupons, cart/wishlist, save-for-later, social proof, lifecycle, returns, accounts, payments, refunds, notifications, order emails, web push, verified-purchase + helpful votes, tax |
+| ✅ Matched | ~38 | catalog, coupons, cart/wishlist, save-for-later, social proof, lifecycle, returns, accounts, payments, refunds, notifications, order emails, web push, verified-purchase + helpful votes, tax, variants |
 | 🟡 Partial | ~6 | google login (no Apple/FB), tracking, wallets, homepage banners, review photos (no video) |
-| ❌ Not matched | ~18 | variants, multi-vendor, gamification, i18n, BNPL |
+| ❌ Not matched | ~17 | multi-vendor, gamification, i18n, BNPL, Q&A |
 
 ## Recommended next gaps (impact order)
 
-1. **Product variants** (size/color/SKU)
-2. **Q&A** on product detail, and **frequently-bought-together** bundles
-3. **New-user / referral discounts**
+1. **Q&A** on product detail, and **frequently-bought-together** bundles
+2. **New-user / referral discounts**
+3. **Search autocomplete / suggestions**
 
 Recently shipped:
 - ~~Real payments (Stripe)~~ — PaymentIntent + Elements + webhook, real refunds, keyless mock fallback.
@@ -121,6 +121,7 @@ Recently shipped:
 - ~~Push notifications~~ — in-app notification center + bell, plus Web Push (VAPID), keyless-disabled by default.
 - ~~Review enhancements~~ — verified-purchase badge (snapshotted from order data), reviewer photos with a lightbox, and one-per-user helpful votes with most-helpful sorting. Video reviews remain out.
 - ~~Tax~~ — configurable `TAX_RATE` applied to discounted merchandise, its own line in the breakdown, snapshotted on the order, with tax-aware refunds. Off by default (0%).
+- ~~Product variants~~ — size/color/SKU with per-variant stock and optional price override; option pickers on the PDP, variant-aware cart/checkout/stock/refunds, and SKU/label snapshots on order history. Products without variants are unchanged.
 
 Marketplace-scale items (multi-vendor, gamification, BNPL, i18n) are realistically
 out of scope for this portfolio piece.

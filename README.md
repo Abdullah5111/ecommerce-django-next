@@ -46,6 +46,7 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - **"Helpful" votes** on reviews — one per user, optimistic count with rollback on failure, self-voting disallowed; reviews can be sorted most-helpful-first
 - Related products rail ("More from {category}") and recently viewed rail (localStorage)
 - Wishlist heart icon; saved items shown at `/wishlist` (server-backed when logged in)
+- **Product variants** (size / color / SKU): an option picker per dimension, derived from the product's variants, with per-variant stock and an optional price override (falls back to the product price). Add-to-cart is gated until an in-stock variant is chosen; cards and the mobile bar route variant products to the PDP to pick. Cart lines, checkout, stock decrement, and refunds are all variant-aware; order history snapshots the variant SKU/label. Products without variants are unchanged
 - Contextual stock urgency ("Only 3 left — order soon", "Selling fast")
 - **"X sold" social proof** on product cards and detail, aggregated from real order data (paid-and-not-cancelled), compacted as `1.2k sold`; also powers the bestsellers ranking
 - Mobile sticky bottom-bar with quantity stepper + Add to cart
@@ -212,7 +213,7 @@ frontend env to set. Without it, the Google button simply doesn't render.
 | Method     | Path                                          | Auth | Purpose                                                          |
 |------------|-----------------------------------------------|------|------------------------------------------------------------------|
 | GET        | /api/products/                                | —    | List products (paginated)                                        |
-| GET        | /api/products/{slug}/                         | —    | Product detail (includes `specifications`, `images`, ratings)    |
+| GET        | /api/products/{slug}/                         | —    | Product detail (includes `specifications`, `images`, ratings, and `variants[]`) |
 | GET        | /api/products/featured/                       | —    | Top featured (cached 5 min)                                      |
 | GET        | /api/products/bestsellers/                    | —    | Top by paid-order quantity (cached 5 min)                        |
 | GET        | /api/products/recommended/                    | —/JWT | Personalized picks from purchase/wishlist/cart affinity; featured fallback for guests/new users |
@@ -233,7 +234,7 @@ Product list query params:
 | Method | Path                              | Auth | Purpose                                                                |
 |--------|-----------------------------------|------|------------------------------------------------------------------------|
 | GET    | /api/orders/                      | JWT  | List my orders (with structured shipping snapshot)                     |
-| POST   | /api/orders/                      | JWT  | Create order — body accepts `shipping_address_id` or legacy `shipping_address` text; optional `coupon_code` applies a promo; response includes `subtotal`, `discount_total`, `tax_total`, `shipping_total`, and `coupon_code` |
+| POST   | /api/orders/                      | JWT  | Create order — body accepts `shipping_address_id` or legacy `shipping_address` text; each item may carry a `variant` id (required for variant products); optional `coupon_code` applies a promo; response includes `subtotal`, `discount_total`, `tax_total`, `shipping_total`, and `coupon_code` |
 | GET    | /api/orders/{id}/                 | JWT  | Order detail                                                           |
 | POST   | /api/orders/{id}/create-payment-intent/ | JWT  | Start payment for a pending order → `{client_secret, publishable_key, mock}` (Stripe when keyed, mock stub otherwise) |
 | POST   | /api/orders/{id}/pay/             | JWT  | Confirm payment → paid. Mock mode confirms immediately; live mode requires a succeeded PaymentIntent |
@@ -269,7 +270,7 @@ Return requests are accepted only on delivered orders within the return window (
 |--------|---------------------------------|------|----------------------------------------------------------------|
 | GET    | /api/cart/                      | JWT  | My cart with nested products + computed total                  |
 | DELETE | /api/cart/                      | JWT  | Clear the cart                                                 |
-| POST   | /api/cart/items/                | JWT  | Add `{product, quantity}` (increments; capped at stock)        |
+| POST   | /api/cart/items/                | JWT  | Add `{product, quantity, variant?}` (increments; capped at the SKU's stock; a variant product requires `variant`) |
 | PATCH  | /api/cart/items/{product_id}/   | JWT  | Set quantity (≤0 removes; capped at stock)                     |
 | DELETE | /api/cart/items/{product_id}/   | JWT  | Remove a line                                                  |
 | POST   | /api/cart/merge/                | JWT  | Merge a guest cart `{items:[{product, quantity}]}` — quantities **summed**, capped at stock |

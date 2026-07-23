@@ -29,7 +29,7 @@ backend/
 ├── core/                  # project settings, root urls, wsgi/asgi
 ├── accounts/              # custom User + Address + auth views
 ├── products/
-│   ├── models.py          # Category (self-FK), Product, ProductImage, Review, ReviewImage, ReviewVote
+│   ├── models.py          # Category (self-FK), Product, ProductVariant, ProductImage, Review, ReviewImage, ReviewVote
 │   ├── signals.py         # Review post_save/post_delete → rating recompute
 │   ├── views.py           # ViewSets + tree/by-path/featured/bestsellers/reviews/related/helpful
 │   ├── pagination.py      # ProductCursorPagination (opt-in)
@@ -47,11 +47,13 @@ backend/
 ```
 User ─< Address                                Category (self-FK: parent/children)
   └─< Order ─< OrderItem >─ Product ────────────┘
-                              │
-                              ├─< ProductImage
-                              └─< Review
-                                    ├─< ReviewImage
-                                    └─< ReviewVote >─ User
+                    │         │
+                    │         ├─< ProductImage
+                    │         ├─< ProductVariant
+                    │         └─< Review
+                    │               ├─< ReviewImage
+                    │               └─< ReviewVote >─ User
+                    └── (optional) ─ ProductVariant
 ```
 
 - **`User`** — custom model on `accounts.User` (extends `AbstractUser`), with `email` (unique), `email_verified`, and profile fields: `avatar` (ImageField → MEDIA; local disk by default, GCS when `GS_BUCKET_NAME` is set), `display_name`, `bio`, `date_of_birth`, `gender`, plus `phone` + `phone_verified`. Defined upfront so swapping later doesn't require a painful migration. `phone`/`phone_verified` are read-only via `me` and only set through the phone-verification flow; legacy `address` text kept for backward compat (new code uses the address book).
@@ -59,6 +61,7 @@ User ─< Address                                Category (self-FK: parent/child
 - **`Category`** — self-referential. `parent`, computed `full_slug` (e.g. `electronics/audio`), `level`. `save()` keeps the latter two coherent on writes. Indexed on the unique `full_slug` for fast path lookups.
 - **`Product`** — `category` FK, pricing (`price`, `compare_at_price`, computed `is_on_sale`/`discount_percent`), `stock`, `rating_avg`/`rating_count` (denormalised — driven by Review signals), `specifications` (JSONField, flat key→value), `is_featured`, `is_active`. Has many `ProductImage`s and `Review`s; keeps a legacy `image_url` for backward compat.
 - **`ProductImage`** — `url`, `alt`, `sort_order`. Ordered.
+- **`ProductVariant`** — optional purchasable variation of a product. `options` (JSON, e.g. `{"Size": "L"}`), unique `sku`, own `stock`, nullable `price` (null inherits the product price via `effective_price`), `is_active`. Unique on `(product, options)` so a combination can't be duplicated. Variants are additive: a product with none is bought directly; one with variants must be bought through a variant. The set of option *types* is derived from the variants, so a new dimension needs no schema change. `ProductSerializer` exposes cheap `has_variants` + `price_from` for cards; the full `variants[]` list rides only on `ProductDetailSerializer`, and the queryset prefetches variants (seeding each variant's product back-reference) so neither adds a per-product query.
 - **`Review`** — `product` FK, `user` FK (nullable for seeded/anonymous reviews; `author_name` snapshot for survivability), `rating` (1-5, CHECK constraint), `title`, `body`, `created_at`, plus `verified_purchase` and `helpful_count`. Partial unique on `(product, user)` when `user IS NOT NULL`. Indexed on `(product, -created_at)` and `(product, -helpful_count)`.
   - `verified_purchase` is **snapshotted at write time** from whether the reviewer has an order for the product in `SOLD_STATUSES` — the same definition that powers the "X sold" badge. Frozen deliberately: a later cancellation must not retract the badge.
   - `helpful_count` is denormalised from `ReviewVote` and recomputed by `post_save`/`post_delete` receivers on the vote — the same source-of-truth pattern `Review` uses to drive the product's rating fields. Counting the rows rather than incrementing a counter is what keeps it correct when votes disappear without passing through the endpoint (deleting a user cascades their votes; an incremented counter would stay inflated forever).
@@ -66,7 +69,8 @@ User ─< Address                                Category (self-FK: parent/child
 - **`ReviewVote`** — `review` FK, `user` FK, `created_at`. Unique on `(review, user)`, which is what makes the helpful toggle idempotent.
 - **`Order`** — `user` FK, `status` (`pending`/`paid`/`shipped`/`delivered`/`cancelled`), `shipping_address` (composed text for backward compat), plus structured `ship_*` snapshot fields (`recipient`, `phone`, `line1/2`, `city`, `state`, `postal_code`, `country`) populated from the chosen Address at create time. **Immutable thereafter** — editing the Address row later does not mutate past orders.
 - **`Order.total`** — denormalised, recalculated on item changes (`recalculate_total`). The breakdown fields (`subtotal`, `discount_total`, `tax_total`, `shipping_total`) are snapshotted from `orders.pricing.quote()` at create time. Tax is `TAX_RATE` percent of the discounted merchandise (`subtotal − discount`), not shipping; it defaults to 0, so the line is absent until a rate is configured. `returns.refunds.refund_for` redistributes that tax back proportionally to returned lines, so a refund returns the tax the customer actually paid.
-- **Stock decrement** — done with an atomic conditional UPDATE (`Product.objects.filter(stock__gte=qty).update(stock=F("stock") - qty)`) inside `OrderSerializer.create`'s `@transaction.atomic`, eliminating the read-then-write oversell race.
+- **Stock decrement** — done with an atomic conditional UPDATE (`Product.objects.filter(stock__gte=qty).update(stock=F("stock") - qty)`) inside `OrderSerializer.create`'s `@transaction.atomic`, eliminating the read-then-write oversell race. When a line has a variant, the same conditional UPDATE runs against `ProductVariant.stock` instead; cancel and return-receive restock whichever was decremented.
+- **`OrderItem` variant** — an optional `variant` FK (PROTECT) plus `variant_sku` / `variant_label` snapshots, so order history survives a variant being edited or deleted. `CartItem` gains a nullable `variant` and keys lines on `(product, variant)` via two conditional unique constraints (a single unique over all three would let a no-variant product be added twice, since NULLs are distinct in Postgres). Pricing's `quote()` takes `Line(product, quantity, variant)` and prices each line at the variant's `effective_price`; coupon eligibility stays product/category based via `Coupon.is_product_eligible()`.
 
 ### Indexes
 
@@ -173,6 +177,7 @@ frontend/
 │   └── product-detail/
 │       ├── Gallery.tsx                   # thumbs + main image + lightbox
 │       ├── PurchasePanel.tsx             # buy box: dual CTA (Add/Buy now), delivery est., trust badges
+│       ├── VariantSelector.tsx           # option pickers → resolves the chosen variant
 │       ├── Tabs.tsx                      # hash-driven Description / Specifications / Reviews
 │       ├── SpecsTable.tsx
 │       ├── ReviewsSection.tsx, ReviewCta.tsx, WriteReviewForm.tsx
