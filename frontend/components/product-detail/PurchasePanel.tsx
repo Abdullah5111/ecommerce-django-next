@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Product } from "@/lib/api";
+import type { Product, ProductVariant } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { useToast } from "@/lib/useToast";
 import { useWishlist } from "@/lib/useWishlist";
@@ -11,6 +11,7 @@ import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
 import RatingStars from "@/components/RatingStars";
 import Button from "@/components/ui/Button";
 import Price from "@/components/ui/Price";
+import VariantSelector from "./VariantSelector";
 
 function Trust({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -26,6 +27,7 @@ function Trust({ icon, children }: { icon: React.ReactNode; children: React.Reac
 export default function PurchasePanel({ product }: { product: Product }) {
   const [qty, setQty] = useState(1);
   const [deliveryBy, setDeliveryBy] = useState<string | null>(null);
+  const [variant, setVariant] = useState<ProductVariant | null>(null);
   const { add } = useCart();
   const { toast } = useToast();
   const { has, toggle } = useWishlist();
@@ -39,22 +41,35 @@ export default function PurchasePanel({ product }: { product: Product }) {
     setDeliveryBy(d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }));
   }, []);
 
+  const variants = product.variants ?? [];
+  const hasVariants = variants.length > 0;
+  // A variant product needs a chosen variant before price/stock are known.
+  const needsVariant = hasVariants && !variant;
+  const displayPrice = variant ? variant.effective_price : product.price;
+  const stock = variant ? variant.stock : hasVariants ? 0 : product.stock;
+
   const inWishlist = has(product.id);
-  const maxQty = Math.max(1, product.stock);
-  const inStock = product.stock > 0;
-  const freeShip = Number(product.price) >= FREE_SHIPPING_THRESHOLD;
+  const maxQty = Math.max(1, stock);
+  const inStock = stock > 0;
+  const canAdd = inStock && !needsVariant;
+  const freeShip = Number(displayPrice) >= FREE_SHIPPING_THRESHOLD;
   const saved =
-    product.is_on_sale && product.compare_at_price
+    !variant && product.is_on_sale && product.compare_at_price
       ? Number(product.compare_at_price) - Number(product.price)
       : 0;
 
+  // Keep quantity within the selected variant's stock when it changes.
+  useEffect(() => {
+    setQty((q) => Math.min(Math.max(1, q), Math.max(1, stock)));
+  }, [stock]);
+
   const handleAdd = () => {
-    add(product, qty);
+    add(product, variant, qty);
     toast("Added to cart", "success");
   };
 
   const handleBuyNow = () => {
-    add(product, qty);
+    add(product, variant, qty);
     router.push("/checkout");
   };
 
@@ -79,9 +94,17 @@ export default function PurchasePanel({ product }: { product: Product }) {
 
       {/* Buy box */}
       <div className="mt-4 rounded-card border border-zinc-200 bg-white shadow-card p-5">
-        <Price price={product.price} compareAt={product.compare_at_price} size="lg" />
+        <Price
+          price={displayPrice}
+          compareAt={variant ? null : product.compare_at_price}
+          size="lg"
+        />
         {saved > 0 && (
           <div className="mt-1 text-sm font-medium text-success">You save ${saved.toFixed(2)}</div>
+        )}
+
+        {hasVariants && (
+          <VariantSelector variants={variants} selected={variant} onSelect={setVariant} />
         )}
 
         <ul className="mt-4 space-y-2 border-t border-zinc-100 pt-4">
@@ -95,11 +118,13 @@ export default function PurchasePanel({ product }: { product: Product }) {
               {freeShip && <span className="text-success font-medium"> · Free shipping</span>}
             </Trust>
           )}
-          {inStock ? (
-            product.stock <= 5 ? (
-              <li className="text-sm font-medium text-danger">Only {product.stock} left — order soon</li>
-            ) : product.stock < 10 ? (
-              <li className="text-sm font-medium text-deal-dark">Selling fast — {product.stock} in stock</li>
+          {needsVariant ? (
+            <li className="text-sm text-zinc-500">Select an option to see availability</li>
+          ) : inStock ? (
+            stock <= 5 ? (
+              <li className="text-sm font-medium text-danger">Only {stock} left — order soon</li>
+            ) : stock < 10 ? (
+              <li className="text-sm font-medium text-deal-dark">Selling fast — {stock} in stock</li>
             ) : (
               <li className="text-sm text-success">In stock</li>
             )
@@ -108,7 +133,7 @@ export default function PurchasePanel({ product }: { product: Product }) {
           )}
         </ul>
 
-        {inStock && (
+        {canAdd && (
           <div className="mt-4 flex items-center gap-3">
             <span className="text-sm text-zinc-600">Quantity</span>
             <div className="inline-flex items-center border border-zinc-300 rounded-lg">
@@ -136,10 +161,10 @@ export default function PurchasePanel({ product }: { product: Product }) {
         )}
 
         <div className="mt-5 space-y-2">
-          <Button onClick={handleAdd} disabled={!inStock} fullWidth size="lg">
-            {inStock ? "Add to cart" : "Out of stock"}
+          <Button onClick={handleAdd} disabled={!canAdd} fullWidth size="lg">
+            {needsVariant ? "Select an option" : inStock ? "Add to cart" : "Out of stock"}
           </Button>
-          {inStock && (
+          {canAdd && (
             <Button onClick={handleBuyNow} variant="deal" fullWidth size="lg">
               Buy now
             </Button>

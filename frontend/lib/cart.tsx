@@ -1,23 +1,37 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { api, type Cart, type Product } from "./api";
+import { api, type Cart, type Product, type ProductVariant } from "./api";
 import { auth } from "./auth";
 import { useAuth } from "./useAuth";
 
-export type CartItem = { product: Product; quantity: number };
+export type CartItem = {
+  product: Product;
+  variant: ProductVariant | null;
+  quantity: number;
+};
 
 type CartContextValue = {
   items: CartItem[];
-  add: (product: Product, quantity?: number) => void;
-  remove: (productId: number) => void;
-  update: (productId: number, quantity: number) => void;
+  add: (product: Product, variant?: ProductVariant | null, quantity?: number) => void;
+  remove: (productId: number, variantId?: number | null) => void;
+  update: (productId: number, variantId: number | null, quantity: number) => void;
   clear: () => void;
   total: number;
 };
 
 const CartContext = createContext<CartContextValue | null>(null);
 const KEY = "shop_cart";
+
+// A cart line is identified by its product *and* variant, so the same product
+// under two variants is two lines.
+function lineKey(productId: number, variantId: number | null | undefined): string {
+  return `${productId}:${variantId ?? ""}`;
+}
+
+function unitPrice(item: CartItem): number {
+  return parseFloat(item.variant ? item.variant.effective_price : item.product.price);
+}
 
 function readLocal(): CartItem[] {
   try {
@@ -29,7 +43,11 @@ function readLocal(): CartItem[] {
 }
 
 function fromCart(cart: Cart): CartItem[] {
-  return cart.items.map((line) => ({ product: line.product, quantity: line.quantity }));
+  return cart.items.map((line) => ({
+    product: line.product,
+    variant: line.variant,
+    quantity: line.quantity,
+  }));
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
@@ -56,7 +74,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         try {
           if (local.length > 0) {
             await api.mergeCart(token, {
-              items: local.map((i) => ({ product: i.product.id, quantity: i.quantity })),
+              items: local.map((i) => ({
+                product: i.product.id,
+                variant: i.variant?.id ?? null,
+                quantity: i.quantity,
+              })),
             });
             window.localStorage.removeItem(KEY);
           }
@@ -89,21 +111,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const add = useCallback(
-    (product: Product, quantity = 1) => {
+    (product: Product, variant: ProductVariant | null = null, quantity = 1) => {
+      const key = lineKey(product.id, variant?.id ?? null);
       // Optimistic update for snappy UX; server response reconciles (e.g. stock cap).
       setItems((prev) => {
-        const existing = prev.find((i) => i.product.id === product.id);
+        const existing = prev.find(
+          (i) => lineKey(i.product.id, i.variant?.id ?? null) === key,
+        );
         if (existing) {
           return prev.map((i) =>
-            i.product.id === product.id ? { ...i, quantity: i.quantity + quantity } : i,
+            lineKey(i.product.id, i.variant?.id ?? null) === key
+              ? { ...i, quantity: i.quantity + quantity }
+              : i,
           );
         }
-        return [...prev, { product, quantity }];
+        return [...prev, { product, variant, quantity }];
       });
       const token = auth.get();
       if (token) {
         api
-          .addToCart(token, { product: product.id, quantity })
+          .addToCart(token, { product: product.id, variant: variant?.id ?? null, quantity })
           .then((cart) => setItems(fromCart(cart)))
           .catch(() => reloadServer());
       }
@@ -112,26 +139,40 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   );
 
   const remove = useCallback(
-    (productId: number) => {
-      setItems((prev) => prev.filter((i) => i.product.id !== productId));
+    (productId: number, variantId: number | null = null) => {
+      const key = lineKey(productId, variantId);
+      setItems((prev) =>
+        prev.filter((i) => lineKey(i.product.id, i.variant?.id ?? null) !== key),
+      );
       const token = auth.get();
       if (token) {
-        api.removeCartItem(token, productId).then((c) => setItems(fromCart(c))).catch(() => reloadServer());
+        api
+          .removeCartItem(token, productId, variantId)
+          .then((c) => setItems(fromCart(c)))
+          .catch(() => reloadServer());
       }
     },
     [reloadServer],
   );
 
   const update = useCallback(
-    (productId: number, quantity: number) => {
+    (productId: number, variantId: number | null, quantity: number) => {
+      const key = lineKey(productId, variantId);
       setItems((prev) =>
         quantity <= 0
-          ? prev.filter((i) => i.product.id !== productId)
-          : prev.map((i) => (i.product.id === productId ? { ...i, quantity } : i)),
+          ? prev.filter((i) => lineKey(i.product.id, i.variant?.id ?? null) !== key)
+          : prev.map((i) =>
+              lineKey(i.product.id, i.variant?.id ?? null) === key
+                ? { ...i, quantity }
+                : i,
+            ),
       );
       const token = auth.get();
       if (token) {
-        api.updateCartItem(token, productId, quantity).then((c) => setItems(fromCart(c))).catch(() => reloadServer());
+        api
+          .updateCartItem(token, productId, quantity, variantId)
+          .then((c) => setItems(fromCart(c)))
+          .catch(() => reloadServer());
       }
     },
     [reloadServer],
@@ -143,7 +184,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     if (token) api.clearCart(token).catch(() => {});
   }, []);
 
-  const total = items.reduce((sum, i) => sum + parseFloat(i.product.price) * i.quantity, 0);
+  const total = items.reduce((sum, i) => sum + unitPrice(i) * i.quantity, 0);
 
   return (
     <CartContext.Provider value={{ items, add, remove, update, clear, total }}>

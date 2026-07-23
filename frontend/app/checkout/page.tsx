@@ -84,7 +84,7 @@ export default function CheckoutPage() {
     try {
       const result = await api.quoteOrder(token, {
         code,
-        items: items.map((i) => ({ product: i.product.id, quantity: i.quantity })),
+        items: items.map((i) => ({ product: i.product.id, variant: i.variant?.id ?? null, quantity: i.quantity })),
       });
       setQuote(result);
       if (code) {
@@ -174,7 +174,7 @@ export default function CheckoutPage() {
     try {
       const order = await api.createOrder(token, {
         shipping_address_id: addressId,
-        items: items.map((i) => ({ product: i.product.id, quantity: i.quantity })),
+        items: items.map((i) => ({ product: i.product.id, variant: i.variant?.id ?? null, quantity: i.quantity })),
         coupon_code: appliedCode ?? undefined,
       });
       await startPayment(token, order.id);
@@ -197,7 +197,7 @@ export default function CheckoutPage() {
     try {
       const order = await api.createOrder(token, {
         shipping_address: guestAddress,
-        items: items.map((i) => ({ product: i.product.id, quantity: i.quantity })),
+        items: items.map((i) => ({ product: i.product.id, variant: i.variant?.id ?? null, quantity: i.quantity })),
       });
       await startPayment(token, order.id);
     } catch (e) {

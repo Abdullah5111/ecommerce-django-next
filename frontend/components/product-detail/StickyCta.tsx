@@ -10,22 +10,34 @@ export default function StickyCta({ product }: { product: Product }) {
   const [qty, setQty] = useState(1);
   const { add } = useCart();
   const { toast } = useToast();
+  const hasVariants = (product.variants?.length ?? 0) > 0;
   const maxQty = Math.max(1, product.stock);
-  const outOfStock = product.stock === 0;
+  const outOfStock = !hasVariants && product.stock === 0;
 
   const dec = () => setQty((q) => Math.max(1, q - 1));
   const inc = () => setQty((q) => Math.min(maxQty, q + 1));
 
   const handleAdd = () => {
-    add(product, qty);
+    // Variant products can't be added from the compact bar — send the shopper
+    // up to the buy box to pick an option.
+    if (hasVariants) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    add(product, null, qty);
     toast("Added to cart", "success");
   };
 
   return (
     <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-zinc-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] px-4 py-3 flex items-center gap-3">
-      <Price price={product.price} compareAt={product.compare_at_price} size="sm" showPercent={false} />
+      <Price
+        price={hasVariants ? (product.price_from ?? product.price) : product.price}
+        compareAt={hasVariants ? null : product.compare_at_price}
+        size="sm"
+        showPercent={false}
+      />
 
-      {!outOfStock && (
+      {!outOfStock && !hasVariants && (
         <div className="inline-flex items-center border rounded">
           <button
             type="button"
@@ -53,7 +65,7 @@ export default function StickyCta({ product }: { product: Product }) {
         disabled={outOfStock}
         className="flex-1 bg-brand text-brand-fg px-4 py-2.5 rounded-lg font-medium hover:bg-brand-dark disabled:bg-zinc-300"
       >
-        {outOfStock ? "Out of stock" : "Add to cart"}
+        {outOfStock ? "Out of stock" : hasVariants ? "Choose options" : "Add to cart"}
       </button>
     </div>
   );

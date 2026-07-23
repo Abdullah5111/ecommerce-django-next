@@ -44,6 +44,16 @@ export type ProductImage = {
   sort_order: number;
 };
 
+export type ProductVariant = {
+  id: number;
+  options: Record<string, string>;
+  sku: string;
+  stock: number;
+  price: string | null;
+  effective_price: string;
+  in_stock: boolean;
+};
+
 export type Product = {
   id: number;
   name: string;
@@ -61,6 +71,10 @@ export type Product = {
   is_on_sale: boolean;
   discount_percent: number;
   is_featured: boolean;
+  has_variants?: boolean;
+  price_from?: string;
+  // Present only on product detail (ProductDetailSerializer).
+  variants?: ProductVariant[];
   created_at?: string;
   specifications?: Record<string, string>;
 };
@@ -89,6 +103,9 @@ export type OrderItem = {
   id: number;
   product: number;
   product_name: string;
+  variant: number | null;
+  variant_sku: string;
+  variant_label: string;
   quantity: number;
   unit_price: string;
   subtotal: string;
@@ -127,7 +144,13 @@ export type ReturnRequest = {
   lines: ReturnLine[];
 };
 
-export type CartLine = { id: number; product: Product; quantity: number };
+export type CartLine = {
+  id: number;
+  product: Product;
+  variant: ProductVariant | null;
+  quantity: number;
+  unit_price: string;
+};
 
 export type Cart = { id: number; items: CartLine[]; total: string };
 
@@ -418,12 +441,12 @@ export const api = {
     payload:
       | {
           shipping_address_id: number;
-          items: { product: number; quantity: number }[];
+          items: { product: number; variant?: number | null; quantity: number }[];
           coupon_code?: string;
         }
       | {
           shipping_address: string;
-          items: { product: number; quantity: number }[];
+          items: { product: number; variant?: number | null; quantity: number }[];
           coupon_code?: string;
         }
   ) =>
@@ -434,7 +457,7 @@ export const api = {
     }),
   quoteOrder: (
     token: string,
-    payload: { code?: string; items: { product: number; quantity: number }[] }
+    payload: { code?: string; items: { product: number; variant?: number | null; quantity: number }[] }
   ) =>
     request<QuoteResult>(`/coupons/quote/`, {
       method: "POST",
@@ -507,26 +530,40 @@ export const api = {
     }),
   getCart: (token: string) =>
     request<Cart>(`/cart/`, { headers: { Authorization: `Bearer ${token}` } }),
-  addToCart: (token: string, payload: { product: number; quantity: number }) =>
+  addToCart: (
+    token: string,
+    payload: { product: number; quantity: number; variant?: number | null }
+  ) =>
     request<Cart>(`/cart/items/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),
     }),
-  updateCartItem: (token: string, productId: number, quantity: number) =>
+  updateCartItem: (
+    token: string,
+    productId: number,
+    quantity: number,
+    variant?: number | null
+  ) =>
     request<Cart>(`/cart/items/${productId}/`, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ quantity }),
+      body: JSON.stringify({ quantity, variant: variant ?? null }),
     }),
-  removeCartItem: (token: string, productId: number) =>
-    request<Cart>(`/cart/items/${productId}/`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+  removeCartItem: (token: string, productId: number, variant?: number | null) =>
+    request<Cart>(
+      `/cart/items/${productId}/${variant ? `?variant=${variant}` : ""}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    ),
   clearCart: (token: string) =>
     request<Cart>(`/cart/`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
-  mergeCart: (token: string, payload: { items: { product: number; quantity: number }[] }) =>
+  mergeCart: (
+    token: string,
+    payload: { items: { product: number; quantity: number; variant?: number | null }[] }
+  ) =>
     request<Cart>(`/cart/merge/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },

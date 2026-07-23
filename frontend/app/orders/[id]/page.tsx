@@ -121,7 +121,13 @@ export default function OrderDetailPage() {
         <ul className="divide-y border-y">
           {order.items.map((it) => (
             <li key={it.id} className="py-2 flex justify-between text-sm">
-              <span>{it.product_name} × {it.quantity}</span>
+              <span>
+                {it.product_name}
+                {it.variant_label && (
+                  <span className="text-zinc-500"> ({it.variant_label})</span>
+                )}
+                {" "}× {it.quantity}
+              </span>
               <span>${it.subtotal}</span>
             </li>
           ))}

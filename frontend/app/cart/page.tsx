@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart";
 import { useWishlist } from "@/lib/useWishlist";
 import type { Product } from "@/lib/api";
@@ -11,17 +12,24 @@ import EmptyState from "@/components/EmptyState";
 export default function CartPage() {
   const { items, add, update, remove, total } = useCart();
   const { items: saved, has, toggle } = useWishlist();
+  const router = useRouter();
 
   // "Save for later" reuses the wishlist as its store: move the line into the
-  // wishlist (if not already there) and drop it from the cart.
-  const saveForLater = (product: Product) => {
+  // wishlist (if not already there) and drop it from the cart. The wishlist is
+  // product-level, so the specific variant line is what gets removed.
+  const saveForLater = (product: Product, variantId: number | null) => {
     if (!has(product.id)) toggle(product);
-    remove(product.id);
+    remove(product.id, variantId);
   };
 
-  // "Move to cart" is the reverse: add to the cart and remove from the wishlist.
+  // "Move to cart" is the reverse. A variant product can't be re-added blindly
+  // (no variant is stored on the wishlist), so send the shopper to choose.
   const moveToCart = (product: Product) => {
-    add(product, 1);
+    if (product.has_variants) {
+      router.push(`/products/${product.slug}`);
+      return;
+    }
+    add(product, null, 1);
     if (has(product.id)) toggle(product);
   };
 
@@ -52,8 +60,11 @@ export default function CartPage() {
               .
             </p>
           ) : (
-            items.map(({ product, quantity }) => (
-              <div key={product.id} className="flex gap-4 bg-white p-4 rounded border">
+            items.map(({ product, variant, quantity }) => {
+              const unit = variant ? variant.effective_price : product.price;
+              const variantId = variant?.id ?? null;
+              return (
+              <div key={`${product.id}:${variantId ?? ""}`} className="flex gap-4 bg-white p-4 rounded border">
                 <div className="relative w-24 h-24 bg-zinc-100 rounded overflow-hidden shrink-0">
                   {product.image_url && (
                     <Image
@@ -67,20 +78,26 @@ export default function CartPage() {
                 </div>
                 <div className="flex-1">
                   <div className="font-medium">{product.name}</div>
-                  <div className="text-sm text-zinc-500">${product.price} each</div>
+                  {variant && (
+                    <div className="text-xs text-zinc-500 mt-0.5">
+                      {Object.entries(variant.options).map(([k, v]) => `${k}: ${v}`).join(" · ")}
+                    </div>
+                  )}
+                  <div className="text-sm text-zinc-500">${unit} each</div>
                   <div className="mt-2 flex items-center gap-2">
-                    <button onClick={() => update(product.id, quantity - 1)} className="px-2 border rounded">-</button>
+                    <button onClick={() => update(product.id, variantId, quantity - 1)} className="px-2 border rounded">-</button>
                     <span>{quantity}</span>
-                    <button onClick={() => update(product.id, quantity + 1)} className="px-2 border rounded">+</button>
-                    <button onClick={() => saveForLater(product)} className="ml-4 text-sm text-blue-600 hover:underline">
+                    <button onClick={() => update(product.id, variantId, quantity + 1)} className="px-2 border rounded">+</button>
+                    <button onClick={() => saveForLater(product, variantId)} className="ml-4 text-sm text-blue-600 hover:underline">
                       Save for later
                     </button>
-                    <button onClick={() => remove(product.id)} className="text-sm text-red-600 hover:underline">Remove</button>
+                    <button onClick={() => remove(product.id, variantId)} className="text-sm text-red-600 hover:underline">Remove</button>
                   </div>
                 </div>
-                <div className="font-semibold">${(parseFloat(product.price) * quantity).toFixed(2)}</div>
+                <div className="font-semibold">${(parseFloat(unit) * quantity).toFixed(2)}</div>
               </div>
-            ))
+              );
+            })
           )}
         </section>
 

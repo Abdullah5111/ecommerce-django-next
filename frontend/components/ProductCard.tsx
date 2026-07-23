@@ -117,6 +117,12 @@ export default function ProductCard({ product }: { product: Product }) {
             <span className="bg-zinc-200 text-zinc-600 text-xs font-medium px-3 py-1.5 rounded-full">
               Out of stock
             </span>
+          ) : product.has_variants ? (
+            // Can't quick-add without picking a variant; the card link takes
+            // the shopper to the product page to choose.
+            <span className="bg-white/95 text-ink text-xs font-medium px-3 py-1.5 rounded-full shadow-md">
+              Options
+            </span>
           ) : (
             <button
               type="button"
