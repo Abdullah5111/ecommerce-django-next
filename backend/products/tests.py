@@ -12,7 +12,9 @@ from rest_framework.test import APITestCase
 
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderItem
-from products.models import Category, Product, Review, ReviewImage, ReviewVote
+from products.models import (
+    Category, Product, ProductVariant, Review, ReviewImage, ReviewVote,
+)
 from products.throttling import ReviewWriteThrottle
 from wishlist.models import WishlistItem
 
@@ -557,3 +559,73 @@ class ReviewImageTests(APITestCase):
         self.assertEqual(res.status_code, 400)
         self.assertEqual(Review.objects.count(), 0)
         self.assertEqual(ReviewImage.objects.count(), 0)
+
+
+class ProductVariantAPITests(APITestCase):
+    def setUp(self):
+        cache.clear()  # featured/etc. cache their responses
+        self.cat = Category.objects.create(name="Apparel")
+        self.tshirt = Product.objects.create(
+            name="Tee", price=Decimal("20.00"), stock=0, category=self.cat
+        )
+        self.plain = Product.objects.create(
+            name="Mug", price=Decimal("8.00"), stock=5, category=self.cat
+        )
+        # Two variants: one at product price, one with an override.
+        self.small = ProductVariant.objects.create(
+            product=self.tshirt, options={"Size": "S"}, sku="TEE-S", stock=3
+        )
+        self.large = ProductVariant.objects.create(
+            product=self.tshirt, options={"Size": "L"}, sku="TEE-L", stock=0,
+            price=Decimal("24.00"),
+        )
+
+    def test_detail_lists_active_variants(self):
+        res = self.client.get(f"/api/products/{self.tshirt.slug}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["has_variants"])
+        skus = {v["sku"] for v in res.data["variants"]}
+        self.assertEqual(skus, {"TEE-S", "TEE-L"})
+
+    def test_effective_price_and_in_stock(self):
+        res = self.client.get(f"/api/products/{self.tshirt.slug}/")
+        by_sku = {v["sku"]: v for v in res.data["variants"]}
+        self.assertEqual(by_sku["TEE-S"]["effective_price"], "20.00")  # inherits
+        self.assertEqual(by_sku["TEE-L"]["effective_price"], "24.00")  # override
+        self.assertTrue(by_sku["TEE-S"]["in_stock"])
+        self.assertFalse(by_sku["TEE-L"]["in_stock"])
+
+    def test_price_from_is_cheapest_variant(self):
+        res = self.client.get(f"/api/products/{self.tshirt.slug}/")
+        self.assertEqual(res.data["price_from"], "20.00")
+
+    def test_inactive_variants_are_hidden(self):
+        self.large.is_active = False
+        self.large.save(update_fields=["is_active"])
+        res = self.client.get(f"/api/products/{self.tshirt.slug}/")
+        skus = {v["sku"] for v in res.data["variants"]}
+        self.assertEqual(skus, {"TEE-S"})
+
+    def test_product_without_variants_reports_none(self):
+        res = self.client.get(f"/api/products/{self.plain.slug}/")
+        self.assertFalse(res.data["has_variants"])
+        self.assertEqual(res.data["variants"], [])
+        self.assertEqual(res.data["price_from"], "8.00")
+
+    def test_list_cards_omit_the_variant_array(self):
+        # Cards use the lean serializer; only has_variants/price_from ride along.
+        res = self.client.get("/api/products/")
+        row = next(r for r in res.data["results"] if r["slug"] == self.tshirt.slug)
+        self.assertNotIn("variants", row)
+        self.assertTrue(row["has_variants"])
+        self.assertEqual(row["price_from"], "20.00")
+
+    def test_duplicate_option_combo_is_rejected(self):
+        from django.db import IntegrityError, transaction
+
+        # atomic() so the failed INSERT doesn't taint the outer test transaction.
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                ProductVariant.objects.create(
+                    product=self.tshirt, options={"Size": "S"}, sku="TEE-S2", stock=1
+                )

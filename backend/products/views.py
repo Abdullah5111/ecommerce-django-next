@@ -15,6 +15,7 @@ from .serializers import (
     CategoryTreeSerializer,
     CategoryDetailSerializer,
     ProductSerializer,
+    ProductDetailSerializer,
     ReviewImageUploadSerializer,
     ReviewSerializer,
 )
@@ -106,8 +107,20 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     # Reviews accept multipart (photo uploads) as well as plain JSON.
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
+    def get_serializer_class(self):
+        # Detail carries the full variant list; list/cards stay lean.
+        if self.action == "retrieve":
+            return ProductDetailSerializer
+        return ProductSerializer
+
     def get_queryset(self):
-        qs = Product.objects.filter(is_active=True).select_related("category")
+        qs = (
+            Product.objects.filter(is_active=True)
+            .select_related("category")
+            # Powers has_variants / price_from (and the detail variant list)
+            # without a query per product.
+            .prefetch_related("variants")
+        )
         # Postgres full-text search path: only when on PG and ?search= is set.
         if connection.vendor == "postgresql":
             q = self.request.query_params.get("search") if hasattr(self, "request") and self.request else None
@@ -234,6 +247,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
                 Product.objects.filter(is_active=True, category=product.category)
                 .exclude(pk=product.pk)
                 .select_related("category")
+                .prefetch_related("variants")
                 .order_by("-rating_avg", "-created_at")[:8]
             )
             data = ProductSerializer(qs, many=True).data
@@ -275,6 +289,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
                     Product.objects.filter(is_active=True, category_id__in=cat_ids)
                     .exclude(pk__in=owned_ids)
                     .select_related("category")
+                    .prefetch_related("variants")
                     .order_by("-is_featured", "-rating_avg", "-rating_count")[:limit]
                 )
                 products = list(qs)
@@ -285,6 +300,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         qs = (
             Product.objects.filter(is_active=True)
             .select_related("category")
+            .prefetch_related("variants")
             .order_by("-is_featured", "-rating_avg", "-rating_count")[:limit]
         )
         return Response(self.get_serializer(qs, many=True).data)

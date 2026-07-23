@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Category, Product, ProductImage, Review, ReviewImage
+from .models import Category, Product, ProductImage, ProductVariant, Review, ReviewImage
 
 
 @admin.register(Category)
@@ -14,6 +14,11 @@ class ProductImageInline(admin.TabularInline):
     extra = 1
 
 
+class ProductVariantInline(admin.TabularInline):
+    model = ProductVariant
+    extra = 0
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
@@ -23,7 +28,14 @@ class ProductAdmin(admin.ModelAdmin):
     list_filter = ("category", "is_active")
     search_fields = ("name", "description")
     prepopulated_fields = {"slug": ("name",)}
-    inlines = [ProductImageInline]
+    inlines = [ProductImageInline, ProductVariantInline]
+
+
+@admin.register(ProductVariant)
+class ProductVariantAdmin(admin.ModelAdmin):
+    list_display = ("sku", "product", "label", "stock", "price", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("sku", "product__name")
 
 
 class ReviewImageInline(admin.TabularInline):

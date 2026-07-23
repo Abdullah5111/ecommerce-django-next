@@ -1,6 +1,6 @@
 from django.core.validators import FileExtensionValidator
 from rest_framework import serializers
-from .models import Category, Product, ProductImage, Review, ReviewImage
+from .models import Category, Product, ProductImage, ProductVariant, Review, ReviewImage
 
 MAX_REVIEW_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB per photo
 # Kept narrow on purpose. SVG is excluded: it is a real image to a browser but
@@ -61,6 +61,33 @@ class ProductImageSerializer(serializers.ModelSerializer):
         fields = ("id", "url", "alt", "sort_order")
 
 
+class ProductVariantSerializer(serializers.ModelSerializer):
+    effective_price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True
+    )
+    in_stock = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductVariant
+        fields = ("id", "options", "sku", "stock", "price", "effective_price", "in_stock")
+
+    def get_in_stock(self, obj):
+        return obj.stock > 0
+
+
+def _active_variants(product):
+    # Uses the prefetched list where present, so cards don't fire a query each.
+    # Seed each variant's back-reference to the product we already hold, so
+    # effective_price (which reads variant.product.price when price is null)
+    # doesn't trigger a query per variant.
+    out = []
+    for v in product.variants.all():
+        if v.is_active:
+            v.product = product
+            out.append(v)
+    return out
+
+
 class ProductSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(
@@ -70,6 +97,8 @@ class ProductSerializer(serializers.ModelSerializer):
     is_on_sale = serializers.BooleanField(read_only=True)
     discount_percent = serializers.IntegerField(read_only=True)
     sold_count = serializers.SerializerMethodField()
+    has_variants = serializers.SerializerMethodField()
+    price_from = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -77,6 +106,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "id", "name", "slug", "description", "price", "compare_at_price",
             "rating_avg", "rating_count", "stock", "sold_count",
             "image_url", "images", "is_on_sale", "discount_percent",
+            "has_variants", "price_from",
             "is_active", "is_featured", "specifications",
             "category", "category_id",
             "created_at", "updated_at",
@@ -91,6 +121,29 @@ class ProductSerializer(serializers.ModelSerializer):
         # featured, related, bestsellers). Null elsewhere (cart, orders, etc.),
         # which the frontend treats as "hide the badge".
         return getattr(obj, "sold_count", None)
+
+    def get_has_variants(self, obj):
+        return len(_active_variants(obj)) > 0
+
+    def get_price_from(self, obj):
+        # Lowest sticker price a card should advertise: the cheapest active
+        # variant, or the product's own price when there are none.
+        variants = _active_variants(obj)
+        if not variants:
+            return str(obj.price)
+        return str(min(v.effective_price for v in variants))
+
+
+class ProductDetailSerializer(ProductSerializer):
+    """Product detail carries the full variant list; cards do not."""
+
+    variants = serializers.SerializerMethodField()
+
+    class Meta(ProductSerializer.Meta):
+        fields = ProductSerializer.Meta.fields + ("variants",)
+
+    def get_variants(self, obj):
+        return ProductVariantSerializer(_active_variants(obj), many=True).data
 
 
 class ReviewImageSerializer(serializers.ModelSerializer):

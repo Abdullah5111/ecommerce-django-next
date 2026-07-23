@@ -82,6 +82,51 @@ class Product(models.Model):
         return int(round((1 - (float(self.price) / float(self.compare_at_price))) * 100))
 
 
+class ProductVariant(models.Model):
+    """An optional purchasable variation of a product (e.g. Size L / Blue).
+
+    Variants are additive: a product with none behaves exactly as before and
+    is bought directly. A product with variants sells through them — each
+    carries its own stock and an optional price override. The set of option
+    *types* (Size, Color, …) is derived from the variants themselves, so
+    adding a dimension needs no schema change.
+    """
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="variants")
+    # {"Size": "L", "Color": "Blue"} — order preserved for display.
+    options = models.JSONField(default=dict)
+    sku = models.CharField(max_length=64, unique=True)
+    stock = models.PositiveIntegerField(default=0)
+    # null → inherit product.price; set → this variant costs a different amount.
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            # One variant per option combination within a product.
+            models.UniqueConstraint(
+                fields=["product", "options"], name="uniq_variant_options_per_product"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["product", "is_active"], name="products_pr_product_var_idx"),
+        ]
+
+    @property
+    def effective_price(self):
+        return self.price if self.price is not None else self.product.price
+
+    @property
+    def label(self) -> str:
+        # "Size: L / Color: Blue" — a stable human name for snapshots and admin.
+        return " / ".join(f"{k}: {v}" for k, v in self.options.items())
+
+    def __str__(self):
+        return f"{self.product.name} ({self.label or self.sku})"
+
+
 class ProductImage(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="images")
     url = models.URLField(max_length=500)
