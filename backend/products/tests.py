@@ -79,6 +79,59 @@ class SoldCountTests(APITestCase):
         self.assertEqual(res.data[0]["id"], hot.id)
 
 
+class SearchSuggestTests(APITestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.blue = Product.objects.create(
+            name="Blue Running Shoes", price=Decimal("50"), stock=5,
+            category=self.cat, image_url="http://img/blue.jpg",
+        )
+        self.red = Product.objects.create(
+            name="Red Running Socks", price=Decimal("8"), stock=5, category=self.cat
+        )
+        self.hidden = Product.objects.create(
+            name="Running Hat (discontinued)", price=Decimal("9"), stock=0,
+            category=self.cat, is_active=False,
+        )
+
+    def test_matches_by_substring_case_insensitive(self):
+        res = self.client.get("/api/products/suggest/?q=running")
+        self.assertEqual(res.status_code, 200)
+        names = {r["name"] for r in res.data}
+        self.assertEqual(names, {"Blue Running Shoes", "Red Running Socks"})
+
+    def test_excludes_inactive_products(self):
+        res = self.client.get("/api/products/suggest/?q=hat")
+        self.assertEqual(res.data, [])
+
+    def test_short_query_returns_empty_without_hitting_db(self):
+        res = self.client.get("/api/products/suggest/?q=r")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data, [])
+
+    def test_missing_query_returns_empty(self):
+        res = self.client.get("/api/products/suggest/")
+        self.assertEqual(res.data, [])
+
+    def test_payload_is_lean_with_string_price(self):
+        res = self.client.get("/api/products/suggest/?q=blue")
+        self.assertEqual(len(res.data), 1)
+        row = res.data[0]
+        self.assertEqual(
+            set(row.keys()), {"id", "name", "slug", "price", "image_url"}
+        )
+        self.assertEqual(row["price"], "50.00")
+        self.assertEqual(row["image_url"], "http://img/blue.jpg")
+
+    def test_capped_at_eight_results(self):
+        for i in range(10):
+            Product.objects.create(
+                name=f"Widget {i:02d}", price=Decimal("1"), stock=1, category=self.cat
+            )
+        res = self.client.get("/api/products/suggest/?q=widget")
+        self.assertEqual(len(res.data), 8)
+
+
 class RecommendedTests(APITestCase):
     def setUp(self):
         self.electronics = Category.objects.create(name="Electronics")

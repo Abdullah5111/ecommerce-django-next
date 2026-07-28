@@ -150,6 +150,43 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(data)
 
     @action(
+        detail=False,
+        methods=["get"],
+        url_path="suggest",
+        permission_classes=[permissions.AllowAny],
+    )
+    def suggest(self, request):
+        """Typeahead for the search box: a few lean matches, no heavy joins.
+
+        Deliberately does NOT use the Postgres full-text path `get_queryset`
+        takes — typeahead needs substring/prefix hits on partial words, and
+        this must also work on the sqlite test/dev fallback. `icontains`
+        gives both. Payload is kept minimal (no variants/images/reviews) and
+        capped, so it stays cheap on every keystroke.
+        """
+        q = (request.query_params.get("q") or "").strip()
+        if len(q) < 2:
+            return Response([])
+        rows = (
+            Product.objects.filter(is_active=True, name__icontains=q)
+            .order_by("name")
+            .values("id", "name", "slug", "price", "image_url")[:8]
+        )
+        return Response(
+            [
+                {
+                    "id": r["id"],
+                    "name": r["name"],
+                    "slug": r["slug"],
+                    # str() to match the string prices the rest of the API emits.
+                    "price": str(r["price"]),
+                    "image_url": r["image_url"],
+                }
+                for r in rows
+            ]
+        )
+
+    @action(
         detail=True,
         methods=["get", "post"],
         url_path="reviews",
