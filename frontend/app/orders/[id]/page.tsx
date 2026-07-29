@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, type Order, type ReturnRequest, type ReturnReason } from "@/lib/api";
 import { auth } from "@/lib/auth";
+import { formatDateTime } from "@/lib/format";
 
 const REASONS: { value: ReturnReason; label: string }[] = [
   { value: "defective", label: "Defective" },
@@ -12,10 +13,6 @@ const REASONS: { value: ReturnReason; label: string }[] = [
   { value: "no_longer_needed", label: "No longer needed" },
   { value: "other", label: "Other" },
 ];
-
-function fmt(iso: string | null) {
-  return iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "";
-}
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -154,7 +151,7 @@ export default function OrderDetailPage() {
           {order.events.map((ev) => (
             <li key={ev.id} className="flex justify-between">
               <span>{ev.message}</span>
-              <span className="text-zinc-500">{fmt(ev.created_at)}</span>
+              <span className="text-zinc-500">{formatDateTime(ev.created_at)}</span>
             </li>
           ))}
         </ul>

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Order } from "@/lib/api";
 import { auth } from "@/lib/auth";
+import { formatDateTime } from "@/lib/format";
 import EmptyState from "@/components/EmptyState";
 
 const STATUS_STYLES: Record<Order["status"], string> = {
@@ -16,13 +17,6 @@ const STATUS_STYLES: Record<Order["status"], string> = {
   partially_refunded: "bg-orange-100 text-orange-800",
   refunded: "bg-rose-100 text-rose-800",
 };
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -84,7 +78,7 @@ export default function OrdersPage() {
                 <Link href={`/orders/${order.id}`} className="font-semibold hover:underline">
                   Order #{order.id}
                 </Link>
-                <div className="text-sm text-zinc-500">{formatDate(order.created_at)}</div>
+                <div className="text-sm text-zinc-500">{formatDateTime(order.created_at)}</div>
               </div>
               <span
                 className={`text-xs font-medium px-2 py-1 rounded-full uppercase ${STATUS_STYLES[order.status]}`}
