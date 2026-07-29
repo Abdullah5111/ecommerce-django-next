@@ -20,7 +20,7 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 | Personalized feed / recommendations | ✅ | ✅ | "Recommended for you" rail from purchase/wishlist/cart affinity, featured fallback |
 | Flash / lightning deals + countdowns | ✅ | ❌ | |
 | Homepage banners / carousels | ✅ | 🟡 | Featured grid only |
-| Search autocomplete / visual / voice search | ✅ | ❌ | |
+| Search autocomplete / visual / voice search | ✅ | 🟡 | Debounced typeahead with product suggestions; no visual/voice search |
 
 ## Product detail
 | Sub-feature | Temu | Yours | Notes |
@@ -106,16 +106,16 @@ marketplace). Legend: ✅ matched · 🟡 partial / stub · ❌ not present.
 | Status | Count (approx) | Examples |
 |---|---|---|
 | ✅ Matched | ~38 | catalog, coupons, cart/wishlist, save-for-later, social proof, lifecycle, returns, accounts, payments, refunds, notifications, order emails, web push, verified-purchase + helpful votes, tax, variants |
-| 🟡 Partial | ~6 | google login (no Apple/FB), tracking, wallets, homepage banners, review photos (no video) |
-| ❌ Not matched | ~17 | multi-vendor, gamification, i18n, BNPL, Q&A |
+| 🟡 Partial | ~7 | google login (no Apple/FB), tracking, wallets, homepage banners, review photos (no video), search autocomplete (no visual/voice) |
+| ❌ Not matched | ~16 | multi-vendor, gamification, i18n, BNPL, Q&A |
 
 ## Recommended next gaps (impact order)
 
 1. **Q&A** on product detail, and **frequently-bought-together** bundles
 2. **New-user / referral discounts**
-3. **Search autocomplete / suggestions**
 
 Recently shipped:
+- ~~Search autocomplete~~ — debounced header typeahead (`/products/suggest/`, ≤8 lean matches by name) with thumbnail/price rows, keyboard navigation, and stale-response guarding. Visual/voice search remain out.
 - ~~Real payments (Stripe)~~ — PaymentIntent + Elements + webhook, real refunds, keyless mock fallback.
 - ~~Order-confirmation / shipping emails~~ — emails on every order lifecycle event.
 - ~~Push notifications~~ — in-app notification center + bell, plus Web Push (VAPID), keyless-disabled by default.

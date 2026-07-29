@@ -9,7 +9,7 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 | Frontend     | Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS   |
 | Backend      | Django 5, Django REST Framework, SimpleJWT (+ token blacklist)|
 | Database     | PostgreSQL 16 (SQLite for the simplest dev path)              |
-| Search       | Postgres `SearchVector` + `SearchRank` (icontains fallback)   |
+| Search       | Postgres `SearchVector` + `SearchRank` (icontains fallback), header typeahead autocomplete |
 | Cache        | Configurable backend (LocMem default; Redis via env)          |
 | Container    | Docker, docker-compose                                        |
 | Deploy       | Google Cloud Run + Cloud SQL + Artifact Registry              |
@@ -32,6 +32,7 @@ A full-stack e-commerce app built as a portfolio piece. Django REST Framework ba
 - Faceted filtering: price range, in-stock, category-and-descendants
 - Sort: featured, newest, price ↑ / ↓
 - Search (Postgres full-text when available, icontains otherwise) scoped to category when on a category page
+- Search-box autocomplete: debounced typeahead (`/products/suggest/`) with thumbnail/price rows, keyboard navigation, and stale-response guarding
 - Paginated grid with shareable URLs (`?page=2&priceMin=20&inStock=true&ordering=-price`)
 - Personalized **"Recommended for you"** rail (logged-in users): products from the categories you've purchased / wishlisted / carted, ranked featured-first; guests see the Featured rail
 

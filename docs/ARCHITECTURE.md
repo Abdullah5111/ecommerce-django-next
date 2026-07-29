@@ -93,6 +93,7 @@ The product list endpoint accepts:
 | Param          | Behaviour                                                                |
 |----------------|--------------------------------------------------------------------------|
 | `search=q`     | Postgres `SearchVector("name","description")` + `SearchRank` ordering. Falls back to `icontains` on SQLite. |
+| `suggest/?q=`  | Typeahead action (not a filter): ≤8 lean matches by `name__icontains` for the header autocomplete; `[]` under 2 chars. |
 | `category__slug` | Exact category (no descendants).                                       |
 | `category_path=a/b` | Matches `full_slug=path` OR `full_slug LIKE path||'/%'` — category + descendants. |
 | `price__gte`/`price__lte` | Range filters.                                                  |
@@ -289,6 +290,7 @@ Caching is used on `featured`, `bestsellers`, and per-product `related` (5-minut
 
 - **Postgres**: when `connection.vendor == "postgresql"` and `?search=` is present, `ProductViewSet.get_queryset()` annotates with `SearchRank(SearchVector("name","description"), SearchQuery(q))`, filters on `rank > 0`, orders by rank descending. Adding a `GinIndex` on `to_tsvector('simple', name || ' ' || description)` is the natural follow-up to make this scale past tens of thousands of rows.
 - **SQLite (dev)**: DRF's `SearchFilter` handles `icontains` over the same fields. Fine for development; not for production-scale catalogs.
+- **Autocomplete** (`GET /products/suggest/?q=`): a separate lightweight path for the header typeahead. It deliberately does *not* reuse the full-text ranking — typeahead needs substring/prefix hits on partial words (and must work on the SQLite fallback), so it uses `name__icontains`, returns at most 8 rows, and serialises a lean payload (`id, name, slug, price, image_url`) with `.values()` — no variant/image/review joins on every keystroke. Queries under 2 chars short-circuit to `[]` without touching the DB. The frontend debounces input (200 ms) and drops out-of-order responses.
 
 ## Testing & CI
 
