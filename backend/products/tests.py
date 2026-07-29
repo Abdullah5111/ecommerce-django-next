@@ -123,6 +123,18 @@ class SearchSuggestTests(APITestCase):
         self.assertEqual(row["price"], "50.00")
         self.assertEqual(row["image_url"], "http://img/blue.jpg")
 
+    def test_prefix_matches_rank_before_mid_word(self):
+        # "Alpha Shoe" is alphabetically first, but "Shoe Rack" starts with the
+        # query and must therefore win the top slot.
+        Product.objects.create(
+            name="Alpha Shoe", price=Decimal("1"), stock=1, category=self.cat
+        )
+        Product.objects.create(
+            name="Shoe Rack", price=Decimal("1"), stock=1, category=self.cat
+        )
+        res = self.client.get("/api/products/suggest/?q=shoe")
+        self.assertEqual(res.data[0]["name"], "Shoe Rack")
+
     def test_capped_at_eight_results(self):
         for i in range(10):
             Product.objects.create(

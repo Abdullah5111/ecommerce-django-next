@@ -1,7 +1,7 @@
 import django_filters
 from django.core.cache import cache
 from django.db import IntegrityError, connection, transaction
-from django.db.models import Exists, OuterRef, Q, Sum
+from django.db.models import Case, Exists, IntegerField, OuterRef, Q, Sum, Value, When
 from django.db.models.functions import Coalesce
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
@@ -169,7 +169,17 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             return Response([])
         rows = (
             Product.objects.filter(is_active=True, name__icontains=q)
-            .order_by("name")
+            # Rank names that *start* with the query above mid-word matches, so
+            # typing "shoe" surfaces "Shoe Rack" before "Blue Shoe"; ties break
+            # alphabetically.
+            .annotate(
+                match_rank=Case(
+                    When(name__istartswith=q, then=Value(0)),
+                    default=Value(1),
+                    output_field=IntegerField(),
+                )
+            )
+            .order_by("match_rank", "name")
             .values("id", "name", "slug", "price", "image_url")[:8]
         )
         return Response(
