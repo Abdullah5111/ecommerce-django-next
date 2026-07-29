@@ -65,7 +65,7 @@ export default async function HomePage({
 
   const activeCategory = categories.find((c) => c.slug === category);
   const heading = query
-    ? `Results for “${query}”`
+    ? `Results for “${query}” (${totalCount} ${totalCount === 1 ? "result" : "results"})`
     : activeCategory
       ? activeCategory.name
       : "Featured products";
