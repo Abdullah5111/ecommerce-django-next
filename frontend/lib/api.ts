@@ -79,6 +79,16 @@ export type Product = {
   specifications?: Record<string, string>;
 };
 
+// Lean shape returned by /products/suggest/ — just enough to render a
+// typeahead row. Not a full Product (no variants/images/reviews).
+export type ProductSuggestion = {
+  id: number;
+  name: string;
+  slug: string;
+  price: string;
+  image_url: string;
+};
+
 export type ReviewImage = {
   id: number;
   image: string;
@@ -357,6 +367,10 @@ export const api = {
     return request<Paginated<Product>>(`/products/${suffix ? `?${suffix}` : ""}`);
   },
   getProduct: (slug: string) => request<Product>(`/products/${slug}/`),
+  // Typeahead for the search box. Returns a bare array (not paginated),
+  // capped server-side; the backend returns [] for queries under 2 chars.
+  suggest: (q: string) =>
+    request<ProductSuggestion[]>(`/products/suggest/?q=${encodeURIComponent(q)}`),
   // `token` is optional because the product page lists reviews from a server
   // component, where there is no token. Pass it from the client to resolve the
   // per-viewer fields (helpful_by_me, is_mine), which are false without auth.
