@@ -13,6 +13,9 @@ export default function SearchBar() {
   const [value, setValue] = useState(params.get("search") ?? "");
   const [suggestions, setSuggestions] = useState<ProductSuggestion[]>([]);
   const [open, setOpen] = useState(false);
+  // Index of the keyboard-highlighted row; -1 means none (Enter runs the
+  // full-text search instead of jumping to a product).
+  const [active, setActive] = useState(-1);
 
   const debounced = useDebouncedValue(value.trim(), 200);
 
@@ -25,10 +28,29 @@ export default function SearchBar() {
       .suggest(debounced)
       .then((rows) => {
         setSuggestions(rows);
+        setActive(-1);
         setOpen(true);
       })
       .catch(() => setSuggestions([]));
   }, [debounced]);
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!open || suggestions.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActive((i) => (i + 1) % suggestions.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
+    } else if (e.key === "Enter" && active >= 0) {
+      // Let a highlighted suggestion win over submitting the search form.
+      e.preventDefault();
+      setOpen(false);
+      router.push(`/products/${suggestions[active].slug}`);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,6 +72,7 @@ export default function SearchBar() {
           type="search"
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          onKeyDown={onKeyDown}
           placeholder="Search products…"
           className="flex-1 border rounded px-4 py-2"
         />
@@ -60,12 +83,15 @@ export default function SearchBar() {
 
       {open && suggestions.length > 0 && (
         <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border rounded shadow-lg overflow-hidden">
-          {suggestions.map((s) => (
+          {suggestions.map((s, i) => (
             <li key={s.id}>
               <Link
                 href={`/products/${s.slug}`}
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-50"
+                onMouseEnter={() => setActive(i)}
+                className={`flex items-center gap-3 px-3 py-2 ${
+                  i === active ? "bg-zinc-100" : "hover:bg-zinc-50"
+                }`}
               >
                 {s.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
