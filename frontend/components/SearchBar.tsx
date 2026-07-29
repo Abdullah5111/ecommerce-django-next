@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type ProductSuggestion } from "@/lib/api";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 
@@ -10,9 +10,11 @@ export default function SearchBar() {
   const router = useRouter();
   const params = useSearchParams();
   const pathname = usePathname();
+  const boxRef = useRef<HTMLDivElement>(null);
   const [value, setValue] = useState(params.get("search") ?? "");
   const [suggestions, setSuggestions] = useState<ProductSuggestion[]>([]);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   // Index of the keyboard-highlighted row; -1 means none (Enter runs the
   // full-text search instead of jumping to a product).
   const [active, setActive] = useState(-1);
@@ -22,17 +24,43 @@ export default function SearchBar() {
   useEffect(() => {
     if (debounced.length < 2) {
       setSuggestions([]);
+      setLoading(false);
       return;
     }
+    // Guard against out-of-order responses: a slow request for "sho" must not
+    // overwrite a newer one for "shoes". `ignore` is flipped by cleanup when
+    // `debounced` changes before this request resolves.
+    let ignore = false;
+    setLoading(true);
+    setOpen(true);
     api
       .suggest(debounced)
       .then((rows) => {
+        if (ignore) return;
         setSuggestions(rows);
         setActive(-1);
-        setOpen(true);
       })
-      .catch(() => setSuggestions([]));
+      .catch(() => {
+        if (!ignore) setSuggestions([]);
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+    return () => {
+      ignore = true;
+    };
   }, [debounced]);
+
+  // Close the dropdown when focus/click leaves the search box.
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (!open || suggestions.length === 0) return;
@@ -65,8 +93,10 @@ export default function SearchBar() {
     router.push(qs ? `${base}?${qs}` : base);
   };
 
+  const showDropdown = open && debounced.length >= 2;
+
   return (
-    <div className="relative mb-6">
+    <div ref={boxRef} className="relative mb-6">
       <form onSubmit={submit} className="flex gap-2">
         <input
           type="search"
@@ -81,8 +111,13 @@ export default function SearchBar() {
         </button>
       </form>
 
-      {open && suggestions.length > 0 && (
+      {showDropdown && (
         <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border rounded shadow-lg overflow-hidden">
+          {suggestions.length === 0 && (
+            <li className="px-3 py-2 text-sm text-zinc-500">
+              {loading ? "Searching…" : "No products found"}
+            </li>
+          )}
           {suggestions.map((s, i) => (
             <li key={s.id}>
               <Link
