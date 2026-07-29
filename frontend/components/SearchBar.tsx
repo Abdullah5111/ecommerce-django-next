@@ -105,6 +105,12 @@ export default function SearchBar() {
           onKeyDown={onKeyDown}
           placeholder="Search products…"
           className="flex-1 border rounded px-4 py-2"
+          role="combobox"
+          aria-expanded={showDropdown}
+          aria-controls="search-suggestions"
+          aria-activedescendant={active >= 0 ? `suggestion-${suggestions[active].id}` : undefined}
+          aria-autocomplete="list"
+          autoComplete="off"
         />
         <button type="submit" className="bg-black text-white px-5 py-2 rounded font-medium hover:bg-zinc-800">
           Search
@@ -112,14 +118,18 @@ export default function SearchBar() {
       </form>
 
       {showDropdown && (
-        <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border rounded shadow-lg overflow-hidden">
+        <ul
+          id="search-suggestions"
+          role="listbox"
+          className="absolute z-20 left-0 right-0 mt-1 bg-white border rounded shadow-lg overflow-hidden"
+        >
           {suggestions.length === 0 && (
             <li className="px-3 py-2 text-sm text-zinc-500">
               {loading ? "Searching…" : "No products found"}
             </li>
           )}
           {suggestions.map((s, i) => (
-            <li key={s.id}>
+            <li key={s.id} id={`suggestion-${s.id}`} role="option" aria-selected={i === active}>
               <Link
                 href={`/products/${s.slug}`}
                 onClick={() => setOpen(false)}
