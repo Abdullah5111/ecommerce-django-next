@@ -96,7 +96,7 @@ class OrderSerializer(serializers.ModelSerializer):
             if coupon is None:
                 raise serializers.ValidationError({"coupon_code": "Invalid coupon code."})
 
-        # Address resolution (unchanged).
+        # Copy the chosen saved address into the order's snapshot fields.
         address = validated_data.pop("shipping_address_id", None)
         order_kwargs = {}
         if address is not None:
@@ -113,8 +113,7 @@ class OrderSerializer(serializers.ModelSerializer):
         else:
             order_kwargs["shipping_address"] = validated_data.pop("shipping_address")
 
-        # Validate each variant belongs to its product, then build the priced
-        # lines (variant price wins when a variant is chosen).
+        # Validate each variant belongs to its product, then build priced lines.
         lines = []
         for it in items_data:
             product = it["product"]
@@ -158,8 +157,7 @@ class OrderSerializer(serializers.ModelSerializer):
             variant = line.variant
             quantity = line.quantity
             if variant is not None:
-                # Atomic conditional decrement on the variant's own stock —
-                # same no-oversell guarantee as the product path.
+                # Atomic conditional decrement — no-oversell, same as the product path.
                 updated = ProductVariant.objects.filter(
                     pk=variant.pk, stock__gte=quantity
                 ).update(stock=F("stock") - quantity)

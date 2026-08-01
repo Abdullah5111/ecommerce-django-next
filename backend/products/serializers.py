@@ -3,8 +3,7 @@ from rest_framework import serializers
 from .models import Category, Product, ProductImage, ProductVariant, Review, ReviewImage
 
 MAX_REVIEW_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB per photo
-# Kept narrow on purpose. SVG is excluded: it is a real image to a browser but
-# can carry <script>, and MEDIA is served from our own origin.
+# SVG excluded: a real image that can carry <script>, served from our origin.
 ALLOWED_REVIEW_IMAGE_EXTENSIONS = ("jpg", "jpeg", "png", "webp", "gif")
 
 
@@ -76,10 +75,8 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 
 def _active_variants(product):
-    # Uses the prefetched list where present, so cards don't fire a query each.
-    # Seed each variant's back-reference to the product we already hold, so
-    # effective_price (which reads variant.product.price when price is null)
-    # doesn't trigger a query per variant.
+    # Uses the prefetched list; seeds each variant's product back-reference so
+    # effective_price doesn't fire a query per variant.
     out = []
     for v in product.variants.all():
         if v.is_active:
@@ -117,17 +114,14 @@ class ProductSerializer(serializers.ModelSerializer):
         )
 
     def get_sold_count(self, obj):
-        # Present only where the queryset annotated it (product list/detail,
-        # featured, related, bestsellers). Null elsewhere (cart, orders, etc.),
-        # which the frontend treats as "hide the badge".
+        # Only present where the queryset annotated it; null elsewhere (hides the badge).
         return getattr(obj, "sold_count", None)
 
     def get_has_variants(self, obj):
         return len(_active_variants(obj)) > 0
 
     def get_price_from(self, obj):
-        # Lowest sticker price a card should advertise: the cheapest active
-        # variant, or the product's own price when there are none.
+        # Cheapest active variant, or the product's own price when there are none.
         variants = _active_variants(obj)
         if not variants:
             return str(obj.price)
@@ -162,13 +156,8 @@ class ReviewImageSerializer(serializers.ModelSerializer):
 
 
 class ReviewImageUploadSerializer(serializers.Serializer):
-    """Validates one uploaded review photo.
-
-    ReviewImage rows are written straight from request.FILES, and a model
-    ImageField only validates under full_clean(), which the API path never
-    calls — so without this, any file of any size would be accepted. ImageField
-    makes Pillow prove the bytes are an image; the extension allowlist stops a
-    real image being stored under a name that MEDIA would serve as script.
+    """Validates one uploaded review photo — the API writes straight from
+    request.FILES, so ImageField (Pillow) + extension allowlist are the only checks.
     """
 
     image = serializers.ImageField(
@@ -205,8 +194,7 @@ class ReviewSerializer(serializers.ModelSerializer):
         return value
 
     def get_helpful_by_me(self, obj):
-        # Anonymous callers get False rather than null — the UI only needs to
-        # know whether *this* viewer's vote is already cast.
+        # Anonymous callers get False, not null.
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return False
@@ -216,8 +204,7 @@ class ReviewSerializer(serializers.ModelSerializer):
         return obj.votes.filter(user=request.user).exists()
 
     def get_is_mine(self, obj):
-        # Lets the UI hide the helpful control on your own review, matching the
-        # self-vote rule the endpoint enforces.
+        # Lets the UI hide the helpful control on your own review.
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return False

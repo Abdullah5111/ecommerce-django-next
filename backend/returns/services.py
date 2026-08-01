@@ -80,8 +80,7 @@ def refund(ret, actor=None):
     order = Order.objects.select_for_update().get(pk=ret.order_id)
 
     amount = refund_for(ret)
-    # Never refund more than the customer actually paid (subtotal − discount),
-    # cumulatively across all of this order's returns. Shipping is never refunded.
+    # Never refund more than paid (subtotal − discount) across all returns; shipping never.
     max_refundable = order.subtotal - order.discount_total - order.refunded_total
     if max_refundable < 0:
         max_refundable = Decimal("0")

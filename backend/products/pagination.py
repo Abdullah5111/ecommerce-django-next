@@ -2,12 +2,8 @@ from rest_framework.pagination import CursorPagination
 
 
 class ProductCursorPagination(CursorPagination):
-    """Opt-in cursor pagination for product listings.
-
-    Not wired by default — the project uses ``PageNumberPagination`` globally
-    for the standard catalog list. Set ``pagination_class = ProductCursorPagination``
-    on a viewset when deep-paginating large catalogs to avoid the cost of
-    ``OFFSET`` scans on big offsets.
+    """Opt-in cursor pagination for deep-paginating large catalogs (avoids OFFSET
+    scans). Not wired by default; the catalog uses PageNumberPagination globally.
     """
 
     ordering = "-created_at"

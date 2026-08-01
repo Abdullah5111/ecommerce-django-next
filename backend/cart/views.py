@@ -105,8 +105,8 @@ class CartItemDetailView(APIView):
 
     def delete(self, request, product_id):
         cart = get_cart(request.user)
-        # variant disambiguates when the same product sits in the cart under
-        # more than one variant; omitted → the no-variant line.
+        # variant disambiguates the same product under multiple variants;
+        # omitted → the no-variant line.
         variant_id = request.query_params.get("variant")
         if variant_id in (None, "", "0"):
             CartItem.objects.filter(
@@ -141,5 +141,5 @@ class CartMergeView(APIView):
             current = existing.quantity if existing else 0
             _set_quantity(
                 cart, product, variant, _cap(product, variant, current + qty)
-            )  # sum, capped at stock
+            )
         return Response(CartSerializer(cart).data)

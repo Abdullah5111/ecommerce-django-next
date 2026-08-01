@@ -12,8 +12,7 @@ from products.models import Category, Product, ProductImage, Review
 
 # Hierarchy: top-level -> {child: [products]}
 # Product tuple: (name, description, price, stock, [image_urls], on_sale)
-# Featured: roughly half the catalog, picking one product per top-level
-# parent category for variety. Deterministic + idempotent.
+# Featured: one product per top-level category, deterministic + idempotent.
 FEATURED_NAMES = {
     "Wireless Headphones",   # Electronics
     "Cotton T-Shirt",        # Apparel
@@ -292,7 +291,6 @@ def run():
                     product.specifications = specs
                     product.save()
 
-                # Image rows: only create if product has zero existing images.
                 if not product.images.exists():
                     for idx, url in enumerate(images):
                         ProductImage.objects.create(
@@ -302,7 +300,6 @@ def run():
                             sort_order=idx,
                         )
 
-                # Seed reviews and recompute aggregate explicitly.
                 seed_reviews_for(product)
                 agg = product.reviews.aggregate(avg=Avg("rating"), n=Count("id"))
                 product.rating_avg = round(agg["avg"] or 0, 2)

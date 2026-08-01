@@ -1,9 +1,7 @@
-"""Web Push (VAPID) delivery, with a graceful no-op when keys are absent.
+"""Web Push (VAPID) delivery, a graceful no-op when keys are absent.
 
-Push is enabled only when both ``VAPID_PUBLIC_KEY`` and ``VAPID_PRIVATE_KEY`` are
-configured. Without them the in-app notification center and emails still work;
-push delivery is simply skipped and the subscribe UI is never offered. The
-``pywebpush`` SDK is imported lazily so disabled deployments never need it.
+Enabled only with both VAPID keys set; otherwise push is skipped (in-app + email
+still work). ``pywebpush`` is imported lazily.
 """
 import json
 import logging
@@ -29,10 +27,8 @@ def _vapid_claims() -> dict:
 
 
 def send(subscription, payload: dict) -> bool:
-    """Deliver one push message. Returns True on success.
-
-    A 404/410 means the subscription is dead — the caller should delete it
-    (signalled by returning False after logging).
+    """Deliver one push message; returns True on success.
+    A dead subscription (404/410) is pruned here.
     """
     if not is_enabled():
         return False

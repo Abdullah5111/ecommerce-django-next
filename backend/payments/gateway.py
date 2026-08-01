@@ -1,10 +1,7 @@
 """Payment gateway abstraction over Stripe.
 
-When ``STRIPE_SECRET_KEY`` is configured the real Stripe API is used. When it is
-absent — the default for local and demo runs — every call degrades to a
-deterministic *mock* mode so the full checkout flow still works end-to-end
-without keys. ``stripe`` is imported lazily so mock-mode code paths never need
-the SDK or network access.
+Without ``STRIPE_SECRET_KEY`` every call degrades to a deterministic mock mode
+so checkout works end-to-end keyless; ``stripe`` is imported lazily.
 """
 from decimal import Decimal
 

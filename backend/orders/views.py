@@ -35,11 +35,8 @@ class OrderViewSet(
 
     @action(detail=True, methods=["post"], url_path="create-payment-intent")
     def create_payment_intent(self, request, pk=None):
-        """Start (or resume) payment for a pending order.
-
-        Returns the Stripe client secret + publishable key for the frontend's
-        PaymentElement. In mock mode `mock` is true and the secret is a stub —
-        the frontend then confirms via the `pay` action instead of Stripe.js.
+        """Start (or resume) payment for a pending order — returns the Stripe
+        client secret + key. In mock mode `mock` is true and the secret is a stub.
         """
         order = self.get_object()
         if order.status != Order.Status.PENDING:

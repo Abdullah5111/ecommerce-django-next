@@ -45,10 +45,8 @@ class Coupon(models.Model):
         return self.code
 
     def is_product_eligible(self, product) -> bool:
-        """Whether a single product is in this coupon's scope.
-
-        Empty product+category scope means the whole catalog is eligible; a
-        category in scope also matches its descendants (by full_slug).
+        """Whether a product is in this coupon's scope.
+        Empty scope = whole catalog; a category also matches its descendants.
         """
         product_ids = set(self.products.values_list("id", flat=True))
         cats = list(self.categories.all())
@@ -69,10 +67,8 @@ class Coupon(models.Model):
     def validate_for(self, user, items, subtotal):
         """Return the first failing reason as a string, or None if valid.
 
-        The redemption-count checks below are only race-safe when the caller
-        holds a row lock on this coupon (``select_for_update``), as order
-        creation does — otherwise two concurrent checkouts could both pass a
-        ``max_redemptions`` gate before either records its redemption.
+        Redemption-count checks are only race-safe when the caller holds a row
+        lock (``select_for_update``), as order creation does.
         """
         now = timezone.now()
         if not self.is_active:

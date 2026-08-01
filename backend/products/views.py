@@ -24,8 +24,7 @@ from .throttling import ReviewVoteThrottle, ReviewWriteThrottle
 # Cap on photos per review — keeps a single upload from filling the disk.
 MAX_REVIEW_IMAGES = 5
 
-# Order statuses that count as a completed sale (an order that was paid and not
-# cancelled — cancellation restocks, so it must not count). Used for "X sold".
+# Statuses that count as a completed sale (cancellation restocks, so excluded).
 SOLD_STATUSES = ("paid", "shipped", "delivered", "partially_refunded", "refunded")
 
 
@@ -37,11 +36,7 @@ def _sold_annotation():
 
 
 def _has_purchased(user, product) -> bool:
-    """Whether `user` has a completed order containing `product`.
-
-    Reuses SOLD_STATUSES so "bought it" means the same thing here as it does
-    for the "X sold" badge.
-    """
+    """Whether `user` has a completed order containing `product` (per SOLD_STATUSES)."""
     return product.orderitem_set.filter(
         order__user=user, order__status__in=SOLD_STATUSES
     ).exists()
@@ -117,8 +112,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         qs = (
             Product.objects.filter(is_active=True)
             .select_related("category")
-            # Powers has_variants / price_from (and the detail variant list)
-            # without a query per product.
+            # Powers has_variants / price_from without a query per product.
             .prefetch_related("variants")
         )
         # Postgres full-text search path: only when on PG and ?search= is set.
@@ -156,22 +150,16 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         permission_classes=[permissions.AllowAny],
     )
     def suggest(self, request):
-        """Typeahead for the search box: a few lean matches, no heavy joins.
-
-        Deliberately does NOT use the Postgres full-text path `get_queryset`
-        takes — typeahead needs substring/prefix hits on partial words, and
-        this must also work on the sqlite test/dev fallback. `icontains`
-        gives both. Payload is kept minimal (no variants/images/reviews) and
-        capped, so it stays cheap on every keystroke.
+        """Typeahead: lean icontains matches, capped, no heavy joins.
+        Not the FTS path — typeahead needs partial-word hits and must work on sqlite.
         """
         q = (request.query_params.get("q") or "").strip()
         if len(q) < 2:
             return Response([])
         rows = (
             Product.objects.filter(is_active=True, name__icontains=q)
-            # Rank names that *start* with the query above mid-word matches, so
-            # typing "shoe" surfaces "Shoe Rack" before "Blue Shoe"; ties break
-            # alphabetically.
+            # Rank prefix matches above mid-word ("shoe" → "Shoe Rack" before
+            # "Blue Shoe"); ties break alphabetically.
             .annotate(
                 match_rank=Case(
                     When(name__istartswith=q, then=Value(0)),
@@ -237,12 +225,8 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         if not request.user.is_authenticated:
             return Response({"detail": "Authentication required."}, status=401)
 
-        # Validate the review fields and the photos together, then raise once,
-        # so a request that's wrong in both ways (bad rating *and* bad images)
-        # reports both at once instead of making the user fix them one per
-        # round-trip. Nothing is written until every upload is proven a real,
-        # allowed, size-capped image — a rejected photo must not leave a review
-        # behind.
+        # Validate review fields and photos together so both sets of errors
+        # surface at once. Nothing is written until every upload passes.
         ser = ReviewSerializer(data=request.data, context={"request": request})
         review_ok = ser.is_valid()
 
@@ -303,18 +287,13 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="recommended")
     def recommended(self, request):
-        """Content-based recommendations from the signed-in user's signals.
-
-        Affinity categories come from the user's purchases, wishlist, and cart;
-        we surface active products from those categories (excluding ones already
-        purchased), ranked featured-first then by rating. Guests and new users
-        with no signals fall back to top featured/rated products.
+        """Content-based recs from the user's purchase/wishlist/cart categories,
+        excluding already-purchased. Guests/new users fall back to top featured.
         """
         limit = 12
         user = request.user
         if user.is_authenticated:
-            # Local imports avoid a circular dependency (orders/cart/wishlist
-            # all import products at module load).
+            # Local imports avoid a circular dependency at module load.
             from cart.models import CartItem
             from orders.models import OrderItem
             from wishlist.models import WishlistItem
@@ -384,9 +363,8 @@ class ReviewViewSet(viewsets.GenericViewSet):
                 {"detail": "You cannot vote on your own review."}, status=400
             )
 
-        # helpful_count is maintained by the post_save/post_delete receivers on
-        # ReviewVote (products/signals.py), the same way Review drives the
-        # product's rating fields. Writing the vote row is the whole job here.
+        # helpful_count is maintained by the ReviewVote receivers (signals.py);
+        # writing the vote row is the whole job here.
         if request.method == "POST":
             ReviewVote.objects.get_or_create(review=review, user=request.user)
             voted = True

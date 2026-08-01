@@ -23,12 +23,8 @@ def review_deleted(sender, instance, **kwargs):
 
 
 def _recompute_helpful(review_id):
-    """Derive helpful_count from the vote rows themselves.
-
-    Counting the source of truth (rather than incrementing a counter) is what
-    keeps this correct when votes disappear without going through the vote
-    endpoint — deleting a user cascades their ReviewVote rows, and a
-    hand-maintained counter would stay inflated forever.
+    """Derive helpful_count from the vote rows themselves — counting the source
+    of truth stays correct when votes vanish outside the endpoint (e.g. user delete).
     """
     n = ReviewVote.objects.filter(review_id=review_id).count()
     Review.objects.filter(pk=review_id).update(helpful_count=n)
@@ -41,23 +37,16 @@ def review_vote_saved(sender, instance, **kwargs):
 
 @receiver(post_delete, sender=ReviewVote)
 def review_vote_deleted(sender, instance, **kwargs):
-    # Deleting a Review cascades its votes; the .update() simply matches no
-    # rows in that case, so the vanished review needs no special handling.
+    # Review delete cascades its votes; the .update() then matches no rows.
     _recompute_helpful(instance.review_id)
 
 
 @receiver(post_delete, sender=ReviewImage)
 def review_image_deleted(sender, instance, **kwargs):
-    """Drop the stored file when its row goes.
-
-    Deleting a Review cascades its ReviewImage rows, and without this the
-    files outlive them forever — on local disk that is clutter, but with
-    GS_BUCKET_NAME set it is unbounded paid storage nobody can reach.
-    Mirrors the explicit avatar.delete() in accounts/views.py.
+    """Drop the stored file when its row goes — otherwise cascade-deleted
+    ReviewImage files outlive their rows forever (unbounded on GCS).
     """
     if not instance.image:
         return
-    # save=False: the row is already gone, so there is nothing to write back.
-    # Storage backends ignore an already-missing file, so this is safe to
-    # re-run and safe if the file was cleaned up out of band.
+    # save=False: the row is already gone. Safe if the file is already missing.
     instance.image.delete(save=False)

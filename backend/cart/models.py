@@ -23,10 +23,8 @@ class CartItem(models.Model):
 
     class Meta:
         constraints = [
-            # NULLs compare distinct in Postgres, so a single unique across
-            # (cart, product, variant) would let a product without a variant
-            # be added twice. Split it: one line per product when there's no
-            # variant, one line per (product, variant) when there is.
+            # NULLs compare distinct in Postgres, so a single unique over
+            # (cart, product, variant) would let a no-variant product duplicate.
             models.UniqueConstraint(
                 fields=["cart", "product"],
                 condition=Q(variant__isnull=True),

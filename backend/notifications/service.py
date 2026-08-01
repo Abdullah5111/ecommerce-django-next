@@ -1,12 +1,8 @@
 """Central fan-out for user notifications.
 
-``notify()`` records an in-app Notification, emails the user, and pushes to any
-registered browsers. It is best-effort on the side channels: a failed email or
-push never breaks the calling order transition.
-
-Order transitions call ``notify_order()`` from ``transaction.on_commit`` so the
-notification (and its email/push) only fire once the status change is durably
-committed — never on a rolled-back transaction.
+``notify()`` records an in-app Notification, emails, and web-pushes — best-effort
+on the side channels, so a failed email/push never breaks the caller. Order
+transitions call ``notify_order()`` from ``on_commit`` (never on a rollback).
 """
 import logging
 

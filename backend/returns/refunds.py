@@ -8,16 +8,12 @@ def money(value) -> Decimal:
 
 
 def refund_for(return_request) -> Decimal:
-    """Proportional refund: the returned lines' net value plus their tax.
-
-    Each line refunds its value minus its share of the order discount, plus
-    the tax that was charged on that discounted amount — a customer who paid
-    tax on an item must get it back on return. Shipping is never refunded.
+    """Proportional refund: each returned line's value minus its share of the
+    order discount, plus the tax charged on that amount. Shipping never refunded.
     """
     order = return_request.order
     subtotal = order.subtotal
-    # Tax was charged on (subtotal - discount); tax per net dollar is the ratio
-    # that redistributes it back proportionally to each returned line.
+    # Tax per net dollar, to redistribute it proportionally to each returned line.
     discounted_subtotal = subtotal - order.discount_total
     tax_ratio = (
         order.tax_total / discounted_subtotal

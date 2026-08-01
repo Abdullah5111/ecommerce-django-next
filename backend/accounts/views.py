@@ -127,11 +127,10 @@ def _unique_username(base):
 
 
 def _get_or_link_google_user(claims):
-    """Find a user by email (linking an existing password account) or create one.
+    """Find a user by email (linking an existing account) or create one.
 
-    Google has verified the email, so we trust it: a returning password user with
-    the same email is logged in, and new users get an unusable password (they sign
-    in via Google, or set one through password reset).
+    Google verified the email, so a matching password user is logged in; new
+    users get an unusable password.
     """
     email = claims["email"]
     user = User.objects.filter(email__iexact=email).first()
@@ -269,10 +268,8 @@ def _otp_cooldown_key(user_id):
 
 
 class PhoneSendCodeView(APIView):
-    """Generate a one-time code for a phone number and 'send' it.
-
-    Mirrors the email-verification flow: in dev the code is written to the
-    server console (swap for a real SMS provider in production).
+    """Generate a one-time code and 'send' it.
+    In dev the code is printed to the console (swap for a real SMS provider).
     """
 
     permission_classes = [permissions.IsAuthenticated]

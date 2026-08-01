@@ -30,10 +30,8 @@ def log_event(order, actor, message, to_status=""):
 
 
 def _notify(order, key):
-    """Queue a user notification for after the transaction commits.
-
-    `key` is a short order-event name; deferring to on_commit guarantees we
-    never notify on a rolled-back transition.
+    """Queue a notification for after commit, so a rolled-back transition
+    never notifies. `key` is a short order-event name.
     """
     from notifications.models import Notification
     from notifications.service import notify_order
@@ -96,8 +94,7 @@ def cancel(order, actor=None):
     _check(order, Order.Status.CANCELLED)
     was_paid = order.status == Order.Status.PAID
     for item in order.items.all():
-        # Restock wherever the stock was taken from — the variant if the line
-        # had one, otherwise the product.
+        # Restock where the stock was taken from — variant if the line had one.
         if item.variant_id is not None:
             ProductVariant.objects.filter(pk=item.variant_id).update(
                 stock=F("stock") + item.quantity

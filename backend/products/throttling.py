@@ -3,10 +3,8 @@ from rest_framework.throttling import UserRateThrottle
 
 
 class WriteOnlyUserRateThrottle(UserRateThrottle):
-    """Throttles writes while leaving reads alone.
-
-    The reviews endpoint serves a public GET and an authenticated POST on the
-    same route, so a plain throttle would rate-limit ordinary review browsing.
+    """Throttles writes while leaving reads alone — the reviews route serves a
+    public GET and an authed POST, and browsing must not be rate-limited.
     """
 
     def allow_request(self, request, view):

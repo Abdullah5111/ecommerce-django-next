@@ -104,16 +104,13 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# Uploaded media (avatars, review photos). Local disk by default so the dev
-# path needs no setup; set GS_BUCKET_NAME to store them in Google Cloud Storage
-# instead. That is required on Cloud Run, whose filesystem is ephemeral and
-# per-instance — without a bucket, uploads vanish on redeploy and are invisible
-# to other instances.
+# Uploaded media (avatars, review photos). Local disk by default; set
+# GS_BUCKET_NAME to use Google Cloud Storage — required on Cloud Run, whose
+# filesystem is ephemeral and per-instance.
 GS_BUCKET_NAME = config("GS_BUCKET_NAME", default="")
 
-# NOTE: STORAGES and the legacy STATICFILES_STORAGE/DEFAULT_FILE_STORAGE
-# settings are mutually exclusive (Django raises ImproperlyConfigured), so
-# whitenoise is configured here rather than as STATICFILES_STORAGE.
+# STORAGES and the legacy STATICFILES_STORAGE settings are mutually exclusive
+# (Django raises ImproperlyConfigured), so whitenoise is configured here.
 STORAGES = {
     "default": {
         "BACKEND": (
@@ -155,9 +152,8 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 12,
-    # Applied per-view via throttle_classes, not globally. Throttle state lives
-    # in the cache, so with the default per-process LocMemCache these limits are
-    # per-instance — point CACHE_BACKEND at Redis to make them cluster-wide.
+    # Applied per-view via throttle_classes. State lives in the cache, so with
+    # the default LocMemCache limits are per-instance (use Redis for cluster-wide).
     "DEFAULT_THROTTLE_RATES": {
         "review-write": "10/hour",
         "review-vote": "60/hour",

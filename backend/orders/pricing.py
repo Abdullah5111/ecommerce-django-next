@@ -14,9 +14,7 @@ def money(value) -> Decimal:
 
 @dataclass
 class Line:
-    """One priced cart/order line. `variant` is optional; when set, its
-    effective price is what the line costs.
-    """
+    """One priced cart/order line; a set `variant` supplies the unit price."""
 
     product: object
     quantity: int
@@ -28,10 +26,7 @@ class Line:
 
 
 def _to_lines(items) -> list:
-    """Accept Line objects, 3-tuples (product, qty, variant) or legacy
-    2-tuples (product, qty). Keeps every existing caller working while letting
-    new ones pass a variant.
-    """
+    """Accept Line objects, 3-tuples (product, qty, variant) or 2-tuples (product, qty)."""
     lines = []
     for it in items:
         if isinstance(it, Line):
@@ -76,8 +71,7 @@ def _bogo_discount(coupon, eligible) -> Decimal:
 
 
 def _discount(coupon, lines, subtotal) -> Decimal:
-    # Eligibility is by product/category; pricing uses each line's own unit
-    # price, so a variant override discounts correctly.
+    # Eligibility is by product/category; pricing uses each line's own unit price.
     eligible = [line for line in lines if coupon.is_product_eligible(line.product)]
     if coupon.kind == Coupon.Kind.PERCENT:
         elig_subtotal = sum((l.unit_price * l.quantity for l in eligible), Decimal("0"))
@@ -97,10 +91,8 @@ def _shipping(subtotal, free_shipping) -> Decimal:
 
 
 def _tax(taxable) -> Decimal:
-    """Tax on the taxable base. TAX_RATE is a percent, so 8.25 → 8.25%.
-
-    Applied to merchandise after discount, not to shipping — the common
-    default, and it keeps the base independent of the shipping rules.
+    """Tax on the taxable base (TAX_RATE is a percent: 8.25 → 8.25%).
+    Applied to merchandise after discount, not shipping.
     """
     rate = settings.TAX_RATE
     if rate <= 0 or taxable <= 0:
@@ -110,9 +102,7 @@ def _tax(taxable) -> Decimal:
 
 def quote(items, coupon=None, user=None) -> PriceQuote:
     """Compute the authoritative price breakdown. Pure — no DB writes.
-
-    items: an iterable of Line, (product, quantity, variant) or (product,
-    quantity). Variant, when present, sets the line's unit price.
+    items: Line / (product, qty, variant) / (product, qty); variant sets unit price.
     """
     lines = _to_lines(items)
     subtotal = _subtotal(lines)
@@ -131,15 +121,13 @@ def quote(items, coupon=None, user=None) -> PriceQuote:
             free_shipping = coupon.kind == Coupon.Kind.FREE_SHIPPING
 
     shipping = _shipping(subtotal, free_shipping)
-    # Tax the discounted merchandise. Floor the base at 0 so an over-large
-    # discount can't produce negative tax.
+    # Floor the taxable base at 0 so an over-large discount can't make tax negative.
     taxable = subtotal - discount
     if taxable < 0:
         taxable = Decimal("0.00")
     tax = _tax(taxable)
     grand = subtotal - discount + tax + shipping
-    # Defensive floor: a misconfigured coupon (e.g. BOGO/percent value > 100)
-    # could discount more than the cart is worth. Never bill a negative total.
+    # Defensive floor: a misconfigured coupon must never bill a negative total.
     if grand < 0:
         grand = Decimal("0.00")
 

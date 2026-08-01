@@ -85,11 +85,8 @@ class Product(models.Model):
 class ProductVariant(models.Model):
     """An optional purchasable variation of a product (e.g. Size L / Blue).
 
-    Variants are additive: a product with none behaves exactly as before and
-    is bought directly. A product with variants sells through them — each
-    carries its own stock and an optional price override. The set of option
-    *types* (Size, Color, …) is derived from the variants themselves, so
-    adding a dimension needs no schema change.
+    Additive: a product with none is bought directly; one with variants sells
+    through them, each with its own stock and optional price override.
     """
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="variants")
@@ -148,17 +145,14 @@ class Review(models.Model):
         null=True,
         related_name="reviews",
     )
-    # Snapshot the reviewer display name at write time so the review survives
-    # account deletion / username change.
+    # Snapshot at write time so the review survives account deletion / rename.
     author_name = models.CharField(max_length=120, blank=True)
     rating = models.PositiveSmallIntegerField()  # 1-5
     title = models.CharField(max_length=200, blank=True)
     body = models.TextField(blank=True)
-    # Snapshot at write time: whether the reviewer had actually bought the
-    # product. Frozen on purpose — a later refund shouldn't retract the badge.
+    # Snapshot at write time; frozen — a later refund shouldn't retract the badge.
     verified_purchase = models.BooleanField(default=False)
-    # Denormalized count of ReviewVote rows, kept in sync by the vote endpoint
-    # so listing reviews never needs a per-row aggregate.
+    # Denormalized ReviewVote count so listing never needs a per-row aggregate.
     helpful_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 

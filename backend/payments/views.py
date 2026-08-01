@@ -12,11 +12,8 @@ from . import gateway
 
 @method_decorator(csrf_exempt, name="dispatch")
 class StripeWebhookView(APIView):
-    """Authoritative payment confirmation for live Stripe.
-
-    Stripe POSTs ``payment_intent.succeeded`` here once a card is charged; we
-    move the matching order to PAID. Signature-verified and idempotent — replays
-    are harmless because ``mark_paid`` only fires on a PENDING order.
+    """Authoritative payment confirmation for live Stripe — moves the matching
+    order to PAID on ``payment_intent.succeeded``. Verified and idempotent.
     """
 
     authentication_classes = []
