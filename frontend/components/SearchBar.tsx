@@ -15,8 +15,7 @@ export default function SearchBar() {
   const [suggestions, setSuggestions] = useState<ProductSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  // Index of the keyboard-highlighted row; -1 means none (Enter runs the
-  // full-text search instead of jumping to a product).
+  // Keyboard-highlighted row; -1 means none (Enter runs full-text search instead).
   const [active, setActive] = useState(-1);
 
   const debounced = useDebouncedValue(value.trim(), 200);
@@ -27,9 +26,8 @@ export default function SearchBar() {
       setLoading(false);
       return;
     }
-    // Guard against out-of-order responses: a slow request for "sho" must not
-    // overwrite a newer one for "shoes". `ignore` is flipped by cleanup when
-    // `debounced` changes before this request resolves.
+    // Guard against out-of-order responses: cleanup flips `ignore` so a slow
+    // request can't overwrite a newer one's results.
     let ignore = false;
     setLoading(true);
     setOpen(true);
@@ -51,7 +49,6 @@ export default function SearchBar() {
     };
   }, [debounced]);
 
-  // Close the dropdown when focus/click leaves the search box.
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       if (boxRef.current && !boxRef.current.contains(e.target as Node)) {

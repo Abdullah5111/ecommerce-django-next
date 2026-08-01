@@ -97,8 +97,7 @@ export default function ReviewsSection({
       </div>
 
       {reviews.length > 0 ? (
-        // The list itself stays server-rendered (SEO); the provider resolves
-        // only the per-viewer bits the server can't know, in one request.
+        // List stays server-rendered (SEO); the provider resolves the per-viewer bits in one request.
         <ReviewViewerState slug={slug}>
           <ul className="mt-8 space-y-6">
             {reviews.map((r) => (

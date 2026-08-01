@@ -25,8 +25,7 @@ export default function ProductCard({ product }: { product: Product }) {
   const saved = has(product.id);
   const hasSold = typeof product.sold_count === "number" && product.sold_count > 0;
 
-  // One corner flag, by priority: deal > new > featured. The price block already
-  // carries the strikethrough, so the flag stays the single loud signal.
+  // One corner flag, by priority: deal > new > featured (strikethrough already lives in the price block).
   const isNew =
     product.created_at &&
     Date.now() - new Date(product.created_at).getTime() < 14 * 24 * 60 * 60 * 1000;
@@ -118,8 +117,7 @@ export default function ProductCard({ product }: { product: Product }) {
               Out of stock
             </span>
           ) : product.has_variants ? (
-            // Can't quick-add without picking a variant; the card link takes
-            // the shopper to the product page to choose.
+            // Can't quick-add without a variant; the card link goes to the product page to choose.
             <span className="bg-white/95 text-ink text-xs font-medium px-3 py-1.5 rounded-full shadow-md">
               Options
             </span>

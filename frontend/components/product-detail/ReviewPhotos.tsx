@@ -29,8 +29,7 @@ export default function ReviewPhotos({ images }: { images: ReviewImage[] }) {
               className="block h-16 w-16 overflow-hidden rounded border hover:opacity-90"
               aria-label={`Open reviewer photo ${i + 1}`}
             >
-              {/* Plain <img>: these are served from the API host, which isn't in
-                  next.config remotePatterns — next/image would reject them. */}
+              {/* Plain <img>: API host isn't in next.config remotePatterns, so next/image rejects it. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={img.image}

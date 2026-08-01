@@ -18,8 +18,7 @@ export default function StickyCta({ product }: { product: Product }) {
   const inc = () => setQty((q) => Math.min(maxQty, q + 1));
 
   const handleAdd = () => {
-    // Variant products can't be added from the compact bar — send the shopper
-    // up to the buy box to pick an option.
+    // Variant products can't be added from the compact bar — scroll up to the buy box.
     if (hasVariants) {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;

@@ -4,11 +4,7 @@ import { useMemo, useState } from "react";
 import type { ProductVariant } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
-/**
- * Renders one picker per option type (Size, Color, …) derived from the
- * variants, and reports the variant matching the full selection — or null
- * while the choice is incomplete or unmatched.
- */
+/** One picker per option type; reports the matching variant, or null if the choice is incomplete/unmatched. */
 export default function VariantSelector({
   variants,
   selected,
@@ -48,8 +44,7 @@ export default function VariantSelector({
     onSelect(resolve(next));
   };
 
-  // Is a given value still selectable given the *other* current choices, and
-  // does the resulting variant have stock? Used to grey out dead ends.
+  // Is this value still selectable given the other choices, and in stock? Greys out dead ends.
   const valueState = (name: string, value: string) => {
     const hypothetical = { ...choice, [name]: value };
     const match = variants.find((v) =>

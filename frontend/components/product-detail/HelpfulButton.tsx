@@ -24,13 +24,12 @@ export default function HelpfulButton({
   const [touched, setTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Whether this is my own review is only knowable once the authenticated
-  // lookup lands — the server-rendered payload always says "not mine".
+  // Only knowable once the authenticated lookup lands — SSR payload always says "not mine".
   const isOwnReview = viewer.mineIds.has(reviewId);
 
   useEffect(() => {
-    // Adopt the real vote state when it arrives, unless the viewer has already
-    // clicked (their optimistic state is newer than the in-flight lookup).
+    // Adopt the real vote state when it arrives, unless the viewer already clicked
+    // (their optimistic state is newer than the in-flight lookup).
     if (!viewer.pending && !touched) {
       setVoted(viewer.votedIds.has(reviewId));
     }
@@ -70,8 +69,8 @@ export default function HelpfulButton({
     }
   };
 
-  // Stay disabled until the lookup settles: until then we can't rule out that
-  // this is the viewer's own review, and clicking would 400.
+  // Stay disabled until the lookup settles: this could be the viewer's own review,
+  // where clicking would 400.
   const disabled = submitting || viewer.pending;
 
   return (

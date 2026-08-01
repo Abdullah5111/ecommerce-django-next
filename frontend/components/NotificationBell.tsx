@@ -15,7 +15,6 @@ export default function NotificationBell() {
   const [items, setItems] = useState<AppNotification[] | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Poll the unread count while logged in.
   useEffect(() => {
     if (!user) {
       setUnread(0);
@@ -40,7 +39,6 @@ export default function NotificationBell() {
     };
   }, [user]);
 
-  // Close the dropdown on outside click.
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {

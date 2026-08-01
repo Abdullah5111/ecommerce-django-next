@@ -25,7 +25,6 @@ export default function CheckoutPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
 
-  // guest fallback
   const [guestAddress, setGuestAddress] = useState("");
 
   const [error, setError] = useState<string | null>(null);
@@ -118,14 +117,12 @@ export default function CheckoutPage() {
     if (authed && items.length > 0) {
       refreshQuote(appliedCode ?? undefined);
     }
-    // Re-quote only when auth resolves or the cart size changes. appliedCode is
-    // intentionally excluded — applyPromo/removePromo already re-quote on change,
-    // and adding it here would fire a duplicate request right after applying a code.
+    // Re-quote on auth/cart-size change only; appliedCode is excluded because
+    // applyPromo/removePromo already re-quote, so including it would double-request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed, items.length]);
 
-  // Confirm a paid order on the backend, then finish up. In live Stripe mode
-  // this runs after the card is confirmed; in mock mode it runs immediately.
+  // Confirm a paid order on the backend (after card confirm in live mode, immediately in mock).
   const finalizeOrder = async (orderId: number) => {
     const token = auth.get();
     if (!token) return;
@@ -135,8 +132,7 @@ export default function CheckoutPage() {
     router.push("/");
   };
 
-  // Kick off payment for a freshly-created order. Mock mode confirms straight
-  // away; live mode surfaces the Stripe PaymentElement.
+  // Kick off payment for a new order: mock confirms immediately, live surfaces the PaymentElement.
   const startPayment = async (token: string, orderId: number) => {
     const intent = await api.createPaymentIntent(token, orderId);
     if (intent.mock || !intent.publishable_key) {
@@ -155,7 +151,6 @@ export default function CheckoutPage() {
     const token = auth.get();
 
     if (!token) {
-      // guest path
       if (!guestAddress.trim()) {
         setError("Please enter a shipping address");
         return;

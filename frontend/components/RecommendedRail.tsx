@@ -5,11 +5,7 @@ import { api, type Product } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import RailCard from "./RailCard";
 
-/**
- * Personalized "Recommended for you" rail. Only shown to logged-in users —
- * guests already see the Featured rail, and recommendations are derived from
- * the user's own purchases / wishlist / cart server-side.
- */
+/** Personalized "Recommended for you" rail; logged-in users only (guests see Featured). */
 export default function RecommendedRail() {
   const [items, setItems] = useState<Product[]>([]);
 

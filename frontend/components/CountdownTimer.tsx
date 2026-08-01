@@ -4,10 +4,7 @@ import { useEffect, useState } from "react";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/**
- * Counts down to the next local midnight. Computed entirely on the client (in an
- * effect) so it's always fresh and never causes an SSR/CSR hydration mismatch.
- */
+/** Counts down to the next local midnight. Client-only to avoid an SSR/CSR hydration mismatch. */
 export default function CountdownTimer() {
   const [parts, setParts] = useState<string[] | null>(null);
 

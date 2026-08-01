@@ -6,9 +6,7 @@ import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { useToast } from "@/lib/useToast";
 
-// These mirror the server's limits (MAX_REVIEW_IMAGES / MAX_REVIEW_IMAGE_BYTES
-// / ALLOWED_REVIEW_IMAGE_EXTENSIONS). Checking here only saves the user a
-// failed upload — the server is still the one that enforces them.
+// Mirror the server's limits; checking here only saves a failed upload — the server enforces them.
 const MAX_PHOTOS = 5;
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_TYPES = "image/jpeg,image/png,image/webp,image/gif";
@@ -58,8 +56,8 @@ export default function WriteReviewForm({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Build preview URLs once per file set and revoke them on change/unmount —
-  // creating them inline during render would leak an object URL every render.
+  // Build preview URLs once per file set and revoke on change/unmount; inline during
+  // render would leak an object URL every render.
   const previews = useMemo(() => photos.map((f) => URL.createObjectURL(f)), [photos]);
   useEffect(() => {
     return () => previews.forEach((url) => URL.revokeObjectURL(url));

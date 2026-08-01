@@ -12,11 +12,7 @@ function fmt(v: Money): string {
   return `$${Number(v).toFixed(2)}`;
 }
 
-/**
- * The store's price treatment — the one place that renders a current price with
- * an optional struck-through compare-at and a %-off flag. On sale the current
- * price uses the deal accent to pull the eye; otherwise it's plain ink.
- */
+/** Current price with optional struck-through compare-at and %-off flag; deal accent when on sale. */
 export default function Price({
   price,
   compareAt,

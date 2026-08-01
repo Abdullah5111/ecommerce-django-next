@@ -6,11 +6,7 @@ import { auth } from "@/lib/auth";
 import { useToast } from "@/lib/useToast";
 import { isSubscribed, pushSupported, subscribe, unsubscribe } from "@/lib/push";
 
-/**
- * Browser-push opt-in. Renders nothing unless the server has push enabled
- * (VAPID keys set) and the browser supports the Web Push stack — so it stays
- * invisible in the keyless demo configuration.
- */
+/** Browser-push opt-in; renders nothing unless the server has push enabled and the browser supports it. */
 export default function PushToggle() {
   const { toast } = useToast();
   const [available, setAvailable] = useState(false);

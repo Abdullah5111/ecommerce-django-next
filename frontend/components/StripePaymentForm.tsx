@@ -10,10 +10,8 @@ import {
 } from "@stripe/react-stripe-js";
 
 /**
- * Real-Stripe card form. Rendered only when the backend returns a live
- * PaymentIntent (keys configured). Confirms the payment with Stripe.js using
- * `redirect: "if_required"` so card payments resolve inline without a redirect,
- * then hands control back to checkout via `onPaid`.
+ * Real-Stripe card form; rendered only for a live PaymentIntent. Confirms with
+ * `redirect: "if_required"` so cards resolve inline, then calls `onPaid`.
  */
 function CardForm({
   onPaid,
@@ -40,8 +38,7 @@ function CardForm({
       setBusy(false);
       return;
     }
-    // Charge succeeded — let checkout finalize the order (backend verifies the
-    // intent; the webhook is the authoritative backstop).
+    // Charge succeeded — let checkout finalize (backend verifies the intent; webhook is the backstop).
     await onPaid();
     setBusy(false);
   };

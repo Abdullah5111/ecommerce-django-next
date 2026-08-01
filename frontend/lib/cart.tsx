@@ -23,8 +23,7 @@ type CartContextValue = {
 const CartContext = createContext<CartContextValue | null>(null);
 const KEY = "shop_cart";
 
-// A cart line is identified by its product *and* variant, so the same product
-// under two variants is two lines.
+// A cart line is keyed by product *and* variant, so one product under two variants is two lines.
 function lineKey(productId: number, variantId: number | null | undefined): string {
   return `${productId}:${variantId ?? ""}`;
 }
@@ -53,8 +52,7 @@ function fromCart(cart: Cart): CartItem[] {
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [items, setItems] = useState<CartItem[]>([]);
-  // Which auth identity the current `items` were loaded for — guards the
-  // login-merge from re-running on every auth refresh.
+  // Auth identity the current `items` were loaded for; guards the login-merge from re-running.
   const syncedFor = useRef<number | "guest" | null>(null);
 
   // Persist to localStorage only while a guest; logged-in carts live on the server.
@@ -62,8 +60,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     if (!user) window.localStorage.setItem(KEY, JSON.stringify(items));
   }, [items, user]);
 
-  // Load on mount and whenever auth state changes. On the guest→login transition,
-  // merge the local cart into the server (summing quantities) then drop localStorage.
+  // Load on auth change; on the guest→login transition, merge the local cart into the
+  // server (summing quantities) then drop localStorage.
   useEffect(() => {
     let cancelled = false;
     (async () => {

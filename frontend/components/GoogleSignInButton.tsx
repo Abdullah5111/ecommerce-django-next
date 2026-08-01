@@ -44,9 +44,8 @@ function loadGis(): Promise<void> {
 }
 
 /**
- * Google Identity Services sign-in. Renders nothing unless the backend reports
- * Google sign-in is configured (so the keyless demo just shows nothing). On a
- * successful credential it exchanges the Google ID token for our JWT pair.
+ * Google Identity Services sign-in; renders nothing unless the backend reports it's
+ * configured. Exchanges the Google ID token for our JWT pair on success.
  */
 export default function GoogleSignInButton({ next = "/" }: { next?: string }) {
   const { refresh } = useAuth();

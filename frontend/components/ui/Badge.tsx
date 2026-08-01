@@ -2,8 +2,7 @@ import { cn } from "@/lib/cn";
 
 export type BadgeTone = "brand" | "deal" | "success" | "warning" | "danger" | "neutral";
 
-// Soft (tinted bg + colored text) is the default; `solid` fills for emphasis
-// like a %-off flag.
+// Soft (tinted bg + colored text) is the default; `solid` fills for emphasis like a %-off flag.
 const soft: Record<BadgeTone, string> = {
   brand: "bg-brand-light text-brand",
   deal: "bg-deal-light text-deal-dark",

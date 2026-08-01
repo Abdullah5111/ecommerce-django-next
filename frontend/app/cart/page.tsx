@@ -14,16 +14,14 @@ export default function CartPage() {
   const { items: saved, has, toggle } = useWishlist();
   const router = useRouter();
 
-  // "Save for later" reuses the wishlist as its store: move the line into the
-  // wishlist (if not already there) and drop it from the cart. The wishlist is
-  // product-level, so the specific variant line is what gets removed.
+  // "Save for later" moves the line into the wishlist; wishlist is product-level,
+  // so the specific variant line is what gets removed from the cart.
   const saveForLater = (product: Product, variantId: number | null) => {
     if (!has(product.id)) toggle(product);
     remove(product.id, variantId);
   };
 
-  // "Move to cart" is the reverse. A variant product can't be re-added blindly
-  // (no variant is stored on the wishlist), so send the shopper to choose.
+  // "Move to cart": a variant product has no stored variant, so send the shopper to choose.
   const moveToCart = (product: Product) => {
     if (product.has_variants) {
       router.push(`/products/${product.slug}`);

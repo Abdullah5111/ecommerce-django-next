@@ -9,8 +9,7 @@ export default function RecentlyViewedRail({ product }: { product: Product }) {
   const [items, setItems] = useState<Product[]>([]);
 
   useEffect(() => {
-    // Read existing recents (excluding current) BEFORE pushing the current product,
-    // so the current product never appears in its own "recently viewed" rail.
+    // Read recents BEFORE pushing the current product, so it never appears in its own rail.
     setItems(getRecent(product.id));
     pushRecent(product);
   }, [product]);

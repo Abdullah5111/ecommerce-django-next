@@ -79,8 +79,7 @@ export type Product = {
   specifications?: Record<string, string>;
 };
 
-// Lean shape returned by /products/suggest/ — just enough to render a
-// typeahead row. Not a full Product (no variants/images/reviews).
+// Lean shape from /products/suggest/ — just a typeahead row, not a full Product.
 export type ProductSuggestion = {
   id: number;
   name: string;
@@ -367,13 +366,11 @@ export const api = {
     return request<Paginated<Product>>(`/products/${suffix ? `?${suffix}` : ""}`);
   },
   getProduct: (slug: string) => request<Product>(`/products/${slug}/`),
-  // Typeahead for the search box. Returns a bare array (not paginated),
-  // capped server-side; the backend returns [] for queries under 2 chars.
+  // Typeahead for the search box; bare array (not paginated), [] for queries under 2 chars.
   suggest: (q: string) =>
     request<ProductSuggestion[]>(`/products/suggest/?q=${encodeURIComponent(q)}`),
-  // `token` is optional because the product page lists reviews from a server
-  // component, where there is no token. Pass it from the client to resolve the
-  // per-viewer fields (helpful_by_me, is_mine), which are false without auth.
+  // `token` is optional: the server component has none; pass it from the client to
+  // resolve per-viewer fields (helpful_by_me, is_mine), which are false without auth.
   listReviews: (
     slug: string,
     page?: number,
@@ -402,8 +399,7 @@ export const api = {
         body: JSON.stringify(fields),
       });
     }
-    // Photos force multipart, which means bypassing the JSON `request` helper
-    // so the browser can set the boundary itself (same as uploadAvatar).
+    // Photos force multipart: bypass the JSON `request` helper so the browser sets the boundary.
     const fd = new FormData();
     fd.append("rating", String(fields.rating));
     if (fields.title) fd.append("title", fields.title);
@@ -658,8 +654,7 @@ export const api = {
   uploadAvatar: async (token: string, file: File): Promise<Me> => {
     const fd = new FormData();
     fd.append("avatar", file);
-    // Multipart: let the browser set Content-Type (with boundary), so this
-    // bypasses the JSON `request` helper.
+    // Multipart: bypass the JSON `request` helper so the browser sets Content-Type + boundary.
     const res = await fetch(`${API_URL}/auth/me/avatar/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },

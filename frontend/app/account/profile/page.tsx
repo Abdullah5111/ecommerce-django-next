@@ -33,7 +33,6 @@ export default function ProfilePage() {
   });
   const [saving, setSaving] = useState(false);
 
-  // phone verification
   const [phoneInput, setPhoneInput] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [code, setCode] = useState("");
@@ -150,7 +149,6 @@ export default function ProfilePage() {
     <div>
       <h1 className="text-2xl font-bold mb-6">Login &amp; profile</h1>
 
-      {/* Avatar */}
       <section className="flex items-center gap-4 mb-8">
         <Avatar src={me.avatar} name={displayName} size={72} />
         <div className="flex flex-col gap-2">
@@ -183,7 +181,6 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      {/* Profile fields */}
       <form onSubmit={saveProfile} className="space-y-4 mb-10">
         <div className="grid grid-cols-2 gap-3">
           <Field label="First name">
@@ -250,7 +247,6 @@ export default function ProfilePage() {
         </button>
       </form>
 
-      {/* Phone verification */}
       <section className="border-t pt-6">
         <h2 className="text-lg font-semibold mb-1">Phone number</h2>
         <p className="text-sm text-zinc-500 mb-3">

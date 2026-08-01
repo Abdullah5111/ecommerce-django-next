@@ -33,8 +33,7 @@ export default function PurchasePanel({ product }: { product: Product }) {
   const { has, toggle } = useWishlist();
   const router = useRouter();
 
-  // Compute the delivery estimate on the client only, to avoid an SSR/CSR
-  // hydration mismatch around the date boundary.
+  // Client-only delivery estimate, to avoid an SSR/CSR hydration mismatch at the date boundary.
   useEffect(() => {
     const d = new Date();
     d.setDate(d.getDate() + 4);
@@ -92,7 +91,6 @@ export default function PurchasePanel({ product }: { product: Product }) {
         )}
       </div>
 
-      {/* Buy box */}
       <div className="mt-4 rounded-card border border-zinc-200 bg-white shadow-card p-5">
         <Price
           price={displayPrice}

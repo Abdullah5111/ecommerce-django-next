@@ -1,7 +1,4 @@
-/**
- * Localized "medium date, short time" — e.g. "Jul 29, 2026, 3:04 PM".
- * Accepts null (renders ""), so order timelines can pass optional timestamps.
- */
+/** Localized "medium date, short time" — e.g. "Jul 29, 2026, 3:04 PM". Null renders "". */
 export function formatDateTime(iso: string | null): string {
   return iso
     ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })

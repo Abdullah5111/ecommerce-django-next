@@ -33,7 +33,6 @@ function ResetPasswordForm() {
       setSuccess(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Reset failed";
-      // try to extract a cleaner detail from the API error string
       const match = msg.match(/API \d+: (.+)$/);
       if (match) {
         try {
