@@ -284,6 +284,35 @@ class RecommendedTests(APITestCase):
         self.assertGreaterEqual(len(res.data), 1)  # no signals → fallback list
 
 
+class RecommendedCancelledOrderTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="ru", email="ru@example.com", password="pw-123456"
+        )
+        self.cat = Category.objects.create(name="Books")
+        self.p = Product.objects.create(
+            name="P Book", price=Decimal("10"), stock=5, category=self.cat
+        )
+        self.q = Product.objects.create(
+            name="Q Book", price=Decimal("10"), stock=5, category=self.cat
+        )
+        # Wishlist gives recs a category signal without counting as a purchase.
+        WishlistItem.objects.create(user=self.user, product=self.q)
+
+    def test_cancelled_purchase_not_treated_as_owned(self):
+        order = Order.objects.create(
+            user=self.user, shipping_address="x", status=Order.Status.CANCELLED
+        )
+        OrderItem.objects.create(
+            order=order, product=self.p, quantity=1, unit_price=self.p.price
+        )
+        self.client.force_authenticate(self.user)
+        res = self.client.get("/api/products/recommended/")
+        self.assertEqual(res.status_code, 200)
+        ids = {p["id"] for p in res.data}
+        self.assertIn(self.p.id, ids)
+
+
 class VerifiedPurchaseTests(APITestCase):
     def setUp(self):
         # Throttle history lives in the cache, which TestCase does not roll

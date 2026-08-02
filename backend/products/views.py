@@ -305,8 +305,12 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             from orders.models import OrderItem
             from wishlist.models import WishlistItem
 
+            # Only real purchases count as "owned" — a product in a cancelled or
+            # still-pending order must not be excluded from recommendations.
             owned_ids = set(
-                OrderItem.objects.filter(order__user=user).values_list("product_id", flat=True)
+                OrderItem.objects.filter(
+                    order__user=user, order__status__in=SOLD_STATUSES
+                ).values_list("product_id", flat=True)
             )
             cat_ids = set(
                 Product.objects.filter(pk__in=owned_ids).values_list("category_id", flat=True)
