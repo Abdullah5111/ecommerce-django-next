@@ -11,7 +11,6 @@ from rest_framework.response import Response
 from .models import Category, Product, Review, ReviewImage, ReviewVote
 from .serializers import (
     CategorySerializer,
-    CategoryTreeSerializer,
     CategoryDetailSerializer,
     ProductSerializer,
     ProductDetailSerializer,
@@ -42,9 +41,31 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="tree")
     def tree(self, request):
-        roots = Category.objects.filter(parent__isnull=True)
-        serializer = CategoryTreeSerializer(roots, many=True)
-        return Response(serializer.data)
+        # Build the whole nested tree from a single query (was one query per
+        # node via a recursive serializer), then cache it.
+        cache_key = "categories:tree:v1"
+        data = cache.get(cache_key)
+        if data is None:
+            cats = Category.objects.order_by("name").values(
+                "id", "name", "slug", "full_slug", "level", "parent_id"
+            )
+            children_by_parent = {}
+            for c in cats:
+                children_by_parent.setdefault(c["parent_id"], []).append(c)
+
+            def build(node):
+                return {
+                    "id": node["id"],
+                    "name": node["name"],
+                    "slug": node["slug"],
+                    "full_slug": node["full_slug"],
+                    "level": node["level"],
+                    "children": [build(ch) for ch in children_by_parent.get(node["id"], [])],
+                }
+
+            data = [build(root) for root in children_by_parent.get(None, [])]
+            cache.set(cache_key, data, timeout=300)
+        return Response(data)
 
     @action(detail=False, methods=["get"], url_path="by-path")
     def by_path(self, request):

@@ -172,6 +172,27 @@ class CategorySlugCascadeTests(APITestCase):
         self.assertEqual(b.level, 1)
 
 
+class CategoryTreeTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.a = Category.objects.create(name="Apparel")
+        self.men = Category.objects.create(name="Men", parent=self.a)
+        self.shirts = Category.objects.create(name="Shirts", parent=self.men)
+        self.b = Category.objects.create(name="Books")
+
+    def test_tree_is_nested(self):
+        res = self.client.get("/api/categories/tree/")
+        self.assertEqual(res.status_code, 200)
+        roots = {c["name"]: c for c in res.data}
+        self.assertEqual(set(roots), {"Apparel", "Books"})
+        apparel = roots["Apparel"]
+        self.assertEqual([c["name"] for c in apparel["children"]], ["Men"])
+        self.assertEqual(
+            [c["name"] for c in apparel["children"][0]["children"]], ["Shirts"]
+        )
+        self.assertEqual(roots["Books"]["children"], [])
+
+
 class FeaturedSortTests(APITestCase):
     def setUp(self):
         self.cat = Category.objects.create(name="Gear")
