@@ -89,7 +89,7 @@ export default async function HomePage({
 
       {browse && <DealsRail products={deals} />}
 
-      <RecommendedRail />
+      {browse && <RecommendedRail />}
 
       {browse && featured.length > 0 && (
         <section className="mb-8">
