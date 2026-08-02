@@ -4,6 +4,9 @@ import ProductCard from "@/components/ProductCard";
 import RailCard from "@/components/RailCard";
 import RecommendedRail from "@/components/RecommendedRail";
 import SearchBar from "@/components/SearchBar";
+import CategoryFilters from "@/components/CategoryFilters";
+import SortDropdown from "@/components/SortDropdown";
+import ActiveFilters from "@/components/ActiveFilters";
 import Pagination from "@/components/Pagination";
 import Hero from "@/components/home/Hero";
 import CategoryTiles from "@/components/home/CategoryTiles";
@@ -21,10 +24,22 @@ function buildHomeHref(params: { search?: string }) {
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: { search?: string; category?: string; page?: string };
+  searchParams: {
+    search?: string;
+    category?: string;
+    page?: string;
+    ordering?: string;
+    priceMin?: string;
+    priceMax?: string;
+    inStock?: string;
+  };
 }) {
   const query = searchParams.search?.trim() || "";
   const category = searchParams.category?.trim() || "";
+  const ordering = searchParams.ordering?.trim() || "";
+  const priceMin = searchParams.priceMin?.trim() || "";
+  const priceMax = searchParams.priceMax?.trim() || "";
+  const inStock = searchParams.inStock === "true";
   const pageNum = Math.max(1, parseInt(searchParams.page || "1", 10) || 1);
   // The featured/deals rails only appear on the plain browse view, so skip
   // fetching them entirely when searching, filtering by category, or paginating.
@@ -40,6 +55,10 @@ export default async function HomePage({
       api.listProducts({
         search: query || undefined,
         category: category || undefined,
+        ordering: ordering || undefined,
+        price_min: priceMin || undefined,
+        price_max: priceMax || undefined,
+        in_stock: inStock || undefined,
         page: pageNum,
       }),
       api.listCategories(),
@@ -75,6 +94,39 @@ export default async function HomePage({
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const topCategories = categories.filter((c) => c.level === 0);
+
+  const paginationParams = {
+    search: query || undefined,
+    category: category || undefined,
+    ordering: ordering || undefined,
+    priceMin: priceMin || undefined,
+    priceMax: priceMax || undefined,
+    inStock: inStock ? "true" : undefined,
+  };
+
+  // The filter sidebar narrows the grid on search views, so it drops to 3 cols;
+  // the plain browse landing (no sidebar) keeps 4.
+  const results =
+    products.length === 0 ? (
+      <p className="text-zinc-500 py-12 text-center">
+        No products found{query ? ` for “${query}”` : ""}
+        {activeCategory ? ` in ${activeCategory.name}` : ""}.
+      </p>
+    ) : (
+      <>
+        <div className={`grid grid-cols-2 ${browse ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-4`}>
+          {products.map((p) => (
+            <ProductCard key={p.id} product={p} />
+          ))}
+        </div>
+        <Pagination
+          currentPage={pageNum}
+          totalPages={totalPages}
+          pathname="/"
+          searchParams={paginationParams}
+        />
+      </>
+    );
 
   return (
     <div>
@@ -124,28 +176,30 @@ export default async function HomePage({
         ))}
       </div>
 
-      {products.length === 0 ? (
-        <p className="text-zinc-500 py-12 text-center">
-          No products found{query ? ` for “${query}”` : ""}
-          {activeCategory ? ` in ${activeCategory.name}` : ""}.
-        </p>
+      {browse ? (
+        results
       ) : (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {products.map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
+        <div className="flex flex-col md:flex-row gap-6">
+          <div className="md:w-64 shrink-0 md:sticky md:top-4 md:self-start">
+            <CategoryFilters />
           </div>
-          <Pagination
-            currentPage={pageNum}
-            totalPages={totalPages}
-            pathname="/"
-            searchParams={{
-              search: query || undefined,
-              category: category || undefined,
-            }}
-          />
-        </>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <ActiveFilters
+                pathname="/"
+                search={query || undefined}
+                ordering={ordering || undefined}
+                priceMin={priceMin || undefined}
+                priceMax={priceMax || undefined}
+                inStock={inStock ? "true" : undefined}
+              />
+              <div className="ml-auto">
+                <SortDropdown />
+              </div>
+            </div>
+            {results}
+          </div>
+        </div>
       )}
     </div>
   );
