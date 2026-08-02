@@ -144,6 +144,34 @@ class SearchSuggestTests(APITestCase):
         self.assertEqual(len(res.data), 8)
 
 
+class CategorySlugCascadeTests(APITestCase):
+    def test_rename_cascades_full_slug_to_descendants(self):
+        a = Category.objects.create(name="Alpha")
+        b = Category.objects.create(name="Beta", parent=a)
+        c = Category.objects.create(name="Gamma", parent=b)
+        self.assertEqual(c.full_slug, "alpha/beta/gamma")
+
+        a.slug = "alpha2"
+        a.save()
+        b.refresh_from_db()
+        c.refresh_from_db()
+        self.assertEqual(b.full_slug, "alpha2/beta")
+        self.assertEqual(c.full_slug, "alpha2/beta/gamma")
+        self.assertEqual(c.level, 2)
+
+    def test_reparent_updates_slug_and_level(self):
+        a = Category.objects.create(name="A")
+        x = Category.objects.create(name="X")
+        b = Category.objects.create(name="B", parent=a)
+        self.assertEqual(b.full_slug, "a/b")
+
+        b.parent = x
+        b.save()
+        b.refresh_from_db()
+        self.assertEqual(b.full_slug, "x/b")
+        self.assertEqual(b.level, 1)
+
+
 class FeaturedSortTests(APITestCase):
     def setUp(self):
         self.cat = Category.objects.create(name="Gear")

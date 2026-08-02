@@ -30,7 +30,17 @@ class Category(models.Model):
         else:
             self.full_slug = self.slug
             self.level = 0
+        # Detect whether this node's derived path changed, so a rename/reparent
+        # can cascade to descendants (whose full_slug/level derive from it).
+        prev = (
+            type(self).objects.filter(pk=self.pk).values("full_slug", "level").first()
+            if self.pk
+            else None
+        )
         super().save(*args, **kwargs)
+        if prev and (prev["full_slug"] != self.full_slug or prev["level"] != self.level):
+            for child in self.children.all():
+                child.save()
 
     def __str__(self):
         return self.name
