@@ -1,8 +1,7 @@
 import django_filters
 from django.core.cache import cache
 from django.db import IntegrityError, connection, transaction
-from django.db.models import Case, Exists, IntegerField, OuterRef, Q, Sum, Value, When
-from django.db.models.functions import Coalesce
+from django.db.models import Case, Exists, IntegerField, OuterRef, Q, Value, When
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -26,13 +25,6 @@ MAX_REVIEW_IMAGES = 5
 
 # Statuses that count as a completed sale (cancellation restocks, so excluded).
 SOLD_STATUSES = ("paid", "shipped", "delivered", "partially_refunded", "refunded")
-
-
-def _sold_annotation():
-    return Coalesce(
-        Sum("orderitem__quantity", filter=Q(orderitem__order__status__in=SOLD_STATUSES)),
-        0,
-    )
 
 
 def _has_purchased(user, product) -> bool:
@@ -138,7 +130,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
                 )
             else:
                 qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q))
-        return qs.annotate(sold_count=_sold_annotation())
+        return qs
 
     @action(detail=False, methods=["get"], url_path="featured")
     def featured(self, request):

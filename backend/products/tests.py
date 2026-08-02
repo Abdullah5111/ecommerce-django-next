@@ -225,6 +225,38 @@ class SearchTests(APITestCase):
         self.assertEqual(self._names("nonexistentxyz"), set())
 
 
+class SoldCountDenormTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(
+            name="Gizmo", price=Decimal("10"), stock=100, category=self.cat
+        )
+        self.user = User.objects.create_user(
+            username="sc", email="sc@example.com", password="pw-123456"
+        )
+
+    def test_denormalized_field_tracks_status_changes(self):
+        order = Order.objects.create(
+            user=self.user, shipping_address="x", status=Order.Status.PENDING
+        )
+        OrderItem.objects.create(
+            order=order, product=self.p, quantity=3, unit_price=self.p.price
+        )
+        self.p.refresh_from_db()
+        self.assertEqual(self.p.sold_count, 0)  # pending doesn't count
+
+        order.status = Order.Status.PAID
+        order.save()
+        self.p.refresh_from_db()
+        self.assertEqual(self.p.sold_count, 3)  # signal recomputed on status change
+
+        order.status = Order.Status.CANCELLED
+        order.save()
+        self.p.refresh_from_db()
+        self.assertEqual(self.p.sold_count, 0)  # left the sold set
+
+
 class RecommendedTests(APITestCase):
     def setUp(self):
         self.electronics = Category.objects.create(name="Electronics")

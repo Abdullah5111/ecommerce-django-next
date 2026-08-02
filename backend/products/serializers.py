@@ -93,7 +93,6 @@ class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     is_on_sale = serializers.BooleanField(read_only=True)
     discount_percent = serializers.IntegerField(read_only=True)
-    sold_count = serializers.SerializerMethodField()
     has_variants = serializers.SerializerMethodField()
     price_from = serializers.SerializerMethodField()
 
@@ -110,12 +109,8 @@ class ProductSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             "slug", "created_at", "updated_at",
-            "rating_avg", "rating_count", "specifications",
+            "rating_avg", "rating_count", "sold_count", "specifications",
         )
-
-    def get_sold_count(self, obj):
-        # Only present where the queryset annotated it; null elsewhere (hides the badge).
-        return getattr(obj, "sold_count", None)
 
     def get_has_variants(self, obj):
         return len(_active_variants(obj)) > 0

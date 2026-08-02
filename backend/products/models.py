@@ -55,6 +55,9 @@ class Product(models.Model):
     compare_at_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     rating_avg = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     rating_count = models.PositiveIntegerField(default=0)
+    # Denormalized units sold across sold-status orders, maintained by signals
+    # (orders/signals.py) — keeps product lists off a per-row aggregate.
+    sold_count = models.PositiveIntegerField(default=0)
     stock = models.PositiveIntegerField(default=0)
     image_url = models.URLField(blank=True)
     is_active = models.BooleanField(default=True)
@@ -71,6 +74,8 @@ class Product(models.Model):
             models.Index(fields=["is_featured"]),
             models.Index(fields=["stock"]),
             models.Index(fields=["category", "is_active", "-created_at"]),
+            # Backs the bestsellers ordering.
+            models.Index(fields=["-sold_count"], name="products_pr_sold_idx"),
         ]
 
     def save(self, *args, **kwargs):
