@@ -97,7 +97,6 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
     lookup_field = "slug"
     filterset_class = ProductFilter
-    search_fields = ["name", "description"]
     ordering_fields = ["price", "created_at"]
     # Reviews accept multipart (photo uploads) as well as plain JSON.
     parser_classes = [JSONParser, FormParser, MultiPartParser]
@@ -115,10 +114,12 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             # Powers has_variants / price_from without a query per product.
             .prefetch_related("variants")
         )
-        # Postgres full-text search path: only when on PG and ?search= is set.
-        if connection.vendor == "postgresql":
-            q = self.request.query_params.get("search") if hasattr(self, "request") and self.request else None
-            if q:
+        # Search is owned entirely here (not DRF's SearchFilter) so the two never
+        # stack: on PG, SearchFilter's icontains would otherwise drop stemmed
+        # FTS matches. Postgres uses full-text ranking; SQLite dev uses icontains.
+        q = self.request.query_params.get("search") if getattr(self, "request", None) else None
+        if q:
+            if connection.vendor == "postgresql":
                 from django.contrib.postgres.search import (
                     SearchQuery,
                     SearchRank,
@@ -131,6 +132,8 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
                     .filter(rank__gt=0)
                     .order_by("-rank")
                 )
+            else:
+                qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q))
         return qs.annotate(sold_count=_sold_annotation())
 
     @action(detail=False, methods=["get"], url_path="featured")

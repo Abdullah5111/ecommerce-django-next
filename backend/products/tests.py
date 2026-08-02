@@ -144,6 +144,35 @@ class SearchSuggestTests(APITestCase):
         self.assertEqual(len(res.data), 8)
 
 
+class SearchTests(APITestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Lighting")
+        self.lamp = Product.objects.create(
+            name="Aurora Lamp", description="a bright bedside light",
+            price=Decimal("30"), stock=5, category=self.cat,
+        )
+        self.mug = Product.objects.create(
+            name="Coffee Mug", description="ceramic cup",
+            price=Decimal("8"), stock=5, category=self.cat,
+        )
+
+    def _names(self, q):
+        res = self.client.get(f"/api/products/?search={q}")
+        self.assertEqual(res.status_code, 200)
+        return {p["name"] for p in res.data["results"]}
+
+    def test_matches_by_name(self):
+        self.assertEqual(self._names("aurora"), {"Aurora Lamp"})
+
+    def test_matches_by_description(self):
+        # Guards against reintroducing SearchFilter-only search (which would still
+        # work here); the point is that get_queryset owns description matching.
+        self.assertEqual(self._names("bedside"), {"Aurora Lamp"})
+
+    def test_no_match_returns_empty(self):
+        self.assertEqual(self._names("nonexistentxyz"), set())
+
+
 class RecommendedTests(APITestCase):
     def setUp(self):
         self.electronics = Category.objects.create(name="Electronics")
