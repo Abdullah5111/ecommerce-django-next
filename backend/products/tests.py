@@ -172,6 +172,23 @@ class CategorySlugCascadeTests(APITestCase):
         self.assertEqual(b.level, 1)
 
 
+class CategoryAncestorsTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.a = Category.objects.create(name="Alpha")
+        self.b = Category.objects.create(name="Beta", parent=self.a)
+        self.c = Category.objects.create(name="Gamma", parent=self.b)
+
+    def test_ancestors_root_to_parent(self):
+        res = self.client.get("/api/categories/by-path/?path=alpha/beta/gamma")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual([a["slug"] for a in res.data["ancestors"]], ["alpha", "beta"])
+
+    def test_root_has_no_ancestors(self):
+        res = self.client.get("/api/categories/by-path/?path=alpha")
+        self.assertEqual(res.data["ancestors"], [])
+
+
 class CategoryTreeTests(APITestCase):
     def setUp(self):
         cache.clear()

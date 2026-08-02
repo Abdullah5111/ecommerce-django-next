@@ -31,13 +31,14 @@ class CategoryDetailSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "slug", "full_slug", "level", "ancestors", "children")
 
     def get_ancestors(self, obj):
-        chain = []
-        node = obj.parent
-        while node is not None:
-            chain.append(_minimal_cat(node))
-            node = node.parent
-        chain.reverse()
-        return chain
+        # full_slug encodes the path ("a/b/c"), so every ancestor is a prefix of
+        # it. Fetch them all in one query instead of walking .parent per level.
+        parts = obj.full_slug.split("/")
+        prefixes = ["/".join(parts[:i]) for i in range(1, len(parts))]
+        if not prefixes:
+            return []
+        by_slug = {c.full_slug: c for c in Category.objects.filter(full_slug__in=prefixes)}
+        return [_minimal_cat(by_slug[p]) for p in prefixes if p in by_slug]
 
     def get_children(self, obj):
         return [_minimal_cat(c) for c in obj.children.all()]
