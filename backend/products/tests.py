@@ -144,6 +144,30 @@ class SearchSuggestTests(APITestCase):
         self.assertEqual(len(res.data), 8)
 
 
+class FeaturedSortTests(APITestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        # Featured created first (older); the plain product created after is newer.
+        self.feat = Product.objects.create(
+            name="Featured One", price=Decimal("10"), stock=5,
+            category=self.cat, is_featured=True,
+        )
+        self.newer = Product.objects.create(
+            name="Newer Plain", price=Decimal("10"), stock=5, category=self.cat,
+        )
+
+    def test_default_order_puts_featured_first(self):
+        res = self.client.get("/api/products/")
+        self.assertEqual(res.status_code, 200)
+        names = [p["name"] for p in res.data["results"]]
+        self.assertEqual(names[0], "Featured One")
+
+    def test_newest_sort_overrides_featured(self):
+        res = self.client.get("/api/products/?ordering=-created_at")
+        names = [p["name"] for p in res.data["results"]]
+        self.assertEqual(names[0], "Newer Plain")
+
+
 class SearchTests(APITestCase):
     def setUp(self):
         self.cat = Category.objects.create(name="Lighting")

@@ -113,6 +113,10 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             .select_related("category")
             # Powers has_variants / price_from without a query per product.
             .prefetch_related("variants")
+            # Default ("Featured") order actually surfaces featured products;
+            # SortDropdown's other options override this via OrderingFilter, and
+            # the search branch below replaces it with relevance ranking.
+            .order_by("-is_featured", "-created_at")
         )
         # Search is owned entirely here (not DRF's SearchFilter) so the two never
         # stack: on PG, SearchFilter's icontains would otherwise drop stemmed
