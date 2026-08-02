@@ -26,6 +26,9 @@ export default async function HomePage({
   const query = searchParams.search?.trim() || "";
   const category = searchParams.category?.trim() || "";
   const pageNum = Math.max(1, parseInt(searchParams.page || "1", 10) || 1);
+  // The featured/deals rails only appear on the plain browse view, so skip
+  // fetching them entirely when searching, filtering by category, or paginating.
+  const browse = !query && !category && pageNum === 1;
 
   let products: Product[] = [];
   let totalCount = 0;
@@ -40,8 +43,8 @@ export default async function HomePage({
         page: pageNum,
       }),
       api.listCategories(),
-      api.getFeatured().catch(() => [] as Product[]),
-      api.getBestsellers().catch(() => [] as Product[]),
+      browse ? api.getFeatured().catch(() => [] as Product[]) : Promise.resolve([] as Product[]),
+      browse ? api.getBestsellers().catch(() => [] as Product[]) : Promise.resolve([] as Product[]),
     ]);
     products = productsData.results;
     totalCount = productsData.count;
@@ -71,7 +74,6 @@ export default async function HomePage({
       : "Featured products";
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  const browse = !query && !category && pageNum === 1;
   const topCategories = categories.filter((c) => c.level === 0);
 
   return (
@@ -89,7 +91,7 @@ export default async function HomePage({
 
       <RecommendedRail />
 
-      {featured.length > 0 && (
+      {browse && featured.length > 0 && (
         <section className="mb-8">
           <h2 className="text-xl font-semibold mb-3">Featured</h2>
           <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-2 -mx-4 px-4">
