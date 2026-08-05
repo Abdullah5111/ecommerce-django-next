@@ -7,8 +7,7 @@ import CategoryFilters from "@/components/CategoryFilters";
 import SortDropdown from "@/components/SortDropdown";
 import ActiveFilters from "@/components/ActiveFilters";
 import Pagination from "@/components/Pagination";
-
-const PAGE_SIZE = 12;
+import { PAGE_SIZE } from "@/lib/constants";
 
 type SearchParams = {
   search?: string;

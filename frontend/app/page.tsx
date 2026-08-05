@@ -11,8 +11,7 @@ import Pagination from "@/components/Pagination";
 import Hero from "@/components/home/Hero";
 import CategoryTiles from "@/components/home/CategoryTiles";
 import DealsRail from "@/components/home/DealsRail";
-
-const PAGE_SIZE = 12;
+import { PAGE_SIZE } from "@/lib/constants";
 
 function buildHomeHref(params: { search?: string }) {
   const qs = new URLSearchParams();
