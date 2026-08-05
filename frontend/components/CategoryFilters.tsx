@@ -10,10 +10,12 @@ export default function CategoryFilters() {
 
   const [minVal, setMinVal] = useState(params.get("priceMin") ?? "");
   const [maxVal, setMaxVal] = useState(params.get("priceMax") ?? "");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setMinVal(params.get("priceMin") ?? "");
     setMaxVal(params.get("priceMax") ?? "");
+    setError("");
   }, [params]);
 
   const inStock = params.get("inStock") === "true";
@@ -27,6 +29,13 @@ export default function CategoryFilters() {
 
   const applyPrice = (e: React.FormEvent) => {
     e.preventDefault();
+    // Reject a reversed range up front — the backend would just return nothing,
+    // which reads as "no products" rather than a bad filter.
+    if (minVal && maxVal && Number(minVal) > Number(maxVal)) {
+      setError("Min can’t be greater than max.");
+      return;
+    }
+    setError("");
     pushWith((n) => {
       if (minVal) n.set("priceMin", minVal);
       else n.delete("priceMin");
@@ -73,6 +82,7 @@ export default function CategoryFilters() {
         >
           Apply
         </button>
+        {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
       </form>
 
       <div>
