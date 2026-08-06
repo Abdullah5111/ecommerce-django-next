@@ -1,8 +1,11 @@
+from django.core.cache import cache
 from django.db.models import Avg, Count
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from .models import Review, ReviewImage, ReviewVote
+from .models import (
+    Category, Product, ProductVariant, Review, ReviewImage, ReviewVote,
+)
 
 
 def _recompute(product):
@@ -39,6 +42,26 @@ def review_vote_saved(sender, instance, **kwargs):
 def review_vote_deleted(sender, instance, **kwargs):
     # Review delete cascades its votes; the .update() then matches no rows.
     _recompute_helpful(instance.review_id)
+
+
+def _bump_catalog_cache():
+    """Invalidate the versioned catalog caches (featured/bestsellers/related/tree)
+    by advancing the version their keys embed.
+    """
+    try:
+        cache.incr("catalog:cache_version")
+    except ValueError:  # key not initialized yet
+        cache.set("catalog:cache_version", (cache.get("catalog:cache_version") or 1) + 1)
+
+
+@receiver(post_save, sender=Product)
+@receiver(post_delete, sender=Product)
+@receiver(post_save, sender=Category)
+@receiver(post_delete, sender=Category)
+@receiver(post_save, sender=ProductVariant)
+@receiver(post_delete, sender=ProductVariant)
+def catalog_changed(sender, **kwargs):
+    _bump_catalog_cache()
 
 
 @receiver(post_delete, sender=ReviewImage)

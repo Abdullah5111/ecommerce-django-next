@@ -26,6 +26,12 @@ MAX_REVIEW_IMAGES = 5
 SOLD_STATUSES = ("paid", "shipped", "delivered", "partially_refunded", "refunded")
 
 
+def _catalog_cache_version():
+    # Folded into the cached-rail/tree keys; signals bump it on any catalog
+    # change so caches refresh at once instead of waiting out the TTL.
+    return cache.get_or_set("catalog:cache_version", 1)
+
+
 def _has_purchased(user, product) -> bool:
     """Whether `user` has a completed order containing `product` (per SOLD_STATUSES)."""
     return product.orderitem_set.filter(
@@ -43,7 +49,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     def tree(self, request):
         # Build the whole nested tree from a single query (was one query per
         # node via a recursive serializer), then cache it.
-        cache_key = "categories:tree:v1"
+        cache_key = f"categories:tree:v{_catalog_cache_version()}"
         data = cache.get(cache_key)
         if data is None:
             cats = Category.objects.order_by("name").values(
@@ -155,7 +161,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="featured")
     def featured(self, request):
-        cache_key = "products:featured:v1"
+        cache_key = f"products:featured:v{_catalog_cache_version()}"
         data = cache.get(cache_key)
         if data is None:
             qs = self.get_queryset().filter(is_featured=True).order_by("-created_at")[:12]
@@ -299,7 +305,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     )
     def related(self, request, slug=None):
         product = self.get_object()
-        cache_key = f"products:related:{product.id}:v1"
+        cache_key = f"products:related:{product.id}:v{_catalog_cache_version()}"
         data = cache.get(cache_key)
         if data is None:
             qs = (
@@ -365,7 +371,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="bestsellers")
     def bestsellers(self, request):
-        cache_key = "products:bestsellers:v1"
+        cache_key = f"products:bestsellers:v{_catalog_cache_version()}"
         data = cache.get(cache_key)
         if data is None:
             # get_queryset already annotates sold_count for every product.

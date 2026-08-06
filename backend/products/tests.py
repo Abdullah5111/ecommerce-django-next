@@ -214,6 +214,25 @@ class CategoryAncestorsTests(APITestCase):
         self.assertEqual(res.data["ancestors"], [])
 
 
+class CatalogCacheInvalidationTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.cat = Category.objects.create(name="C")
+        self.p = Product.objects.create(
+            name="Feat", price=Decimal("5"), stock=1, category=self.cat, is_featured=True
+        )
+
+    def test_featured_refreshes_when_product_deactivated(self):
+        res1 = self.client.get("/api/products/featured/")
+        self.assertEqual(len(res1.data), 1)
+
+        self.p.is_active = False
+        self.p.save()  # signal bumps the cache version
+
+        res2 = self.client.get("/api/products/featured/")
+        self.assertEqual(len(res2.data), 0)
+
+
 class CategoryTreeTests(APITestCase):
     def setUp(self):
         cache.clear()
