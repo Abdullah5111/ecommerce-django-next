@@ -32,7 +32,10 @@ def create_payment_intent(order):
 
     Returns ``(client_secret, payment_intent_id, mock)``.
     """
-    if not is_live():
+    # A $0 order (e.g. a 100%-off coupon) has nothing to charge, and Stripe
+    # rejects a zero-amount intent — settle it through the mock path regardless
+    # of mode so the client's mock branch finalizes it.
+    if not is_live() or to_cents(order.total) <= 0:
         pi_id = f"{MOCK_INTENT_PREFIX}{order.pk}"
         return f"{pi_id}_secret_mock", pi_id, True
 
@@ -51,7 +54,8 @@ def verify_paid(order):
 
     Returns ``(ok, detail)``. In mock mode payment is always considered good.
     """
-    if not is_live():
+    # Mock mode, or a $0 order that never had a real intent, is paid by definition.
+    if not is_live() or to_cents(order.total) <= 0:
         return True, ""
     if not order.payment_intent_id:
         return False, "No payment intent for this order."

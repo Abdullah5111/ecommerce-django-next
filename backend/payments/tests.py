@@ -40,6 +40,23 @@ class GatewayUnitTests(TestCase):
         order = types.SimpleNamespace(pk=1, payment_intent_id="")
         self.assertEqual(gateway.create_refund(order, Decimal("0")), "")
 
+
+class FreeOrderPaymentTests(TestCase):
+    """A $0 order must settle without a Stripe intent even in live mode."""
+
+    @override_settings(**LIVE)
+    def test_zero_total_uses_mock_intent_even_when_live(self):
+        order = types.SimpleNamespace(pk=7, total=Decimal("0.00"), payment_intent_id="")
+        _secret, intent_id, mock = gateway.create_payment_intent(order)
+        self.assertTrue(mock)
+        self.assertTrue(intent_id.startswith(gateway.MOCK_INTENT_PREFIX))
+
+    @override_settings(**LIVE)
+    def test_zero_total_verifies_as_paid(self):
+        order = types.SimpleNamespace(pk=7, total=Decimal("0.00"), payment_intent_id="")
+        ok, _detail = gateway.verify_paid(order)
+        self.assertTrue(ok)
+
     def test_create_refund_mock_id_without_keys(self):
         order = types.SimpleNamespace(pk=7, payment_intent_id="mock_pi_7")
         self.assertEqual(gateway.create_refund(order, Decimal("5")), "mock_re_7")
