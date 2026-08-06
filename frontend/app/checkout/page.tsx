@@ -30,6 +30,9 @@ export default function CheckoutPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [payment, setPayment] = useState<LivePayment | null>(null);
+  // Order already created but not yet paid — reused on retry so a failed
+  // payment-start doesn't create a second stock-holding order.
+  const [pendingOrderId, setPendingOrderId] = useState<number | null>(null);
 
   const [promoInput, setPromoInput] = useState("");
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
@@ -122,6 +125,12 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed, items.length]);
 
+  // A changed cart, address, or coupon makes any existing pending order stale;
+  // drop the reference so the next attempt creates a fresh one.
+  useEffect(() => {
+    setPendingOrderId(null);
+  }, [items, selectedId, appliedCode]);
+
   // Confirm a paid order on the backend (after card confirm in live mode, immediately in mock).
   const finalizeOrder = async (orderId: number) => {
     const token = auth.get();
@@ -167,12 +176,19 @@ export default function CheckoutPage() {
 
     setLoading(true);
     try {
-      const order = await api.createOrder(token, {
-        shipping_address_id: addressId,
-        items: items.map((i) => ({ product: i.product.id, variant: i.variant?.id ?? null, quantity: i.quantity })),
-        coupon_code: appliedCode ?? undefined,
-      });
-      await startPayment(token, order.id);
+      // Reuse the order from a prior attempt (e.g. payment-start failed) instead
+      // of creating a duplicate; the reset effect clears it if the cart changed.
+      let orderId = pendingOrderId;
+      if (orderId == null) {
+        const order = await api.createOrder(token, {
+          shipping_address_id: addressId,
+          items: items.map((i) => ({ product: i.product.id, variant: i.variant?.id ?? null, quantity: i.quantity })),
+          coupon_code: appliedCode ?? undefined,
+        });
+        orderId = order.id;
+        setPendingOrderId(orderId);
+      }
+      await startPayment(token, orderId);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Checkout failed");
     } finally {
