@@ -1,7 +1,10 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from coupons.models import Coupon, CouponRedemption
@@ -138,6 +141,49 @@ class OrderCouponTests(APITestCase):
 
 
 @override_settings(SHIPPING_FLAT_FEE=Decimal("5.00"), FREE_SHIPPING_THRESHOLD=Decimal("50.00"))
+class ReleaseExpiredOrdersTests(APITestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(
+            name="Widget", price=Decimal("40.00"), stock=10, category=self.cat
+        )
+        self.user = User.objects.create_user(
+            username="buyer", email="buyer@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def _pending_order(self):
+        res = self.client.post(
+            "/api/orders/",
+            {"shipping_address": "123 Test St", "items": [{"product": self.p.id, "quantity": 2}]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        return Order.objects.get(id=res.data["id"])
+
+    def test_expired_pending_order_released_and_restocked(self):
+        order = self._pending_order()
+        self.p.refresh_from_db()
+        self.assertEqual(self.p.stock, 8)  # reserved at creation
+
+        # Backdate past the TTL; update() bypasses auto_now_add.
+        Order.objects.filter(pk=order.pk).update(
+            created_at=timezone.now() - timedelta(hours=2)
+        )
+        call_command("release_expired_orders")
+
+        order.refresh_from_db()
+        self.p.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(self.p.stock, 10)  # restocked
+
+    def test_recent_pending_order_kept(self):
+        order = self._pending_order()
+        call_command("release_expired_orders")
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
+
+
 class OrderLifecycleTests(APITestCase):
     def setUp(self):
         self.cat = Category.objects.create(name="Gear")

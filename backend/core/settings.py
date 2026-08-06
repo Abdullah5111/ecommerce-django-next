@@ -195,6 +195,10 @@ TAX_RATE = Decimal(config("TAX_RATE", default="0"))
 
 RETURN_WINDOW_DAYS = config("RETURN_WINDOW_DAYS", default=30, cast=int)
 
+# Pending orders reserve stock at creation; the release_expired_orders command
+# cancels (restocks + releases the coupon) any left unpaid past this window.
+PENDING_ORDER_TTL_MINUTES = config("PENDING_ORDER_TTL_MINUTES", default=30, cast=int)
+
 # Stripe payments. Leave the secret key blank to run checkout in mock mode
 # (the demo default — no SDK calls, no network, no keys required).
 STRIPE_SECRET_KEY = config("STRIPE_SECRET_KEY", default="")
