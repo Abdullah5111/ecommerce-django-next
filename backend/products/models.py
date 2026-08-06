@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils.text import slugify
@@ -21,7 +22,20 @@ class Category(models.Model):
         verbose_name_plural = "categories"
         ordering = ["name"]
 
+    def _assert_no_cycle(self):
+        # Walking up from the proposed parent must never reach this node, or the
+        # tree would loop (and save()'s descendant cascade would recurse forever).
+        ancestor = self.parent
+        while ancestor is not None:
+            if ancestor.pk == self.pk:
+                raise ValidationError("A category cannot be its own ancestor.")
+            ancestor = ancestor.parent
+
+    def clean(self):
+        self._assert_no_cycle()
+
     def save(self, *args, **kwargs):
+        self._assert_no_cycle()
         if not self.slug:
             self.slug = slugify(self.name)
         if self.parent:

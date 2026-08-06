@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from rest_framework.test import APITestCase
@@ -151,6 +152,21 @@ class SearchSuggestTests(APITestCase):
         ProductImage.objects.create(product=p, url="http://img/gallery.jpg", sort_order=0)
         res = self.client.get("/api/products/suggest/?q=galleried")
         self.assertEqual(res.data[0]["image_url"], "http://img/gallery.jpg")
+
+
+class CategoryCycleGuardTests(APITestCase):
+    def test_cannot_parent_to_self(self):
+        a = Category.objects.create(name="A")
+        a.parent = a
+        with self.assertRaises(ValidationError):
+            a.save()
+
+    def test_cannot_parent_to_own_descendant(self):
+        a = Category.objects.create(name="A")
+        b = Category.objects.create(name="B", parent=a)
+        a.parent = b
+        with self.assertRaises(ValidationError):
+            a.save()
 
 
 class CategorySlugCascadeTests(APITestCase):
