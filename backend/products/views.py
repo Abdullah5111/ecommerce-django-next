@@ -308,14 +308,29 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         cache_key = f"products:related:{product.id}:v{_catalog_cache_version()}"
         data = cache.get(cache_key)
         if data is None:
-            qs = (
-                Product.objects.filter(is_active=True, category=product.category)
+            base = (
+                Product.objects.filter(is_active=True)
                 .exclude(pk=product.pk)
                 .select_related("category")
                 .prefetch_related("variants")
-                .order_by("-rating_avg", "-created_at")[:8]
             )
-            data = ProductSerializer(qs, many=True).data
+            items = list(
+                base.filter(category=product.category).order_by("-rating_avg", "-created_at")[:8]
+            )
+            if len(items) < 8:
+                # Fill a sparse rail from the same top-level branch (siblings and
+                # cousins) so a small leaf category still shows recommendations.
+                root_slug = product.category.full_slug.split("/")[0]
+                extra = (
+                    base.filter(
+                        Q(category__full_slug=root_slug)
+                        | Q(category__full_slug__startswith=root_slug + "/")
+                    )
+                    .exclude(pk__in=[p.pk for p in items])
+                    .order_by("-rating_avg", "-created_at")[: 8 - len(items)]
+                )
+                items += list(extra)
+            data = ProductSerializer(items, many=True).data
             cache.set(cache_key, data, timeout=300)
         return Response(data)
 

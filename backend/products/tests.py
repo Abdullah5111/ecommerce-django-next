@@ -214,6 +214,28 @@ class CategoryAncestorsTests(APITestCase):
         self.assertEqual(res.data["ancestors"], [])
 
 
+class RelatedProductsTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.root = Category.objects.create(name="Electronics")
+        self.phones = Category.objects.create(name="Phones", parent=self.root)
+        self.laptops = Category.objects.create(name="Laptops", parent=self.root)
+        self.phone = Product.objects.create(
+            name="Phone A", price=Decimal("5"), stock=1, category=self.phones
+        )
+        # Sibling category product; only candidate to fill the sparse phone rail.
+        self.laptop = Product.objects.create(
+            name="Laptop A", price=Decimal("5"), stock=1,
+            category=self.laptops, rating_avg=Decimal("5"),
+        )
+
+    def test_widens_to_branch_when_category_sparse(self):
+        res = self.client.get(f"/api/products/{self.phone.slug}/related/")
+        self.assertEqual(res.status_code, 200)
+        ids = {p["id"] for p in res.data}
+        self.assertIn(self.laptop.id, ids)
+
+
 class CatalogCacheInvalidationTests(APITestCase):
     def setUp(self):
         cache.clear()
