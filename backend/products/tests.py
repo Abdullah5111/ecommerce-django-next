@@ -13,7 +13,7 @@ from rest_framework.test import APITestCase
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderItem
 from products.models import (
-    Category, Product, ProductVariant, Review, ReviewImage, ReviewVote,
+    Category, Product, ProductImage, ProductVariant, Review, ReviewImage, ReviewVote,
 )
 from products.throttling import ReviewWriteThrottle
 from wishlist.models import WishlistItem
@@ -142,6 +142,15 @@ class SearchSuggestTests(APITestCase):
             )
         res = self.client.get("/api/products/suggest/?q=widget")
         self.assertEqual(len(res.data), 8)
+
+    def test_thumbnail_falls_back_to_gallery_image(self):
+        p = Product.objects.create(
+            name="Galleried Widget", price=Decimal("1"), stock=1,
+            category=self.cat, image_url="",
+        )
+        ProductImage.objects.create(product=p, url="http://img/gallery.jpg", sort_order=0)
+        res = self.client.get("/api/products/suggest/?q=galleried")
+        self.assertEqual(res.data[0]["image_url"], "http://img/gallery.jpg")
 
 
 class CategorySlugCascadeTests(APITestCase):

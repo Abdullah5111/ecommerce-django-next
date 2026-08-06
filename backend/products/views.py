@@ -1,14 +1,14 @@
 import django_filters
 from django.core.cache import cache
 from django.db import IntegrityError, connection, transaction
-from django.db.models import Case, Exists, IntegerField, OuterRef, Q, Value, When
+from django.db.models import Case, Exists, IntegerField, OuterRef, Q, Subquery, Value, When
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
-from .models import Category, Product, Review, ReviewImage, ReviewVote
+from .models import Category, Product, ProductImage, Review, ReviewImage, ReviewVote
 from .serializers import (
     CategorySerializer,
     CategoryDetailSerializer,
@@ -176,6 +176,13 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         q = (request.query_params.get("q") or "").strip()
         if len(q) < 2:
             return Response([])
+        # First gallery image, so the dropdown thumbnail matches the card (which
+        # prefers images[0] over image_url); falls back to image_url below.
+        first_image = (
+            ProductImage.objects.filter(product=OuterRef("pk"))
+            .order_by("sort_order", "id")
+            .values("url")[:1]
+        )
         rows = (
             Product.objects.filter(is_active=True, name__icontains=q)
             # Rank prefix matches above mid-word ("shoe" → "Shoe Rack" before
@@ -185,10 +192,11 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
                     When(name__istartswith=q, then=Value(0)),
                     default=Value(1),
                     output_field=IntegerField(),
-                )
+                ),
+                first_image=Subquery(first_image),
             )
             .order_by("match_rank", "name")
-            .values("id", "name", "slug", "price", "image_url")[:8]
+            .values("id", "name", "slug", "price", "image_url", "first_image")[:8]
         )
         return Response(
             [
@@ -198,7 +206,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
                     "slug": r["slug"],
                     # str() to match the string prices the rest of the API emits.
                     "price": str(r["price"]),
-                    "image_url": r["image_url"],
+                    "image_url": r["first_image"] or r["image_url"],
                 }
                 for r in rows
             ]
