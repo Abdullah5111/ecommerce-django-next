@@ -52,6 +52,14 @@ class PricingTests(TestCase):
         self.assertEqual(q.discount_total, Decimal("20.00"))
         self.assertEqual(q.grand_total, Decimal("5.00"))  # 0 items value + shipping 5
 
+    def test_fixed_coupon_scoped_caps_at_eligible_subtotal(self):
+        # $50-off scoped to A only ($20 in cart); must not discount B's value too.
+        c = Coupon.objects.create(code="F50A", kind=Coupon.Kind.FIXED, value=Decimal("50"))
+        c.products.add(self.a)
+        q = quote([(self.a, 1), (self.b, 1)], coupon=c)  # subtotal 50
+        self.assertEqual(q.discount_total, Decimal("20.00"))  # capped at A, not 50
+        self.assertEqual(q.grand_total, Decimal("30.00"))  # 50 - 20, free shipping
+
     def test_free_shipping_coupon_waives_shipping(self):
         c = Coupon.objects.create(code="SHIP", kind=Coupon.Kind.FREE_SHIPPING)
         q = quote([(self.a, 1)], coupon=c)  # 20 subtotal, shipping waived

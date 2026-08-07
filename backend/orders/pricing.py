@@ -70,14 +70,16 @@ def _bogo_discount(coupon, eligible) -> Decimal:
     return money(total)
 
 
-def _discount(coupon, lines, subtotal) -> Decimal:
+def _discount(coupon, lines) -> Decimal:
     # Eligibility is by product/category; pricing uses each line's own unit price.
     eligible = [line for line in lines if coupon.is_product_eligible(line.product)]
+    elig_subtotal = sum((l.unit_price * l.quantity for l in eligible), Decimal("0"))
     if coupon.kind == Coupon.Kind.PERCENT:
-        elig_subtotal = sum((l.unit_price * l.quantity for l in eligible), Decimal("0"))
         return money(elig_subtotal * coupon.value / Decimal("100"))
     if coupon.kind == Coupon.Kind.FIXED:
-        return money(min(coupon.value, subtotal))
+        # Cap at the eligible subtotal so a scoped fixed coupon can't discount
+        # more than the items it applies to (an unscoped one caps at the whole cart).
+        return money(min(coupon.value, elig_subtotal))
     if coupon.kind == Coupon.Kind.BOGO:
         return _bogo_discount(coupon, eligible)
     # FREE_SHIPPING: no line discount; shipping is waived separately
@@ -117,7 +119,7 @@ def quote(items, coupon=None, user=None) -> PriceQuote:
         error = coupon.validate_for(user, pairs, subtotal)
         if error is None:
             code = coupon.code
-            discount = _discount(coupon, lines, subtotal)
+            discount = _discount(coupon, lines)
             free_shipping = coupon.kind == Coupon.Kind.FREE_SHIPPING
 
     shipping = _shipping(subtotal, free_shipping)
