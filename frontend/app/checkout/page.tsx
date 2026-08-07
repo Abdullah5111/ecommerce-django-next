@@ -223,7 +223,7 @@ export default function CheckoutPage() {
   }
 
   if (payment) {
-    const amountLabel = `$${quote ? quote.grand_total : total.toFixed(2)}`;
+    const amountLabel = quote ? `$${quote.grand_total}` : "—";
     return (
       <div className="max-w-lg">
         <h1 className="text-2xl font-bold mb-6">Payment</h1>
@@ -402,15 +402,15 @@ export default function CheckoutPage() {
                 )}
                 <div className="flex justify-between text-lg font-semibold border-t pt-2 mt-2">
                   <span>Total</span>
-                  <span>${quote ? quote.grand_total : total.toFixed(2)}</span>
+                  <span>{quote ? `$${quote.grand_total}` : "—"}</span>
                 </div>
               </div>
               <button
                 onClick={() => placeOrder()}
-                disabled={!selectedId || items.length === 0 || loading}
+                disabled={!selectedId || items.length === 0 || loading || !quote || quoting}
                 className="mt-6 w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50"
               >
-                {loading ? "Placing order…" : "Place order"}
+                {loading ? "Placing order…" : quoting || !quote ? "Calculating total…" : "Place order"}
               </button>
             </>
           )}
