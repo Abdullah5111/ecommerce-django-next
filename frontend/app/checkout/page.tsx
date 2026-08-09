@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart";
 import { auth } from "@/lib/auth";
@@ -24,8 +25,6 @@ export default function CheckoutPage() {
   const [addresses, setAddresses] = useState<Address[] | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
-
-  const [guestAddress, setGuestAddress] = useState("");
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -160,10 +159,6 @@ export default function CheckoutPage() {
     const token = auth.get();
 
     if (!token) {
-      if (!guestAddress.trim()) {
-        setError("Please enter a shipping address");
-        return;
-      }
       router.push("/login?next=/checkout");
       return;
     }
@@ -189,28 +184,6 @@ export default function CheckoutPage() {
         setPendingOrderId(orderId);
       }
       await startPayment(token, orderId);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Checkout failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const placeGuestOrder = async () => {
-    // Guests must log in — keep legacy text fallback in case backend ever supports it.
-    setError(null);
-    const token = auth.get();
-    if (!token) {
-      router.push("/login?next=/checkout");
-      return;
-    }
-    setLoading(true);
-    try {
-      const order = await api.createOrder(token, {
-        shipping_address: guestAddress,
-        items: items.map((i) => ({ product: i.product.id, variant: i.variant?.id ?? null, quantity: i.quantity })),
-      });
-      await startPayment(token, order.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Checkout failed");
     } finally {
@@ -245,26 +218,17 @@ export default function CheckoutPage() {
       <h2 className="text-base font-semibold mb-3">Shipping address</h2>
 
       {!authed ? (
-        <>
-          <textarea
-            value={guestAddress}
-            onChange={(e) => setGuestAddress(e.target.value)}
-            rows={4}
-            className="w-full border rounded p-3"
-            placeholder="Street, city, ZIP, country"
-          />
-          <div className="mt-6 flex justify-between text-lg font-semibold">
-            <span>Total</span>
-            <span>${total.toFixed(2)}</span>
-          </div>
-          <button
-            onClick={placeGuestOrder}
-            disabled={!guestAddress || items.length === 0 || loading}
-            className="mt-6 w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50"
+        <div className="border rounded p-4 bg-zinc-50 text-sm">
+          <p className="mb-3 text-zinc-700">
+            Please sign in to check out — your cart will be saved.
+          </p>
+          <Link
+            href="/login?next=/checkout"
+            className="inline-block bg-black text-white px-4 py-2 rounded font-medium hover:bg-zinc-800"
           >
-            {loading ? "Placing order…" : "Place order"}
-          </button>
-        </>
+            Sign in to check out
+          </Link>
+        </div>
       ) : addresses === null ? (
         <p className="text-zinc-500 text-sm">Loading addresses…</p>
       ) : (
