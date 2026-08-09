@@ -1,3 +1,4 @@
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -54,6 +55,39 @@ def _set_quantity(cart, product, variant, quantity):
         item.save(update_fields=["quantity"])
 
 
+def _add_quantity(cart, product, variant, qty):
+    """Atomically add `qty` (capped at stock) to a (product, variant) line.
+
+    The row is locked while it's read-then-written so two concurrent adds can't
+    both start from the same quantity and lose an increment.
+    """
+    with transaction.atomic():
+        row = (
+            CartItem.objects.select_for_update()
+            .filter(cart=cart, product=product, variant=variant)
+            .first()
+        )
+        if row is None:
+            try:
+                CartItem.objects.create(
+                    cart=cart, product=product, variant=variant,
+                    quantity=_cap(product, variant, qty),
+                )
+                return
+            except IntegrityError:
+                # A concurrent add created the row first; lock it and increment.
+                row = (
+                    CartItem.objects.select_for_update()
+                    .get(cart=cart, product=product, variant=variant)
+                )
+        new_qty = _cap(product, variant, row.quantity + qty)
+        if new_qty <= 0:
+            row.delete()
+        else:
+            row.quantity = new_qty
+            row.save(update_fields=["quantity"])
+
+
 class CartView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -79,11 +113,7 @@ class CartItemsView(APIView):
         except (TypeError, ValueError):
             qty = 1
         cart = get_cart(request.user)
-        existing = CartItem.objects.filter(
-            cart=cart, product=product, variant=variant
-        ).first()
-        current = existing.quantity if existing else 0
-        _set_quantity(cart, product, variant, _cap(product, variant, current + qty))
+        _add_quantity(cart, product, variant, qty)
         return Response(CartSerializer(cart).data, status=201)
 
 
@@ -135,11 +165,5 @@ class CartMergeView(APIView):
                 qty = int(line.get("quantity", 1))
             except (TypeError, ValueError):
                 continue
-            existing = CartItem.objects.filter(
-                cart=cart, product=product, variant=variant
-            ).first()
-            current = existing.quantity if existing else 0
-            _set_quantity(
-                cart, product, variant, _cap(product, variant, current + qty)
-            )
+            _add_quantity(cart, product, variant, qty)
         return Response(CartSerializer(cart).data)

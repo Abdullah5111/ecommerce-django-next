@@ -34,6 +34,13 @@ class CartTests(APITestCase):
         res = self.client.post("/api/cart/items/", {"product": self.p.id, "quantity": 99}, format="json")
         self.assertEqual(res.data["items"][0]["quantity"], 5)  # stock
 
+    def test_incremental_add_caps_at_stock(self):
+        # Two adds that together exceed stock (5) clamp on the second — exercises
+        # the atomic increment-then-cap path, not just the first-insert cap.
+        self.client.post("/api/cart/items/", {"product": self.p.id, "quantity": 3}, format="json")
+        res = self.client.post("/api/cart/items/", {"product": self.p.id, "quantity": 4}, format="json")
+        self.assertEqual(res.data["items"][0]["quantity"], 5)
+
     def test_patch_sets_quantity_and_zero_removes(self):
         self.client.post("/api/cart/items/", {"product": self.p.id, "quantity": 2}, format="json")
         res = self.client.patch(f"/api/cart/items/{self.p.id}/", {"quantity": 4}, format="json")
