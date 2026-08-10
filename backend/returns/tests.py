@@ -187,3 +187,15 @@ class RefundWithTaxTests(APITestCase):
         self.client.post(f"/api/returns/{ret_id}/refund/")
         self.order.refresh_from_db()
         self.assertEqual(self.order.refunded_total, Decimal("44.00"))
+
+    def test_full_return_refunds_merchandise_and_all_tax(self):
+        # Full return (both units): 80 merchandise + 8 tax = 88. The refund cap
+        # must include tax, else this clips to 80 and keeps the buyer's tax.
+        ret_id = self._return(qty=2).data["id"]
+        self.client.force_authenticate(self.staff)
+        self.client.post(f"/api/returns/{ret_id}/approve/")
+        self.client.post(f"/api/returns/{ret_id}/receive/")
+        self.client.post(f"/api/returns/{ret_id}/refund/")
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.refunded_total, Decimal("88.00"))
+        self.assertEqual(self.order.status, Order.Status.REFUNDED)
