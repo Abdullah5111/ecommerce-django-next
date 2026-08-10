@@ -18,6 +18,14 @@ ALLOWED = {
     Return.Status.REJECTED: set(),
 }
 
+# Reasons whose returned unit should NOT go back into sellable stock: defective
+# goods are damaged, and a "wrong item" return is a different product than the
+# order line, so restocking it would inflate the wrong product's stock.
+NON_RESTOCKABLE_REASONS = {
+    ReturnLine.Reason.DEFECTIVE,
+    ReturnLine.Reason.WRONG_ITEM,
+}
+
 
 class ReturnTransitionError(Exception):
     """Raised when a return status change is not allowed."""
@@ -56,6 +64,8 @@ def receive(ret, actor=None):
     ret = Return.objects.select_for_update().get(pk=ret.pk)
     _check(ret, Return.Status.RECEIVED)
     for line in ret.lines.select_related("order_item"):
+        if line.reason in NON_RESTOCKABLE_REASONS:
+            continue  # damaged or not-this-product — keep it out of sellable stock
         oi = line.order_item
         # Restock the exact SKU sold: the variant when the line had one.
         if oi.variant_id is not None:

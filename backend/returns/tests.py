@@ -39,10 +39,10 @@ class ReturnFlowTests(APITestCase):
     def _item_id(self):
         return self.order.items.first().id
 
-    def _create_return(self, qty=1):
+    def _create_return(self, qty=1, reason="no_longer_needed"):
         return self.client.post(
             "/api/returns/",
-            {"order": self.order.id, "lines": [{"order_item": self._item_id(), "quantity": qty, "reason": "defective"}]},
+            {"order": self.order.id, "lines": [{"order_item": self._item_id(), "quantity": qty, "reason": reason}]},
             format="json",
         )
 
@@ -61,6 +61,16 @@ class ReturnFlowTests(APITestCase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.REFUNDED)
         self.assertEqual(self.order.refunded_total, Decimal("80.00"))
+
+    def test_defective_return_is_not_restocked(self):
+        self.p.refresh_from_db()
+        stock_before = self.p.stock
+        ret_id = self._create_return(qty=2, reason="defective").data["id"]
+        self.client.force_authenticate(self.staff)
+        self.client.post(f"/api/returns/{ret_id}/approve/")
+        self.client.post(f"/api/returns/{ret_id}/receive/")
+        self.p.refresh_from_db()
+        self.assertEqual(self.p.stock, stock_before)  # damaged goods stay out of stock
 
     def test_partial_return_sets_partially_refunded(self):
         res = self._create_return(qty=1)
