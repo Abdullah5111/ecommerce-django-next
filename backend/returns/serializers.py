@@ -57,6 +57,14 @@ class ReturnCreateSerializer(serializers.Serializer):
         if not attrs["lines"]:
             raise serializers.ValidationError({"lines": "At least one item is required."})
 
+        self._assert_within_remaining(order, attrs["lines"])
+        return attrs
+
+    def _assert_within_remaining(self, order, lines):
+        """Reject requesting more of an item than is still returnable. Run in
+        validate() for early feedback and again in create() under a row lock, so
+        two concurrent requests can't both pass on the same stale remaining count.
+        """
         items = {i.id: i for i in order.items.all()}
         returned = {}
         for r in order.returns.exclude(status=Return.Status.REJECTED):
@@ -66,7 +74,7 @@ class ReturnCreateSerializer(serializers.Serializer):
         # Sum requested quantities per item so duplicate lines for the same item
         # in one request can't each pass the remaining check independently.
         requested = {}
-        for line in attrs["lines"]:
+        for line in lines:
             requested[line["order_item"]] = requested.get(line["order_item"], 0) + line["quantity"]
 
         for oi_id, qty in requested.items():
@@ -77,12 +85,15 @@ class ReturnCreateSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {"lines": f"Item {oi_id}: only {remaining} unit(s) returnable."}
                 )
-        return attrs
 
     def create(self, validated_data):
         request = self.context["request"]
         order = validated_data["order"]
         with transaction.atomic():
+            # Lock the order so concurrent return requests serialize; then
+            # re-check remaining against now-committed returns before writing.
+            Order.objects.select_for_update().get(pk=order.pk)
+            self._assert_within_remaining(order, validated_data["lines"])
             ret = Return.objects.create(order=order, requested_by=request.user)
             for line in validated_data["lines"]:
                 ReturnLine.objects.create(

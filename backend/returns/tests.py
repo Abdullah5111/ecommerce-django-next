@@ -127,6 +127,26 @@ class ReturnFlowTests(APITestCase):
         res = self.client.post(f"/api/returns/{ret_id}/refund/")
         self.assertEqual(res.status_code, 400)
 
+    def test_create_rechecks_remaining_under_lock(self):
+        # Simulate the race: everything is already returned, but create() is
+        # called directly (as if validate ran on stale data). The in-create
+        # re-check must still reject it.
+        from rest_framework.exceptions import ValidationError
+        from rest_framework.test import APIRequestFactory
+        from returns.serializers import ReturnCreateSerializer
+
+        self._create_return(qty=2)  # exhausts the 2 returnable units
+        req = APIRequestFactory().post("/api/returns/")
+        req.user = self.user
+        ser = ReturnCreateSerializer(context={"request": req})
+        with self.assertRaises(ValidationError):
+            ser.create(
+                {
+                    "order": self.order,
+                    "lines": [{"order_item": self._item_id(), "quantity": 1, "reason": "other"}],
+                }
+            )
+
 
 class RefundMathTests(APITestCase):
     def test_proportional_discount_applied(self):
