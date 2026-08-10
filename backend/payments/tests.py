@@ -123,6 +123,27 @@ class PaymentIntentApiTests(APITestCase):
         self.assertEqual(order.payment_intent_id, "pi_live_1")
 
     @override_settings(**LIVE)
+    def test_reuses_existing_open_intent(self):
+        order = self._order()
+        order.payment_intent_id = "pi_live_existing"
+        order.save(update_fields=["payment_intent_id"])
+        reusable = types.SimpleNamespace(
+            id="pi_live_existing",
+            client_secret="sec_existing",
+            status="requires_payment_method",
+            amount=gateway.to_cents(order.total),
+        )
+        fake = MagicMock()
+        fake.PaymentIntent.retrieve.return_value = reusable
+        with patch.object(gateway, "_stripe", return_value=fake):
+            res = self.client.post(f"/api/orders/{order.id}/create-payment-intent/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["client_secret"], "sec_existing")
+        fake.PaymentIntent.create.assert_not_called()
+        order.refresh_from_db()
+        self.assertEqual(order.payment_intent_id, "pi_live_existing")
+
+    @override_settings(**LIVE)
     def test_live_pay_rejected_when_intent_not_succeeded(self):
         order = self._order()
         order.payment_intent_id = "pi_live_1"

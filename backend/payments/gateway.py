@@ -9,6 +9,12 @@ from django.conf import settings
 
 MOCK_INTENT_PREFIX = "mock_pi_"
 
+# PaymentIntent statuses that are still open and safe to hand back to the client
+# rather than creating (and orphaning) a fresh intent.
+REUSABLE_INTENT_STATUSES = frozenset(
+    {"requires_payment_method", "requires_confirmation", "requires_action", "processing"}
+)
+
 
 def is_live() -> bool:
     """True when a real Stripe secret key is configured."""
@@ -40,8 +46,25 @@ def create_payment_intent(order):
         return f"{pi_id}_secret_mock", pi_id, True
 
     stripe = _stripe()
+    amount = to_cents(order.total)
+
+    # Reuse an already-open intent for this order (e.g. the client called this
+    # again after a network hiccup) so we don't leave orphaned intents behind.
+    existing_id = order.payment_intent_id or ""
+    if existing_id and not existing_id.startswith(MOCK_INTENT_PREFIX):
+        try:
+            intent = stripe.PaymentIntent.retrieve(existing_id)
+        except Exception:
+            intent = None
+        if (
+            intent is not None
+            and getattr(intent, "status", None) in REUSABLE_INTENT_STATUSES
+            and getattr(intent, "amount", None) == amount
+        ):
+            return intent.client_secret, intent.id, False
+
     intent = stripe.PaymentIntent.create(
-        amount=to_cents(order.total),
+        amount=amount,
         currency=settings.STRIPE_CURRENCY,
         metadata={"order_id": str(order.pk)},
         automatic_payment_methods={"enabled": True},
