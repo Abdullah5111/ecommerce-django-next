@@ -146,10 +146,13 @@ export default function CartPage() {
       {items.length > 0 && (
         <aside className="bg-white p-6 rounded-card border border-zinc-200 shadow-card h-fit md:sticky md:top-4">
           <FreeShippingBar subtotal={total} />
-          <div className="flex justify-between mb-4 pt-4 border-t border-zinc-100">
+          <div className="flex justify-between pt-4 border-t border-zinc-100">
             <span>Subtotal</span>
             <span className="font-semibold tabular-nums">${total.toFixed(2)}</span>
           </div>
+          <p className="mt-1 mb-4 text-xs text-zinc-500">
+            Taxes and shipping calculated at checkout.
+          </p>
           <Link
             href="/checkout"
             className="block text-center bg-brand text-brand-fg py-3 rounded-lg font-medium hover:bg-brand-dark transition-colors"
