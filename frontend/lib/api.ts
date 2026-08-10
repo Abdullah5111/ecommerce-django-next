@@ -526,10 +526,11 @@ export const api = {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     }),
-  listReturns: (token: string) =>
-    request<Paginated<ReturnRequest>>(`/returns/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+  listReturns: (token: string, orderId?: number) =>
+    request<Paginated<ReturnRequest>>(
+      `/returns/${orderId ? `?order=${orderId}` : ""}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    ),
   createReturn: (
     token: string,
     payload: { order: number; lines: { order_item: number; quantity: number; reason: ReturnReason; note?: string }[] }

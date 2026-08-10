@@ -72,6 +72,18 @@ class ReturnFlowTests(APITestCase):
         self.p.refresh_from_db()
         self.assertEqual(self.p.stock, stock_before)  # damaged goods stay out of stock
 
+    def test_list_can_filter_by_order(self):
+        self._create_return(qty=1)
+        other = self._delivered_order()
+        self.client.post(
+            "/api/returns/",
+            {"order": other.id, "lines": [{"order_item": other.items.first().id, "quantity": 1, "reason": "other"}]},
+            format="json",
+        )
+        res = self.client.get(f"/api/returns/?order={self.order.id}")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual({r["order"] for r in res.data["results"]}, {self.order.id})
+
     def test_partial_return_sets_partially_refunded(self):
         res = self._create_return(qty=1)
         ret_id = res.data["id"]

@@ -38,8 +38,8 @@ export default function OrderDetailPage() {
     try {
       const o = await api.getOrder(token, id);
       setOrder(o);
-      const r = await api.listReturns(token);
-      setReturns(r.results.filter((x) => x.order === id));
+      const r = await api.listReturns(token, id);
+      setReturns(r.results);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load order");
     }

@@ -17,9 +17,13 @@ class ReturnViewSet(
 
     def get_queryset(self):
         qs = Return.objects.prefetch_related("lines__order_item__product").select_related("order")
-        if self.request.user.is_staff:
-            return qs
-        return qs.filter(order__user=self.request.user)
+        if not self.request.user.is_staff:
+            qs = qs.filter(order__user=self.request.user)
+        # Let the order-detail page fetch just that order's returns.
+        order_id = self.request.query_params.get("order")
+        if order_id:
+            qs = qs.filter(order_id=order_id)
+        return qs
 
     def get_serializer_class(self):
         return ReturnCreateSerializer if self.action == "create" else ReturnSerializer
