@@ -6,6 +6,7 @@ from django.utils import timezone
 from datetime import timedelta
 from rest_framework.test import APITestCase
 
+from coupons.models import Coupon
 from orders.models import Order
 from products.models import Category, Product
 from returns.models import Return
@@ -240,4 +241,47 @@ class RefundWithTaxTests(APITestCase):
         self.client.post(f"/api/returns/{ret_id}/refund/")
         self.order.refresh_from_db()
         self.assertEqual(self.order.refunded_total, Decimal("88.00"))
+        self.assertEqual(self.order.status, Order.Status.REFUNDED)
+
+
+@override_settings(SHIPPING_FLAT_FEE=Decimal("5.00"), FREE_SHIPPING_THRESHOLD=Decimal("50.00"), RETURN_WINDOW_DAYS=30)
+class RefundRoundingTests(APITestCase):
+    """Fully returning across partials must refund the exact owed total, with no
+    per-return rounding drift. $5 fixed coupon on 3 units drifts to 24.99 unfixed."""
+
+    def setUp(self):
+        self.p = Product.objects.create(
+            name="W", price=Decimal("10.00"), stock=10,
+            category=Category.objects.create(name="G"),
+        )
+        self.user = User.objects.create_user(username="b", email="b@e.com", password="pw-123456")
+        self.staff = User.objects.create_user(username="s", email="s@e.com", password="pw-123456", is_staff=True)
+        Coupon.objects.create(code="FIVE", kind=Coupon.Kind.FIXED, value=Decimal("5"))
+        self.client.force_authenticate(self.user)
+        oid = self.client.post(
+            "/api/orders/",
+            {"shipping_address": "x", "items": [{"product": self.p.id, "quantity": 3}], "coupon_code": "FIVE"},
+            format="json",
+        ).data["id"]
+        self.order = Order.objects.get(id=oid)
+        self.client.post(f"/api/orders/{self.order.id}/pay/")
+        self.client.force_authenticate(self.staff)
+        self.client.post(f"/api/orders/{self.order.id}/ship/", {}, format="json")
+        self.client.post(f"/api/orders/{self.order.id}/deliver/")
+
+    def test_full_return_across_partials_refunds_exact_total(self):
+        item = self.order.items.first().id
+        for _ in range(3):
+            self.client.force_authenticate(self.user)
+            rid = self.client.post(
+                "/api/returns/",
+                {"order": self.order.id, "lines": [{"order_item": item, "quantity": 1, "reason": "other"}]},
+                format="json",
+            ).data["id"]
+            self.client.force_authenticate(self.staff)
+            self.client.post(f"/api/returns/{rid}/approve/")
+            self.client.post(f"/api/returns/{rid}/receive/")
+            self.client.post(f"/api/returns/{rid}/refund/")
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.refunded_total, Decimal("25.00"))
         self.assertEqual(self.order.status, Order.Status.REFUNDED)
