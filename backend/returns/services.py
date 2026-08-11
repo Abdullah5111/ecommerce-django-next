@@ -89,7 +89,6 @@ def refund(ret, actor=None):
     _check(ret, Return.Status.REFUNDED)
     order = Order.objects.select_for_update().get(pk=ret.order_id)
 
-    amount = refund_for(ret)
     # Never refund more than paid across all returns: merchandise − discount + tax
     # (shipping is never refunded). Tax must be in the cap or refund_for's tax
     # share gets clipped, and a full return would silently keep the buyer's tax.
@@ -98,8 +97,19 @@ def refund(ret, actor=None):
     )
     if max_refundable < 0:
         max_refundable = Decimal("0")
-    if amount > max_refundable:
-        amount = max_refundable
+
+    purchased_units = sum(i.quantity for i in order.items.all())
+    prior_units = (
+        ReturnLine.objects.filter(
+            return_request__order=order,
+            return_request__status=Return.Status.REFUNDED,
+        ).aggregate(total=Sum("quantity"))["total"]
+        or 0
+    )
+    completes = prior_units + sum(l.quantity for l in ret.lines.all()) >= purchased_units
+    # ponytail: on the final return pay the exact remaining, so per-return
+    # rounding can't leave a cent unrefunded; else cap the proportional amount.
+    amount = max_refundable if completes else min(refund_for(ret), max_refundable)
 
     from payments import gateway
     refund_id = gateway.create_refund(order, amount)
@@ -110,17 +120,8 @@ def refund(ret, actor=None):
     ret.save(update_fields=["status", "refund_amount", "refunded_at"])
 
     order.refunded_total = order.refunded_total + amount
-    purchased_units = sum(i.quantity for i in order.items.all())
-    refunded_units = (
-        ReturnLine.objects.filter(
-            return_request__order=order,
-            return_request__status=Return.Status.REFUNDED,
-        ).aggregate(total=Sum("quantity"))["total"]
-        or 0
-    )
     order.status = (
-        Order.Status.REFUNDED if refunded_units >= purchased_units
-        else Order.Status.PARTIALLY_REFUNDED
+        Order.Status.REFUNDED if completes else Order.Status.PARTIALLY_REFUNDED
     )
     order.save(update_fields=["refunded_total", "status", "updated_at"])
     suffix = f" ({refund_id})" if refund_id else ""

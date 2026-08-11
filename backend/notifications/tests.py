@@ -36,6 +36,16 @@ class NotifyServiceTests(TestCase):
         self.assertEqual(mail.outbox[0].subject, "Order #1 confirmed")
         self.assertEqual(mail.outbox[0].to, ["buyer@example.com"])
 
+    def test_refund_copy_distinguishes_partial(self):
+        import types
+        from notifications.service import _order_message
+        o = types.SimpleNamespace(id=1, status="partially_refunded", refunded_total=Decimal("10.00"))
+        _, body = _order_message(o, Notification.Kind.ORDER_REFUNDED)
+        self.assertIn("partial refund", body)
+        o.status = "refunded"
+        _, body = _order_message(o, Notification.Kind.ORDER_REFUNDED)
+        self.assertNotIn("partial", body)
+
     def test_email_includes_order_link(self):
         order = _order(self.user)
         notify(self.user, Notification.Kind.ORDER_PAID, "Order confirmed", "body", order=order)

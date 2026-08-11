@@ -66,7 +66,8 @@ def _order_message(order, kind):
         note = " A refund has been issued." if order.refunded_total else ""
         return f"Order #{oid} cancelled", f"Your order was cancelled.{note}"
     if kind == Notification.Kind.ORDER_REFUNDED:
-        return f"Order #{oid} refunded", f"A refund of ${order.refunded_total} has been processed."
+        word = "partial refund" if order.status == "partially_refunded" else "refund"
+        return f"Order #{oid} refunded", f"A {word} of ${order.refunded_total} has been processed."
     return f"Order #{oid} updated", ""
 
 
