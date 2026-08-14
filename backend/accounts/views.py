@@ -264,6 +264,17 @@ class ResetPasswordView(APIView):
             )
         user.set_password(new_password)
         user.save()
+        # A reset is often triggered because the account is compromised, so kill
+        # every existing session: blacklist all outstanding refresh tokens.
+        # ponytail: already-issued access tokens still work until they expire
+        # (2h) — that's the JWT tradeoff; revoking refresh tokens stops renewal.
+        from rest_framework_simplejwt.token_blacklist.models import (
+            BlacklistedToken,
+            OutstandingToken,
+        )
+
+        for token in OutstandingToken.objects.filter(user=user):
+            BlacklistedToken.objects.get_or_create(token=token)
         return Response({"detail": "Password reset"})
 
 

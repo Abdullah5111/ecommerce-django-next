@@ -318,3 +318,38 @@ class RegisterPasswordPolicyTests(APITestCase):
 
     def test_strong_password_is_accepted(self):
         self.assertEqual(self._register("s7rong-p4ss-x9").status_code, 201)
+
+
+class PasswordResetRevokesSessionsTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            username="carol", email="carol@example.com", password="old-pw-12345"
+        )
+
+    def _reset_credentials(self):
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.encoding import force_bytes
+        from django.utils.http import urlsafe_base64_encode
+
+        return (
+            urlsafe_base64_encode(force_bytes(self.user.pk)),
+            default_token_generator.make_token(self.user),
+        )
+
+    def test_reset_blacklists_existing_refresh_tokens(self):
+        login = self.client.post(
+            "/api/auth/token/", {"username": "carol", "password": "old-pw-12345"}
+        )
+        refresh = login.data["refresh"]
+        uid, token = self._reset_credentials()
+
+        res = self.client.post(
+            "/api/auth/reset-password/",
+            {"uid": uid, "token": token, "new_password": "new-pw-abc-99"},
+        )
+        self.assertEqual(res.status_code, 200)
+
+        # The pre-reset refresh token can no longer mint access tokens.
+        refreshed = self.client.post("/api/auth/token/refresh/", {"refresh": refresh})
+        self.assertEqual(refreshed.status_code, 401)
