@@ -157,6 +157,10 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "review-write": "10/hour",
         "review-vote": "60/hour",
+        # Unauthenticated auth endpoints — keyed per client IP by ScopedRateThrottle.
+        "auth-login": "10/min",
+        "auth-register": "10/hour",
+        "auth-password": "10/hour",
     },
 }
 

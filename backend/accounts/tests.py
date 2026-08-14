@@ -164,6 +164,8 @@ class PhoneVerificationTests(APITestCase):
 
 from unittest.mock import patch
 
+from rest_framework.throttling import ScopedRateThrottle
+
 from accounts import google
 
 GOOGLE_ENABLED = dict(GOOGLE_OAUTH_CLIENT_ID="test-client-id.apps.googleusercontent.com")
@@ -277,3 +279,26 @@ class GoogleLoginEndpointTests(APITestCase):
         with patch("google.oauth2.id_token.verify_oauth2_token", side_effect=ValueError("bad")):
             res = self._post("bad")
         self.assertEqual(res.status_code, 400)
+
+
+class AuthThrottleTests(APITestCase):
+    def setUp(self):
+        cache.clear()  # throttle history lives in the cache, which TestCase does not roll back
+        # override_settings(REST_FRAMEWORK=...) is ignored here: ScopedRateThrottle
+        # binds THROTTLE_RATES at class-definition time, so patch the dict it reads.
+        rates = patch.dict(
+            ScopedRateThrottle.THROTTLE_RATES,
+            {"auth-register": "1/hour", "auth-password": "1/hour"},
+        )
+        rates.start()
+        self.addCleanup(rates.stop)
+
+    def test_register_is_throttled_per_ip(self):
+        body = lambda n: {"username": f"u{n}", "email": f"u{n}@x.co", "password": "pw-abc12345"}
+        self.assertEqual(self.client.post("/api/auth/register/", body(1)).status_code, 201)
+        self.assertEqual(self.client.post("/api/auth/register/", body(2)).status_code, 429)
+
+    def test_forgot_password_is_throttled_per_ip(self):
+        self.client.post("/api/auth/forgot-password/", {"email": "a@x.co"})
+        res = self.client.post("/api/auth/forgot-password/", {"email": "a@x.co"})
+        self.assertEqual(res.status_code, 429)

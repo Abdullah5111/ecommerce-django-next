@@ -16,6 +16,7 @@ from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -35,6 +36,8 @@ logger = logging.getLogger(__name__)
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-register"
 
     def perform_create(self, serializer):
         user = serializer.save()
@@ -103,6 +106,8 @@ class AvatarView(APIView):
 
 class EmailOrUsernameTokenObtainPairView(TokenObtainPairView):
     serializer_class = EmailOrUsernameTokenObtainPairSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-login"
 
 
 class GoogleConfigView(APIView):
@@ -157,6 +162,8 @@ class GoogleLoginView(APIView):
     """Exchange a verified Google ID token for our own JWT pair."""
 
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-login"
 
     def post(self, request):
         from . import google
@@ -187,6 +194,8 @@ def _get_user_from_uid(uid):
 
 class VerifyEmailView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-password"
 
     def post(self, request):
         uid = request.data.get("uid", "")
@@ -204,6 +213,8 @@ class VerifyEmailView(APIView):
 
 class ForgotPasswordView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-password"
 
     def post(self, request):
         email = request.data.get("email", "")
@@ -231,6 +242,8 @@ class ForgotPasswordView(APIView):
 
 class ResetPasswordView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-password"
 
     def post(self, request):
         uid = request.data.get("uid", "")
