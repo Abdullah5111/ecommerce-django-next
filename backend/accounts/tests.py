@@ -302,3 +302,19 @@ class AuthThrottleTests(APITestCase):
         self.client.post("/api/auth/forgot-password/", {"email": "a@x.co"})
         res = self.client.post("/api/auth/forgot-password/", {"email": "a@x.co"})
         self.assertEqual(res.status_code, 429)
+
+
+class RegisterPasswordPolicyTests(APITestCase):
+    def _register(self, password):
+        return self.client.post(
+            "/api/auth/register/",
+            {"username": "newbie", "email": "newbie@x.co", "password": password},
+        )
+
+    def test_common_password_is_rejected(self):
+        res = self._register("password")  # on Django's common-password blocklist
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(User.objects.filter(username="newbie").exists())
+
+    def test_strong_password_is_accepted(self):
+        self.assertEqual(self._register("s7rong-p4ss-x9").status_code, 201)

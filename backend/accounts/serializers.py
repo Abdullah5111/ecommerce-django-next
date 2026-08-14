@@ -1,4 +1,6 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -58,11 +60,19 @@ class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=8)
+    password = serializers.CharField(write_only=True)
 
     class Meta:
         model = User
         fields = ("username", "email", "password", "first_name", "last_name")
+
+    def validate_password(self, value):
+        # Same rules the reset endpoint enforces (length, common/numeric-only, etc.)
+        try:
+            validate_password(value)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
+        return value
 
     def create(self, validated_data):
         password = validated_data.pop("password")
