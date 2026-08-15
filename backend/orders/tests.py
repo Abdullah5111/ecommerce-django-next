@@ -60,6 +60,13 @@ class PricingTests(TestCase):
         self.assertEqual(q.discount_total, Decimal("20.00"))  # capped at A, not 50
         self.assertEqual(q.grand_total, Decimal("30.00"))  # 50 - 20, free shipping
 
+    def test_percent_over_100_is_capped_at_subtotal(self):
+        # A fat-fingered 150%-off must not discount more than the cart is worth.
+        c = Coupon.objects.create(code="P150", kind=Coupon.Kind.PERCENT, value=Decimal("150"))
+        q = quote([(self.a, 1)], coupon=c)  # subtotal 20
+        self.assertEqual(q.discount_total, Decimal("20.00"))
+        self.assertEqual(q.grand_total, Decimal("5.00"))  # 0 merch + shipping 5
+
     def test_free_shipping_coupon_waives_shipping(self):
         c = Coupon.objects.create(code="SHIP", kind=Coupon.Kind.FREE_SHIPPING)
         q = quote([(self.a, 1)], coupon=c)  # 20 subtotal, shipping waived

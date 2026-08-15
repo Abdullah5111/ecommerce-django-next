@@ -75,7 +75,10 @@ def _discount(coupon, lines) -> Decimal:
     eligible = [line for line in lines if coupon.is_product_eligible(line.product)]
     elig_subtotal = sum((l.unit_price * l.quantity for l in eligible), Decimal("0"))
     if coupon.kind == Coupon.Kind.PERCENT:
-        return money(elig_subtotal * coupon.value / Decimal("100"))
+        raw = elig_subtotal * coupon.value / Decimal("100")
+        # Cap at the eligible subtotal and floor at 0 so a misconfigured percent
+        # (>100, or negative) can neither over-discount nor add to the total.
+        return money(max(Decimal("0"), min(raw, elig_subtotal)))
     if coupon.kind == Coupon.Kind.FIXED:
         # Cap at the eligible subtotal so a scoped fixed coupon can't discount
         # more than the items it applies to (an unscoped one caps at the whole cart).
