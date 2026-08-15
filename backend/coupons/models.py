@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
@@ -37,8 +38,19 @@ class Coupon(models.Model):
     class Meta:
         ordering = ["code"]
 
+    def clean(self):
+        if self.value < 0:
+            raise ValidationError({"value": "Discount value cannot be negative."})
+        if self.kind in (self.Kind.PERCENT, self.Kind.BOGO) and self.value > 100:
+            raise ValidationError({"value": "A percent value cannot exceed 100."})
+        if self.kind == self.Kind.BOGO and not (self.buy_quantity and self.get_quantity):
+            raise ValidationError(
+                "BOGO coupons need both a buy quantity and a get quantity."
+            )
+
     def save(self, *args, **kwargs):
         self.code = self.code.upper().strip()
+        self.full_clean(exclude=["created_at", "updated_at"], validate_unique=False)
         super().save(*args, **kwargs)
 
     def __str__(self):

@@ -2,6 +2,7 @@ from decimal import Decimal
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -21,6 +22,18 @@ class CouponModelTests(TestCase):
     def test_code_is_uppercased_on_save(self):
         c = Coupon.objects.create(code="save10", kind=Coupon.Kind.PERCENT, value=Decimal("10"))
         self.assertEqual(c.code, "SAVE10")
+
+    def test_percent_over_100_is_rejected_on_save(self):
+        with self.assertRaises(ValidationError):
+            Coupon.objects.create(code="P150", kind=Coupon.Kind.PERCENT, value=Decimal("150"))
+
+    def test_negative_value_is_rejected_on_save(self):
+        with self.assertRaises(ValidationError):
+            Coupon.objects.create(code="NEG", kind=Coupon.Kind.FIXED, value=Decimal("-5"))
+
+    def test_bogo_requires_buy_and_get_quantities(self):
+        with self.assertRaises(ValidationError):
+            Coupon.objects.create(code="BOGO", kind=Coupon.Kind.BOGO, value=Decimal("100"))
 
 
 class CouponValidationTests(TestCase):

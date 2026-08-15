@@ -61,8 +61,12 @@ class PricingTests(TestCase):
         self.assertEqual(q.grand_total, Decimal("30.00"))  # 50 - 20, free shipping
 
     def test_percent_over_100_is_capped_at_subtotal(self):
-        # A fat-fingered 150%-off must not discount more than the cart is worth.
-        c = Coupon.objects.create(code="P150", kind=Coupon.Kind.PERCENT, value=Decimal("150"))
+        # Model validation blocks a >100 percent on save, so simulate a value that
+        # reached the DB another way (bulk update / raw SQL): the pricing guard
+        # must still refuse to discount more than the cart is worth.
+        c = Coupon.objects.create(code="P10", kind=Coupon.Kind.PERCENT, value=Decimal("10"))
+        Coupon.objects.filter(pk=c.pk).update(value=Decimal("150"))
+        c.refresh_from_db()
         q = quote([(self.a, 1)], coupon=c)  # subtotal 20
         self.assertEqual(q.discount_total, Decimal("20.00"))
         self.assertEqual(q.grand_total, Decimal("5.00"))  # 0 merch + shipping 5
