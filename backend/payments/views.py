@@ -30,17 +30,21 @@ class StripeWebhookView(APIView):
         if event["type"] == "payment_intent.succeeded":
             intent = event["data"]["object"]
             order_id = (intent.get("metadata") or {}).get("order_id")
-            self._mark_paid(intent.get("id"), order_id)
+            self._mark_paid(intent.get("id"), order_id, intent.get("amount"))
 
         return HttpResponse(status=200)
 
-    def _mark_paid(self, intent_id, order_id):
+    def _mark_paid(self, intent_id, order_id, amount=None):
         order = None
         if order_id:
             order = Order.objects.filter(pk=order_id).first()
         if order is None and intent_id:
             order = Order.objects.filter(payment_intent_id=intent_id).first()
         if order is None or order.status != Order.Status.PENDING:
+            return
+        # Don't confirm against an intent that charged something other than the
+        # order total (same guard the interactive pay path applies).
+        if amount is not None and amount != gateway.to_cents(order.total):
             return
         try:
             transitions.mark_paid(order)

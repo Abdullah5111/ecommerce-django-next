@@ -84,9 +84,13 @@ def verify_paid(order):
         return False, "No payment intent for this order."
     stripe = _stripe()
     intent = stripe.PaymentIntent.retrieve(order.payment_intent_id)
-    if intent.status == "succeeded":
-        return True, ""
-    return False, f"Payment not completed (status: {intent.status})."
+    if intent.status != "succeeded":
+        return False, f"Payment not completed (status: {intent.status})."
+    # Confirm the intent actually charged this order's total — a succeeded status
+    # alone must not mark an order paid against a mismatched (e.g. cheaper) intent.
+    if intent.amount != to_cents(order.total):
+        return False, "Payment amount does not match the order total."
+    return True, ""
 
 
 def create_refund(order, amount) -> str:

@@ -20,10 +20,12 @@ LIVE = dict(
 )
 
 
-def _fake_stripe(intent_id="pi_live_1", secret="pi_live_1_secret", status="succeeded"):
+def _fake_stripe(intent_id="pi_live_1", secret="pi_live_1_secret", status="succeeded", amount=0):
     s = MagicMock()
     s.PaymentIntent.create.return_value = types.SimpleNamespace(id=intent_id, client_secret=secret)
-    s.PaymentIntent.retrieve.return_value = types.SimpleNamespace(id=intent_id, status=status)
+    s.PaymentIntent.retrieve.return_value = types.SimpleNamespace(
+        id=intent_id, status=status, amount=amount
+    )
     s.Refund.create.return_value = types.SimpleNamespace(id="re_live_1")
     return s
 
@@ -159,11 +161,25 @@ class PaymentIntentApiTests(APITestCase):
         order = self._order()
         order.payment_intent_id = "pi_live_1"
         order.save(update_fields=["payment_intent_id"])
-        with patch.object(gateway, "_stripe", return_value=_fake_stripe(status="succeeded")):
+        fake = _fake_stripe(status="succeeded", amount=gateway.to_cents(order.total))
+        with patch.object(gateway, "_stripe", return_value=fake):
             res = self.client.post(f"/api/orders/{order.id}/pay/")
         self.assertEqual(res.status_code, 200)
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.PAID)
+
+    @override_settings(**LIVE)
+    def test_live_pay_rejected_when_intent_amount_mismatches(self):
+        order = self._order()
+        order.payment_intent_id = "pi_live_1"
+        order.save(update_fields=["payment_intent_id"])
+        # Succeeded, but for one cent less than the order total.
+        fake = _fake_stripe(status="succeeded", amount=gateway.to_cents(order.total) - 1)
+        with patch.object(gateway, "_stripe", return_value=fake):
+            res = self.client.post(f"/api/orders/{order.id}/pay/")
+        self.assertEqual(res.status_code, 400)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
 
 
 class WebhookTests(APITestCase):
@@ -191,7 +207,11 @@ class WebhookTests(APITestCase):
         order = self._pending_order()
         event = {
             "type": "payment_intent.succeeded",
-            "data": {"object": {"id": "pi_x", "metadata": {"order_id": str(order.id)}}},
+            "data": {"object": {
+                "id": "pi_x",
+                "amount": gateway.to_cents(order.total),
+                "metadata": {"order_id": str(order.id)},
+            }},
         }
         with patch.object(gateway, "construct_event", return_value=event):
             res = self._post()
@@ -199,13 +219,31 @@ class WebhookTests(APITestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.PAID)
 
+    def test_amount_mismatch_does_not_mark_paid(self):
+        order = self._pending_order()
+        event = {
+            "type": "payment_intent.succeeded",
+            "data": {"object": {
+                "id": "pi_x",
+                "amount": gateway.to_cents(order.total) - 100,  # underpaid
+                "metadata": {"order_id": str(order.id)},
+            }},
+        }
+        with patch.object(gateway, "construct_event", return_value=event):
+            res = self._post()
+        self.assertEqual(res.status_code, 200)  # ack the event, but do not confirm
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
+
     def test_resolves_order_by_intent_id_when_metadata_missing(self):
         order = self._pending_order()
         order.payment_intent_id = "pi_match"
         order.save(update_fields=["payment_intent_id"])
         event = {
             "type": "payment_intent.succeeded",
-            "data": {"object": {"id": "pi_match", "metadata": {}}},
+            "data": {"object": {
+                "id": "pi_match", "amount": gateway.to_cents(order.total), "metadata": {},
+            }},
         }
         with patch.object(gateway, "construct_event", return_value=event):
             self._post()
