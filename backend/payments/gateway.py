@@ -9,6 +9,13 @@ from django.conf import settings
 
 MOCK_INTENT_PREFIX = "mock_pi_"
 
+# Stripe currencies with no minor unit — amounts are charged as whole units, not
+# ×100. https://stripe.com/docs/currencies#zero-decimal
+ZERO_DECIMAL_CURRENCIES = frozenset({
+    "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga",
+    "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
+})
+
 # PaymentIntent statuses that are still open and safe to hand back to the client
 # rather than creating (and orphaning) a fresh intent.
 REUSABLE_INTENT_STATUSES = frozenset(
@@ -29,7 +36,16 @@ def _stripe():
 
 
 def to_cents(amount) -> int:
-    """Convert a decimal money amount to an integer minor-unit (cents)."""
+    """Convert a decimal money amount to Stripe's integer minor unit.
+
+    Zero-decimal currencies (JPY, KRW, …) are charged as whole units — using the
+    ×100 path there would bill the customer 100× the intended amount.
+    """
+    # ponytail: three-decimal currencies (BHD/KWD/…) want ×1000 rounded to 10s —
+    # add that mapping if you ever configure one; ×100 is wrong for them too.
+    currency = getattr(settings, "STRIPE_CURRENCY", "usd").lower()
+    if currency in ZERO_DECIMAL_CURRENCIES:
+        return int(Decimal(amount).quantize(Decimal("1")))
     return int((Decimal(amount) * 100).quantize(Decimal("1")))
 
 

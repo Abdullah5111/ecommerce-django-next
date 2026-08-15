@@ -35,6 +35,11 @@ class GatewayUnitTests(TestCase):
         self.assertEqual(gateway.to_cents(Decimal("40.00")), 4000)
         self.assertEqual(gateway.to_cents(Decimal("19.99")), 1999)
 
+    @override_settings(STRIPE_CURRENCY="jpy")
+    def test_to_cents_uses_whole_units_for_zero_decimal_currency(self):
+        # ¥8000 must bill as 8000, not 800000.
+        self.assertEqual(gateway.to_cents(Decimal("8000.00")), 8000)
+
     def test_mock_mode_is_not_live_by_default(self):
         self.assertFalse(gateway.is_live())
 
