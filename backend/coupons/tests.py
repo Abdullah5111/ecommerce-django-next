@@ -97,6 +97,14 @@ class CouponValidationTests(TestCase):
             "This coupon does not apply to the items in your cart.",
         )
 
+    def test_eligibility_scope_is_resolved_once(self):
+        c = Coupon.objects.create(code="ELEC2", kind=Coupon.Kind.PERCENT, value=Decimal("10"))
+        c.categories.add(self.root)
+        items = [(self.headphones, 1), (self.novel, 1)] * 5  # 10 lines
+        # products + categories + descendant tree, resolved once — not per line.
+        with self.assertNumQueries(3):
+            c.eligible_items(items)
+
     def test_valid_coupon_returns_none(self):
         c = Coupon.objects.create(code="GOOD", kind=Coupon.Kind.PERCENT, value=Decimal("10"))
         self.assertIsNone(c.validate_for(self.user, self._items(), Decimal("55")))

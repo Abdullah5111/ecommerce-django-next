@@ -56,20 +56,31 @@ class Coupon(models.Model):
     def __str__(self):
         return self.code
 
+    def _scope(self):
+        """(product_ids, category_ids) this coupon applies to; empty tuple = whole
+        catalog. Cached on the instance — pricing checks every cart line twice per
+        quote, so resolving the M2M + category tree once avoids an N+1.
+        """
+        if not hasattr(self, "_scope_cache"):
+            product_ids = set(self.products.values_list("id", flat=True))
+            cats = list(self.categories.all())
+            cat_ids = set()
+            if cats:
+                q = Q()
+                for c in cats:
+                    q |= Q(full_slug=c.full_slug) | Q(full_slug__startswith=f"{c.full_slug}/")
+                cat_ids = set(Category.objects.filter(q).values_list("id", flat=True))
+            self._scope_cache = (product_ids, cat_ids) if (product_ids or cats) else ()
+        return self._scope_cache
+
     def is_product_eligible(self, product) -> bool:
         """Whether a product is in this coupon's scope.
         Empty scope = whole catalog; a category also matches its descendants.
         """
-        product_ids = set(self.products.values_list("id", flat=True))
-        cats = list(self.categories.all())
-        if not product_ids and not cats:
+        scope = self._scope()
+        if not scope:  # unscoped coupon → whole catalog
             return True
-        cat_ids = set()
-        if cats:
-            q = Q()
-            for c in cats:
-                q |= Q(full_slug=c.full_slug) | Q(full_slug__startswith=f"{c.full_slug}/")
-            cat_ids = set(Category.objects.filter(q).values_list("id", flat=True))
+        product_ids, cat_ids = scope
         return product.id in product_ids or product.category_id in cat_ids
 
     def eligible_items(self, items):
