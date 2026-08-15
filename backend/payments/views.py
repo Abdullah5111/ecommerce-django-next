@@ -46,6 +46,12 @@ class StripeWebhookView(APIView):
         # order total (same guard the interactive pay path applies).
         if amount is not None and amount != gateway.to_cents(order.total):
             return
+        # Persist the intent id when the order was resolved by metadata and never
+        # stored one (e.g. paid on a Stripe-hosted page) — otherwise a later
+        # refund can't find the intent and would silently skip the real refund.
+        if intent_id and order.payment_intent_id != intent_id:
+            order.payment_intent_id = intent_id
+            order.save(update_fields=["payment_intent_id", "updated_at"])
         try:
             transitions.mark_paid(order)
         except transitions.TransitionError:

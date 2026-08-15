@@ -219,6 +219,22 @@ class WebhookTests(APITestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.PAID)
 
+    def test_stores_intent_id_when_resolved_by_metadata(self):
+        order = self._pending_order()  # no payment_intent_id yet
+        event = {
+            "type": "payment_intent.succeeded",
+            "data": {"object": {
+                "id": "pi_hosted",
+                "amount": gateway.to_cents(order.total),
+                "metadata": {"order_id": str(order.id)},
+            }},
+        }
+        with patch.object(gateway, "construct_event", return_value=event):
+            self._post()
+        order.refresh_from_db()
+        # Stored so a later refund can reach the real Stripe intent.
+        self.assertEqual(order.payment_intent_id, "pi_hosted")
+
     def test_amount_mismatch_does_not_mark_paid(self):
         order = self._pending_order()
         event = {
