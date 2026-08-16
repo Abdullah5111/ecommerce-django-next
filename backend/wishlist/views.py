@@ -10,7 +10,11 @@ from .serializers import WishlistItemSerializer
 
 
 def _wishlist_data(user):
-    qs = WishlistItem.objects.filter(user=user).select_related("product__category").prefetch_related("product__images")
+    qs = (
+        WishlistItem.objects.filter(user=user)
+        .select_related("product__category")
+        .prefetch_related("product__images", "product__variants")
+    )
     return WishlistItemSerializer(qs, many=True).data
 
 
