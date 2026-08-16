@@ -27,7 +27,11 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [models.Index(fields=["user", "is_read"])]
+        indexes = [
+            models.Index(fields=["user", "is_read"]),
+            # Serves the default list query: WHERE user=? ORDER BY -created_at.
+            models.Index(fields=["user", "-created_at"], name="notif_user_created_idx"),
+        ]
 
     def __str__(self):
         return f"{self.get_kind_display()} → {self.user}"
