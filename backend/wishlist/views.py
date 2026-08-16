@@ -47,6 +47,11 @@ class WishlistMergeView(APIView):
 
     def post(self, request):
         ids = request.data.get("product_ids", [])
+        if not isinstance(ids, list):
+            return Response({"product_ids": "Expected a list of product ids."}, status=400)
+        # Keep only well-formed integer ids so a stray string can't blow up the
+        # pk__in lookup; unknown ids are dropped by the filter.
+        ids = [i for i in ids if isinstance(i, int)]
         for pid in Product.objects.filter(pk__in=ids).values_list("pk", flat=True):
             WishlistItem.objects.get_or_create(user=request.user, product_id=pid)
         return Response(_wishlist_data(request.user))

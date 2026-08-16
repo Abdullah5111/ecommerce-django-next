@@ -36,6 +36,19 @@ class WishlistTests(APITestCase):
         ids = {row["product"]["id"] for row in res.data}
         self.assertEqual(ids, {self.p1.id, self.p2.id})  # union, no duplicate of p1
 
+    def test_merge_rejects_non_list_product_ids(self):
+        res = self.client.post("/api/wishlist/merge/", {"product_ids": "5"}, format="json")
+        self.assertEqual(res.status_code, 400)
+
+    def test_merge_ignores_malformed_ids(self):
+        res = self.client.post(
+            "/api/wishlist/merge/",
+            {"product_ids": [self.p1.id, "abc", None]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual({row["product"]["id"] for row in res.data}, {self.p1.id})
+
     def test_requires_auth(self):
         self.client.force_authenticate(None)
         self.assertEqual(self.client.get("/api/wishlist/").status_code, 401)
