@@ -188,6 +188,15 @@ class PushApiTests(APITestCase):
         self.assertTrue(res.data["enabled"])
         self.assertEqual(res.data["public_key"], "pub")
 
+    def test_subscribe_rejects_non_object_payload(self):
+        res = self.client.post("/api/push/subscribe/", [1, 2, 3], format="json")
+        self.assertEqual(res.status_code, 400)
+
+    def test_subscribe_rejects_non_object_keys(self):
+        payload = {"endpoint": "https://push.example/z", "keys": "oops"}
+        res = self.client.post("/api/push/subscribe/", payload, format="json")
+        self.assertEqual(res.status_code, 400)
+
     def test_subscribe_stores_browser_subscription_shape(self):
         payload = {
             "endpoint": "https://push.example/xyz",
