@@ -29,7 +29,10 @@ class WishlistItemsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        product = get_object_or_404(Product, pk=request.data.get("product"))
+        pid = request.data.get("product")
+        if not isinstance(pid, int):  # a non-numeric id would ValueError the lookup
+            return Response({"product": "A valid product id is required."}, status=400)
+        product = get_object_or_404(Product, pk=pid)
         WishlistItem.objects.get_or_create(user=request.user, product=product)
         return Response(_wishlist_data(request.user), status=201)
 

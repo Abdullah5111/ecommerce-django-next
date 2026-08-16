@@ -36,6 +36,14 @@ class WishlistTests(APITestCase):
         ids = {row["product"]["id"] for row in res.data}
         self.assertEqual(ids, {self.p1.id, self.p2.id})  # union, no duplicate of p1
 
+    def test_add_rejects_non_numeric_product(self):
+        res = self.client.post("/api/wishlist/items/", {"product": "abc"}, format="json")
+        self.assertEqual(res.status_code, 400)
+
+    def test_add_missing_product_is_bad_request(self):
+        res = self.client.post("/api/wishlist/items/", {}, format="json")
+        self.assertEqual(res.status_code, 400)
+
     def test_merge_rejects_non_list_product_ids(self):
         res = self.client.post("/api/wishlist/merge/", {"product_ids": "5"}, format="json")
         self.assertEqual(res.status_code, 400)
