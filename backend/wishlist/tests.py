@@ -57,6 +57,12 @@ class WishlistTests(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual({row["product"]["id"] for row in res.data}, {self.p1.id})
 
+    def test_remerge_does_not_duplicate_rows(self):
+        payload = {"product_ids": [self.p1.id, self.p2.id]}
+        self.client.post("/api/wishlist/merge/", payload, format="json")
+        self.client.post("/api/wishlist/merge/", payload, format="json")  # ignore_conflicts
+        self.assertEqual(WishlistItem.objects.filter(user=self.user).count(), 2)
+
     def test_requires_auth(self):
         self.client.force_authenticate(None)
         self.assertEqual(self.client.get("/api/wishlist/").status_code, 401)

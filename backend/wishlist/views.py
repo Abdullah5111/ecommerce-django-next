@@ -55,6 +55,11 @@ class WishlistMergeView(APIView):
         # Keep only well-formed integer ids so a stray string can't blow up the
         # pk__in lookup; unknown ids are dropped by the filter.
         ids = [i for i in ids if isinstance(i, int)]
-        for pid in Product.objects.filter(pk__in=ids).values_list("pk", flat=True):
-            WishlistItem.objects.get_or_create(user=request.user, product_id=pid)
+        valid_ids = Product.objects.filter(pk__in=ids).values_list("pk", flat=True)
+        # One insert for the whole batch; ignore_conflicts skips items already on
+        # the wishlist (the user/product unique constraint), so re-merging is a no-op.
+        WishlistItem.objects.bulk_create(
+            [WishlistItem(user=request.user, product_id=pid) for pid in valid_ids],
+            ignore_conflicts=True,
+        )
         return Response(_wishlist_data(request.user))
