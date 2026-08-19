@@ -1,113 +1,66 @@
-# E-commerce — Django + Next.js
+# Commerce — Django + Next.js
 
-A full-stack e-commerce app built as a portfolio piece. Django REST Framework backend, Next.js 14 (App Router) frontend, PostgreSQL, JWT auth with email verification and password reset, hierarchical categories with faceted search, server-rendered product pages with structured data and rich reviews (verified-purchase badges, reviewer photos, helpful votes), saved-address book with immutable shipping snapshots on orders, server-persisted cart & wishlist with guest-merge on login, personalized product recommendations, Stripe payments, multi-channel order notifications (in-app, email, web push), a polished conversion-focused storefront UI (token-based design system, price-forward cards, a product buy box, deals rail, and a mobile bottom nav), and a scale-aware data layer (DB indexes, Postgres full-text search, atomic stock decrement, cached featured/bestsellers/related endpoints). Containerised and ready to deploy to Google Cloud Run.
+[![CI](https://github.com/Abdullah5111/ecommerce-django-next/actions/workflows/ci.yml/badge.svg)](https://github.com/Abdullah5111/ecommerce-django-next/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/Django-5-092E20?logo=django&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-14-000000?logo=next.js&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+
+A production-shaped, full-stack storefront — Django REST Framework + Next.js 14 — built to demonstrate **correctness under concurrency, money-handling you can trust, and security done properly**, not just CRUD. Catalog & faceted search, cart, coupons, an order state machine, returns/refunds, Stripe payments, and multi-channel notifications, all covered by ~250 tests running on Postgres in CI.
+
+> **The whole app runs with zero external credentials.** Stripe, Google sign-in, and Web Push each degrade to a keyless mock so you can clone it and check out end-to-end in one command.
+
+## Live demo
+
+- **App:** _add your deployed URL here_ · **API docs:** `/<demo-host>/api/docs`
+- **Demo login:** _add demo credentials_ — then add to cart, apply coupon `SAVE10`, and check out (runs in keyless **mock payment** mode).
+
+<!-- Screenshots: drop 2–3 images in docs/screenshots/ and reference them here.
+     A storefront/PDP shot + the checkout breakdown + Swagger UI reads best. -->
+
+## Engineering highlights
+
+The parts that took real thought — each is backed by tests and, where it's subtle, a `# ponytail:` note in the code marking the trade-off.
+
+**Money correctness**
+- **No-oversell inventory** — checkout decrements stock with an atomic conditional `UPDATE … WHERE stock >= qty` (products *and* variants); the whole order is one transaction, so a later line failing rolls back every earlier decrement.
+- **Reserve-then-release** — stock is reserved at order creation and returned by a TTL cron (`release_expired_orders`) that skips orders which raced out of `PENDING` instead of aborting the batch.
+- **Proportional refunds** — a return refunds the line's share of the order discount **plus the tax actually charged** on those items (shipping excluded), and the *final* return pays the exact remaining cent so rounding never strands money.
+- **Stripe hardening** — the webhook *and* the interactive pay path both verify the PaymentIntent **amount matches the order total** (not just `status == succeeded`); zero-decimal currencies (JPY/KRW) are billed as whole units, not ×100; the webhook persists the intent id so later refunds actually reach Stripe.
+- **Coupons** — redemption caps (`max_redemptions`, `per_user_limit`) enforced under a `SELECT … FOR UPDATE` row lock at checkout; percent discounts capped at the eligible subtotal; kind-aware validation on save.
+
+**Concurrency**
+- Order lifecycle is a guarded **state machine** (`select_for_update` + an explicit allowed-transitions table) — idempotent, so a Stripe webhook and the customer's "pay" click can't double-confirm.
+- A cross-cutting **concurrency audit** ([docs/CONCURRENCY.md](./docs/CONCURRENCY.md)) walks every money path and shows which row lock makes each critical section safe.
+
+**Security**
+- JWT with refresh-token rotation + blacklist; **password reset revokes all outstanding sessions**.
+- Django password validators enforced at registration; **scoped rate-limiting** on login/register/reset (brute-force + reset-email bombing).
+- Uploads validated by real image bytes (Pillow) + an extension allowlist (no SVG script vector).
+
+**Performance**
+- **N+1 elimination** across list endpoints (prefetched variants/images, single-query coupon-scope resolution, denormalized counters via signals).
+- Postgres full-text search; composite DB indexes; 5-minute caching on featured/bestsellers/related with signal-driven invalidation.
+
+**Architecture & ops**
+- Notification fan-out (email + Web Push) runs **off the request path** via a bounded thread pool (opt-in, no broker) so order transitions don't block on SMTP/push I/O.
+- **OpenAPI 3** schema with Swagger UI / ReDoc; Dockerized; CI runs the suite on **Postgres 16** (so the full-text path is exercised, not just SQLite).
 
 ## Stack
 
-| Layer        | Tech                                                          |
-|--------------|---------------------------------------------------------------|
-| Frontend     | Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS   |
-| Backend      | Django 5, Django REST Framework, SimpleJWT (+ token blacklist)|
-| Database     | PostgreSQL 16 (SQLite for the simplest dev path)              |
-| Search       | Postgres `SearchVector` + `SearchRank` (icontains fallback), header typeahead autocomplete |
-| Cache        | Configurable backend (LocMem default; Redis via env)          |
-| Container    | Docker, docker-compose                                        |
-| Deploy       | Google Cloud Run + Cloud SQL + Artifact Registry              |
+| Layer     | Tech                                                          |
+|-----------|---------------------------------------------------------------|
+| Frontend  | Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS   |
+| Backend   | Django 5, Django REST Framework, SimpleJWT (+ token blacklist)|
+| Database  | PostgreSQL 16 (SQLite for the simplest dev path)             |
+| Search    | Postgres `SearchVector` + `SearchRank` (icontains fallback), header typeahead |
+| API docs  | OpenAPI 3 via drf-spectacular — Swagger UI + ReDoc            |
+| Cache     | Configurable (LocMem default; Redis via env)                 |
+| Container | Docker, docker-compose                                       |
+| Deploy    | Google Cloud Run + Cloud SQL + Artifact Registry            |
 
-## Features
-
-### Design & UX
-- **Design system**: Indigo (brand) + Amber (deal) token palette in `tailwind.config.ts`, Inter via `next/font`, elevation/`shimmer` tokens, and shared primitives (`Button`, `Badge`, `Price`) so surfaces stay consistent
-- **Price-forward product cards**: big price + struck-through compare-at + %-off flag, wishlist heart, "Only N left" urgency, free-shipping tag, and a compact "★ 4.5 (10) · 120 sold" meta line
-- **Buy box** on product detail: delivery-date estimate, dual CTA (Add to cart + Buy now), quantity, and trust badges — sticky on desktop
-- **Homepage**: gradient hero, shop-by-category tiles, and a **"Deals of the day" rail with a live countdown**
-- **Mobile-first chrome**: trust top-bar, mobile bottom tab nav (Home / Wishlist / Cart / Account), and a real footer
-- **Free-shipping progress nudge** in the cart ("Add $X more for free shipping")
-- Dense 2-col mobile grids, route-level skeletons on navigation, and rich empty states (cart / wishlist / orders)
-
-### Catalog
-- Hierarchical categories (multi-level, with parent / `full_slug` / `level`)
-- Category landing pages at clean URLs (`/c/electronics/audio`)
-- Mega-menu in the header, breadcrumbs on category and product pages
-- Faceted filtering: price range, in-stock, category-and-descendants
-- Sort: featured, newest, price ↑ / ↓
-- Search (Postgres full-text when available, icontains otherwise) scoped to category when on a category page
-- Search-box autocomplete: debounced typeahead (`/products/suggest/`) with thumbnail/price rows, keyboard navigation, and stale-response guarding
-- Paginated grid with shareable URLs (`?page=2&priceMin=20&inStock=true&ordering=-price`)
-- Personalized **"Recommended for you"** rail (logged-in users): products from the categories you've purchased / wishlisted / carted, ranked featured-first; guests see the Featured rail
-
-### Product detail
-- Server-rendered with `generateMetadata` (title, description, og:image) and `schema.org Product` JSON-LD including aggregate rating
-- Image gallery with thumbnail strip + fullscreen lightbox (prev / next / Escape)
-- Hash-driven tabs (`#description`, `#specifications`, `#reviews`) — shareable, scrollable on deep link
-- Specifications table from `Product.specifications` (flat key→value)
-- Reviews block with summary number, 5-bar rating histogram, review list, and "Write a review" form (auth-gated)
-- **Verified-purchase badge** on reviews from buyers who actually ordered the product — snapshotted at write time from real order data, so a later cancellation doesn't retract it
-- **Photo reviews**: attach up to 5 photos when writing a review (previews + per-photo remove on the form); reviewers' photos render as a thumbnail strip that opens a fullscreen lightbox (click / Escape / arrow keys). Uploads are validated server-side — real image bytes (Pillow), jpg/jpeg/png/webp/gif only (no SVG, which can carry script), 5 MB each
-- **"Helpful" votes** on reviews — one per user, optimistic count with rollback on failure, self-voting disallowed; reviews can be sorted most-helpful-first
-- Related products rail ("More from {category}") and recently viewed rail (localStorage)
-- Wishlist heart icon; saved items shown at `/wishlist` (server-backed when logged in)
-- **Product variants** (size / color / SKU): an option picker per dimension, derived from the product's variants, with per-variant stock and an optional price override (falls back to the product price). Add-to-cart is gated until an in-stock variant is chosen; cards and the mobile bar route variant products to the PDP to pick. Cart lines, checkout, stock decrement, and refunds are all variant-aware; order history snapshots the variant SKU/label. Products without variants are unchanged
-- Contextual stock urgency ("Only 3 left — order soon", "Selling fast")
-- **"X sold" social proof** on product cards and detail, aggregated from real order data (paid-and-not-cancelled), compacted as `1.2k sold`; also powers the bestsellers ranking
-- Mobile sticky bottom-bar with quantity stepper + Add to cart
-
-### Cart & checkout
-- Server-persisted cart & wishlist for logged-in users (REST-backed, optimistic UI); guests use `localStorage` and their items **merge into the server on login** — cart quantities summed (capped at stock), wishlist unioned
-- Inline "Add to cart" with toast (no navigation)
-- **Save for later**: move a cart line into a saved (wishlist-backed) section and move it back with "Move to cart" — right on the cart page
-- Saved-address picker at checkout (default pre-selected) plus inline "use a different address" form
-- Stripe card payments (test mode): server creates a PaymentIntent, the frontend confirms via Stripe Elements, and a signature-verified webhook marks the order paid; checkout atomically decrements stock (concurrent-safe `F()` UPDATE). **Without Stripe keys it falls back to a one-click mock payment**, so the demo runs key-free
-- Orders snapshot a structured shipping address at write time — editing the saved address later doesn't mutate order history
-- Per-user order history with the structured shipping snapshot rendered per order
-- Promo codes at checkout: percent, fixed-amount, free-shipping, and buy-X-get-Y; one per order, validated and priced server-side with a live breakdown
-- Flat-fee shipping ($5) waived over $50 subtotal or by a free-shipping coupon
-- Configurable **sales tax** (`TAX_RATE`) applied to discounted merchandise, shown as its own line in the breakdown and snapshotted on the order; off by default (0%), so the tax line only appears once a rate is set
-
-### Orders & returns
-- Full order lifecycle: pay → ship (with tracking) → deliver, plus customer cancel (restock + coupon release), each recorded in a per-order audit timeline
-- Line-item returns/RMA: request specific items + reasons within a return window; staff approve → receive (restock) → refund (proportional to discount, plus the tax charged on the returned items, shipping excluded — issued through Stripe when keys are set, mock otherwise); orders reflect partial/full refunded status
-
-### Notifications & alerts
-- Every order lifecycle event (paid, shipped, delivered, cancelled, refunded) fans out to three channels from one `notify()` call: an in-app notification row, an email, and a browser push
-- **In-app notification center**: a header bell with an unread badge (polled) and dropdown, plus a full feed at `/account/notifications` with mark-read / mark-all-read
-- **Email**: order-confirmation and shipping notifications (with tracking) on the existing email backend — console in dev, SMTP via env in prod
-- **Web Push** (VAPID + service worker): opt-in toggle; works with the tab closed. **Disabled gracefully without VAPID keys** — the in-app center and emails still work, the subscribe UI just hides
-- Notifications fire from `transaction.on_commit`, so a rolled-back transition never sends a false alert
-
-### Auth & profile
-- Register, login (by username **or** email), logout (server-side refresh-token blacklist)
-- **Google sign-in** (Google Identity Services): the frontend gets a Google ID token, the backend verifies it against Google's keys and issues our own JWT; accounts link by email (a Google login into an existing password account just signs in). **Hidden gracefully when no client ID is configured**
-- JWT with auto-refresh on 401 and global redirect when both tokens expire
-- Email verification (`/verify-email?uid&token`) with verified badge on the account page
-- Forgot / reset password (`/forgot-password`, `/reset-password?uid&token`) via Django's password-reset token generator
-- **Account hub** at `/account` — Amazon-style card grid linking profile, orders, addresses, wishlist, security, and payment/notification preferences
-- **Profile** (`/account/profile`): avatar upload (with initials fallback), display name + bio, date of birth + gender, and editable name
-- **Phone verification**: one-time code flow (rate-limited, attempt-capped, constant-time check); code is printed to the console in dev, swap for an SMS provider in prod
-- **Login & security** (`/account/security`): email + phone verification status and change-password entry point
-- Address book at `/account/addresses`: list, add, edit, delete, set default
-- Password-strength hints on the signup form
-- Console email backend for dev; SMTP via env for production
-
-### Scale & performance
-- DB indexes on `price`, `is_active`, `is_featured`, `stock`, plus compound `(category, is_active, -created_at)`
-- Postgres-conditional full-text search with `SearchVector` + `SearchRank`; SQLite gets the existing `icontains` fallback
-- Atomic stock decrement (`Product.objects.filter(stock__gte=q).update(stock=F("stock") - q)`, and the same against `ProductVariant`) — no oversell race
-- Featured + bestsellers + per-product `related` endpoints cached for 5 minutes (`CACHES` configurable per-env)
-- Reviews drive `Product.rating_avg` / `rating_count` via `post_save` / `post_delete` signals — single source of truth
-- Per-user **rate limiting** on the review-write and helpful-vote endpoints (DRF throttles; cache-backed, so point `CACHE_BACKEND` at Redis to make the limits cluster-wide)
-- Cursor-pagination class defined for opt-in use on large catalogs
-- All product images served via `next/image` (lazy loading, responsive `sizes`, AVIF/WebP)
-
-### Admin
-- Django admin for products, categories (hierarchy-aware), orders, users, reviews, addresses, coupons, returns, carts, wishlists, notifications, push subscriptions
-- Inline `ProductImage` / `ProductVariant` editing on products; order/return transitions exposed as admin actions
-
-### Testing & CI
-- ~180 backend tests (DRF `APITestCase`) covering auth, catalog, variants, cart, orders, coupons, tax, returns, reviews, and notifications
-- **GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push and PR: a backend job on **Postgres 16** (so the full-text search path is exercised, not just SQLite) that runs `makemigrations --check` then the test suite, and a frontend job running `tsc --noEmit` + `next build`
-
-## Quick start (local, with Docker)
+## Quick start (Docker)
 
 ```bash
 cp backend/.env.example backend/.env
@@ -116,82 +69,46 @@ docker compose up --build
 ```
 
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:8000/api/
-- Django admin: http://localhost:8000/admin/
+- API: http://localhost:8000/api/ · **Interactive docs: http://localhost:8000/api/docs**
+- Admin: http://localhost:8000/admin/
 
-The backend auto-runs migrations and seeds sample products on first boot.
-Create an admin user with:
+The backend auto-migrates and seeds sample products on first boot. Create an admin with:
 
 ```bash
 docker compose exec backend python manage.py createsuperuser
 ```
 
-## Quick start (local, without Docker)
+<details>
+<summary><strong>Quick start without Docker</strong></summary>
 
 ```bash
 # Backend
 cd backend
-python -m venv .venv && source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+python -m venv .venv && source .venv/bin/activate  # .venv\Scripts\activate on Windows
 pip install -r requirements.txt
 cp .env.example .env  # leave DB_ENGINE=sqlite for the simplest path
 python manage.py migrate
 python manage.py shell < seed.py
 python manage.py runserver
 
-# Frontend (in a new shell)
+# Frontend (new shell)
 cd frontend
 npm install
 cp .env.example .env.local
 npm run dev
 ```
+</details>
 
-### Enabling real Stripe payments (optional)
+## API documentation
 
-Checkout runs in **mock mode** out of the box — no keys needed. To switch on real
-card payments, set these in `backend/.env` (test-mode keys from the Stripe dashboard):
+Interactive, generated from the live code:
 
-```bash
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PUBLISHABLE_KEY=pk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...      # from `stripe listen` or a dashboard endpoint
-```
+- **Swagger UI** — `/api/docs` (click **Authorize**, paste a JWT access token)
+- **ReDoc** — `/api/redoc`
+- **OpenAPI schema** — `/api/schema` (downloadable JSON/YAML; feed it to `openapi-typescript` for typed clients)
 
-The publishable key is handed to the frontend by the API, so no frontend env is
-required. Forward webhooks locally with
-`stripe listen --forward-to localhost:8000/api/payments/webhook/`.
-
-### Enabling browser push (optional)
-
-In-app notifications and emails work with no setup. To also send **Web Push**
-(browser notifications with the tab closed), generate a VAPID keypair and set it
-in `backend/.env`:
-
-```bash
-python -m py_vapid --gen          # writes private_key.pem / public_key.pem
-# put the base64 keys (urlsafe) into:
-VAPID_PUBLIC_KEY=...
-VAPID_PRIVATE_KEY=...
-VAPID_ADMIN_EMAIL=you@example.com
-```
-
-The public key is served to the frontend via `/api/push/config/`; the subscribe
-toggle then appears at `/account/notifications`. Without keys, push stays hidden.
-
-### Enabling Google sign-in (optional)
-
-Login/signup work with username + password out of the box. To add **Google
-sign-in**, create an OAuth 2.0 Client ID (Web application) in the Google Cloud
-console, add your frontend origin to *Authorized JavaScript origins*, and set it
-in `backend/.env`:
-
-```bash
-GOOGLE_OAUTH_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
-```
-
-The frontend fetches the client ID from `/api/auth/google/config/`, so there's no
-frontend env to set. Without it, the Google button simply doesn't render.
-
-## API reference
+<details>
+<summary><strong>REST reference (full endpoint tables)</strong></summary>
 
 ### Auth
 
@@ -209,66 +126,64 @@ frontend env to set. Without it, the Google button simply doesn't render.
 | POST     | /api/auth/phone/verify/                    | JWT  | `{code}` → set phone + mark verified               |
 | POST     | /api/auth/verify-email/                    | —    | `{uid, token}` → mark email verified              |
 | POST     | /api/auth/forgot-password/                 | —    | `{email}` → always 200 (no email-existence leak)  |
-| POST     | /api/auth/reset-password/                  | —    | `{uid, token, new_password}`                      |
+| POST     | /api/auth/reset-password/                  | —    | `{uid, token, new_password}` (revokes all sessions) |
 | GET/POST | /api/auth/addresses/                       | JWT  | List my addresses / create a new one              |
 | GET/PUT/PATCH/DELETE | /api/auth/addresses/{id}/      | JWT  | Address detail / update / delete                  |
 | POST     | /api/auth/addresses/{id}/set-default/      | JWT  | Mark address as default shipping                  |
+
+Auth endpoints are **rate-limited** per client IP (login 10/min; register & password flows 10/hour).
 
 ### Catalog
 
 | Method     | Path                                          | Auth | Purpose                                                          |
 |------------|-----------------------------------------------|------|------------------------------------------------------------------|
 | GET        | /api/products/                                | —    | List products (paginated)                                        |
-| GET        | /api/products/{slug}/                         | —    | Product detail (includes `specifications`, `images`, ratings, and `variants[]`) |
+| GET        | /api/products/{slug}/                         | —    | Product detail (includes `specifications`, `images`, ratings, `variants[]`) |
 | GET        | /api/products/featured/                       | —    | Top featured (cached 5 min)                                      |
 | GET        | /api/products/bestsellers/                    | —    | Top by paid-order quantity (cached 5 min)                        |
-| GET        | /api/products/recommended/                    | —/JWT | Personalized picks from purchase/wishlist/cart affinity; featured fallback for guests/new users |
+| GET        | /api/products/recommended/                    | —/JWT | Personalized picks from purchase/wishlist/cart affinity; featured fallback |
 | GET        | /api/products/{slug}/related/                 | —    | Up to 8 sibling products in same category (cached 5 min)         |
-| GET/POST   | /api/products/{slug}/reviews/                 | —/JWT | List reviews (paginated; `?ordering=helpful` for most-helpful-first) / create one (one per user per product). POST accepts JSON, or multipart with up to 5 `images` files. Each review returns `verified_purchase`, `helpful_count`, `helpful_by_me`, `is_mine`, `images[]` |
-| POST/DELETE | /api/reviews/{id}/helpful/                   | JWT  | Toggle your "helpful" vote → `{helpful_count, helpful_by_me}`; 400 on your own review |
+| GET/POST   | /api/products/{slug}/reviews/                 | —/JWT | List reviews (`?ordering=helpful`) / create (one per user; JSON or multipart with up to 5 `images`) |
+| POST/DELETE | /api/reviews/{id}/helpful/                   | JWT  | Toggle "helpful" vote → `{helpful_count, helpful_by_me}`; 400 on your own review |
 | GET        | /api/categories/                              | —    | Flat list                                                        |
 | GET        | /api/categories/{slug}/                       | —    | By direct slug                                                   |
 | GET        | /api/categories/tree/                         | —    | Full nested tree (roots → children)                              |
 | GET        | /api/categories/by-path/?path=a/b/c           | —    | Category by `full_slug`, with ancestors + children               |
 
-Product list query params:
-`search`, `category__slug`, `category_path` (matches category and all descendants),
-`price__gte`, `price__lte`, `in_stock=true`, `ordering` (`-?price`, `-?created_at`), `page`.
+Product list params: `search`, `category__slug`, `category_path` (category + descendants), `price__gte`, `price__lte`, `in_stock=true`, `ordering` (`-?price`, `-?created_at`), `page`.
 
 ### Orders
 
 | Method | Path                              | Auth | Purpose                                                                |
 |--------|-----------------------------------|------|------------------------------------------------------------------------|
 | GET    | /api/orders/                      | JWT  | List my orders (with structured shipping snapshot)                     |
-| POST   | /api/orders/                      | JWT  | Create order — body accepts `shipping_address_id` or legacy `shipping_address` text; each item may carry a `variant` id (required for variant products); optional `coupon_code` applies a promo; response includes `subtotal`, `discount_total`, `tax_total`, `shipping_total`, and `coupon_code` |
-| GET    | /api/orders/{id}/                 | JWT  | Order detail                                                           |
-| POST   | /api/orders/{id}/create-payment-intent/ | JWT  | Start payment for a pending order → `{client_secret, publishable_key, mock}` (Stripe when keyed, mock stub otherwise) |
-| POST   | /api/orders/{id}/pay/             | JWT  | Confirm payment → paid. Mock mode confirms immediately; live mode requires a succeeded PaymentIntent |
-| POST   | /api/payments/webhook/            | Stripe sig | Stripe webhook — `payment_intent.succeeded` marks the order paid (authoritative, signature-verified) |
+| POST   | /api/orders/                      | JWT  | Create order — `shipping_address_id` or `shipping_address`; items may carry a `variant`; optional `coupon_code`; response has full price breakdown |
+| GET    | /api/orders/{id}/                 | JWT  | Order detail (per-status timestamps, tracking, `refunded_total`, `events` audit) |
+| POST   | /api/orders/{id}/create-payment-intent/ | JWT  | Start payment → `{client_secret, publishable_key, mock}` (Stripe when keyed, mock otherwise) |
+| POST   | /api/orders/{id}/pay/             | JWT  | Confirm payment → paid (mock confirms immediately; live verifies the intent amount) |
+| POST   | /api/payments/webhook/            | Stripe sig | `payment_intent.succeeded` marks the order paid (authoritative, signature- + amount-verified) |
 | POST   | /api/orders/{id}/cancel/          | owner/staff | Cancel a pending/paid order (restock + release coupon)          |
-| POST   | /api/orders/{id}/ship/            | staff | Body `{tracking_number, tracking_carrier}` → shipped              |
+| POST   | /api/orders/{id}/ship/            | staff | `{tracking_number, tracking_carrier}` → shipped                  |
 | POST   | /api/orders/{id}/deliver/         | staff | shipped → delivered                                               |
-
-Order detail now includes per-status timestamps (`paid_at`, `shipped_at`, `delivered_at`, `cancelled_at`), `tracking_number`, `tracking_carrier`, `refunded_total`, and an `events` audit timeline. Staff users see all orders; ship/deliver/cancel (staff path) are also available as Django admin actions.
 
 ### Coupons
 
-| Method | Path                  | Auth | Purpose                                                                                              |
-|--------|-----------------------|------|------------------------------------------------------------------------------------------------------|
-| POST   | /api/coupons/quote/   | JWT  | Price a cart with an optional `code`; returns the breakdown (subtotal, discount, shipping, total) with `coupon_error` inline for an invalid code |
+| Method | Path                  | Auth | Purpose                                                                 |
+|--------|-----------------------|------|-------------------------------------------------------------------------|
+| POST   | /api/coupons/quote/   | JWT  | Price a cart with optional `code`; returns breakdown with `coupon_error` inline |
 
 ### Returns
 
-| Method   | Path                           | Auth        | Purpose                                                          |
-|----------|--------------------------------|-------------|------------------------------------------------------------------|
-| GET/POST | /api/returns/                  | JWT         | List my returns / request a return (line items + reason)         |
-| GET      | /api/returns/{id}/             | owner/staff | Return detail                                                    |
-| POST     | /api/returns/{id}/approve/     | staff       | requested → approved                                             |
-| POST     | /api/returns/{id}/reject/      | staff       | → rejected (`{staff_note}`)                                      |
-| POST     | /api/returns/{id}/receive/     | staff       | approved → received (restock)                                    |
-| POST     | /api/returns/{id}/refund/      | staff       | received → refunded (proportional, mock)                         |
+| Method   | Path                           | Auth        | Purpose                                          |
+|----------|--------------------------------|-------------|--------------------------------------------------|
+| GET/POST | /api/returns/                  | JWT         | List my returns / request one (line items + reason) |
+| GET      | /api/returns/{id}/             | owner/staff | Return detail                                    |
+| POST     | /api/returns/{id}/approve/     | staff       | requested → approved                             |
+| POST     | /api/returns/{id}/reject/      | staff       | → rejected (`{staff_note}`)                      |
+| POST     | /api/returns/{id}/receive/     | staff       | approved → received (restock)                    |
+| POST     | /api/returns/{id}/refund/      | staff       | received → refunded (proportional)              |
 
-Return requests are accepted only on delivered orders within the return window (default 30 days, configurable via `RETURN_WINDOW_DAYS`). The refund is proportional to the line-item discount and includes the tax charged on the returned items; shipping is not refunded. Quantities cannot exceed the original purchased quantity. Order status reflects `partially_refunded` or `refunded` once refunds are issued.
+Returns are accepted only on delivered orders within `RETURN_WINDOW_DAYS` (default 30). Refund is proportional to the line discount + the tax charged; shipping isn't refunded; quantities can't exceed those purchased.
 
 ### Cart
 
@@ -276,10 +191,10 @@ Return requests are accepted only on delivered orders within the return window (
 |--------|---------------------------------|------|----------------------------------------------------------------|
 | GET    | /api/cart/                      | JWT  | My cart with nested products + computed total                  |
 | DELETE | /api/cart/                      | JWT  | Clear the cart                                                 |
-| POST   | /api/cart/items/                | JWT  | Add `{product, quantity, variant?}` (increments; capped at the SKU's stock; a variant product requires `variant`) |
+| POST   | /api/cart/items/                | JWT  | Add `{product, quantity, variant?}` (increments; capped at stock) |
 | PATCH  | /api/cart/items/{product_id}/   | JWT  | Set quantity (≤0 removes; capped at stock)                     |
 | DELETE | /api/cart/items/{product_id}/   | JWT  | Remove a line                                                  |
-| POST   | /api/cart/merge/                | JWT  | Merge a guest cart `{items:[{product, quantity}]}` — quantities **summed**, capped at stock |
+| POST   | /api/cart/merge/                | JWT  | Merge a guest cart — quantities **summed**, capped at stock    |
 
 ### Wishlist
 
@@ -290,8 +205,6 @@ Return requests are accepted only on delivered orders within the return window (
 | DELETE | /api/wishlist/items/{product_id}/ | JWT  | Remove                                                 |
 | POST   | /api/wishlist/merge/              | JWT  | Merge a guest wishlist `{product_ids:[...]}` — **unioned** |
 
-Logged-in cart/wishlist are server-backed; guests use `localStorage` and merge into the server on login.
-
 ### Notifications & push
 
 | Method | Path                                   | Auth | Purpose                                              |
@@ -301,14 +214,90 @@ Logged-in cart/wishlist are server-backed; guests use `localStorage` and merge i
 | POST   | /api/notifications/{id}/read/          | JWT  | Mark one read                                        |
 | POST   | /api/notifications/read-all/           | JWT  | Mark all read                                        |
 | GET    | /api/push/config/                      | —    | `{enabled, public_key}` — VAPID key for subscribing  |
-| POST   | /api/push/subscribe/                   | JWT  | Register a browser `PushSubscription` (upsert)       |
-| DELETE | /api/push/subscribe/                   | JWT  | Remove a subscription by `{endpoint}`                |
+| POST/DELETE | /api/push/subscribe/              | JWT  | Register / remove a browser `PushSubscription`       |
+
+</details>
+
+<details>
+<summary><strong>Full feature list</strong> (design & UX, catalog, PDP, checkout, orders, notifications, auth, admin)</summary>
+
+### Design & UX
+- **Design system**: Indigo (brand) + Amber (deal) token palette, Inter via `next/font`, shared primitives (`Button`, `Badge`, `Price`)
+- **Price-forward cards**: big price + struck-through compare-at + %-off flag, wishlist heart, "Only N left" urgency, free-shipping tag, `★ 4.5 (10) · 120 sold` meta
+- **Buy box** on PDP: delivery estimate, dual CTA, quantity, trust badges — sticky on desktop
+- **Homepage**: gradient hero, shop-by-category tiles, "Deals of the day" rail with live countdown
+- **Mobile chrome**: trust top-bar, bottom tab nav, real footer, free-shipping progress nudge in the cart
+- Route-level skeletons and rich empty states (cart / wishlist / orders)
+
+### Catalog
+- Hierarchical categories (parent / `full_slug` / `level`), category landing pages at clean URLs (`/c/electronics/audio`), mega-menu, breadcrumbs
+- Faceted filtering (price range, in-stock, category-and-descendants), sort (featured/newest/price), category-scoped search
+- Debounced typeahead autocomplete with thumbnail/price rows, keyboard nav, stale-response guarding
+- Shareable paginated grids; personalized "Recommended for you" rail
+
+### Product detail
+- Server-rendered with `generateMetadata` + `schema.org Product` JSON-LD (aggregate rating)
+- Image gallery + fullscreen lightbox; hash-driven shareable tabs; specifications table
+- Reviews: summary + 5-bar histogram, **verified-purchase badge** (snapshotted at write time), **photo reviews** (≤5, server-validated bytes), **"helpful" votes** (one/user, optimistic, self-vote disallowed)
+- **Product variants** (size/color/SKU): per-variant stock + optional price override; cart, checkout, stock decrement, and refunds all variant-aware
+- Related + recently-viewed rails; "X sold" social proof from real orders
+
+### Cart & checkout
+- Server-persisted cart & wishlist; guest items **merge on login** (quantities summed/capped, wishlist unioned)
+- Save-for-later; saved-address picker; structured shipping snapshot on orders (immutable to later edits)
+- Stripe Elements + signature-verified webhook; **keyless mock payment** without keys
+- Promo codes (percent / fixed / free-shipping / BOGO), flat-fee shipping waived over $50, configurable sales tax
+
+### Orders & returns
+- Full lifecycle (pay → ship w/ tracking → deliver) + customer cancel (restock + coupon release), each in a per-order audit timeline
+- Line-item returns/RMA with staff approve → receive (restock) → refund
+
+### Notifications
+- Every lifecycle event fans out to in-app + email + Web Push from one `notify()` call (off the request path)
+- In-app center (header bell + `/account/notifications`), console/SMTP email, VAPID Web Push — each degrades gracefully
+
+### Auth & profile
+- Register, login by username **or** email, logout (refresh-token blacklist), **Google sign-in**, JWT auto-refresh
+- Email verification, forgot/reset password, account hub, profile (avatar/bio/DOB), **phone verification** (rate-limited, attempt-capped, constant-time), address book
+
+### Admin
+- Hierarchy-aware admin for the full catalog + orders/users/reviews/coupons/returns; inline image/variant editing; order/return transitions as admin actions
+
+</details>
+
+## Optional integrations
+
+All three are **off by default and the app runs fine without them.** Set the env vars to switch each on.
+
+<details>
+<summary>Stripe payments · Web Push · Google sign-in — setup</summary>
+
+**Stripe** (`backend/.env`): `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`. Forward webhooks locally with `stripe listen --forward-to localhost:8000/api/payments/webhook/`. The publishable key is served to the frontend by the API.
+
+**Web Push**: `python -m py_vapid --gen`, then set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_ADMIN_EMAIL`. The subscribe toggle appears once configured; otherwise it's hidden.
+
+**Google sign-in**: create an OAuth 2.0 Web client, add your frontend origin to Authorized JS origins, set `GOOGLE_OAUTH_CLIENT_ID`. The frontend fetches the client id from the API; without it the button doesn't render.
+
+</details>
+
+## Testing & CI
+
+- **~250 backend tests** (DRF `APITestCase`) across auth, catalog, variants, cart, orders, coupons, tax, returns, reviews, notifications, payments, and the concurrency paths — plus a smoke test that the OpenAPI schema builds.
+- **GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) on every push/PR: a backend job on **Postgres 16** (exercising the full-text path) and a frontend job running `tsc --noEmit` + `next build`.
+
+```bash
+cd backend && python manage.py test        # backend suite
+cd frontend && npm run build               # type-check + production build
+```
 
 ## Documentation
 
 - [Architecture](./docs/ARCHITECTURE.md)
+- [Concurrency & money-path audit](./docs/CONCURRENCY.md)
 - [Deployment to Google Cloud](./docs/DEPLOYMENT.md)
 
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE).
+</content>
+</invoke>
