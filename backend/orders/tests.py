@@ -1,5 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -201,6 +202,30 @@ class ReleaseExpiredOrdersTests(APITestCase):
         call_command("release_expired_orders")
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.PENDING)
+
+    def test_batch_survives_an_order_that_raced_out_of_pending(self):
+        from orders import transitions
+
+        o1, o2 = self._pending_order(), self._pending_order()
+        Order.objects.filter(pk__in=[o1.pk, o2.pk]).update(
+            created_at=timezone.now() - timedelta(hours=2)
+        )
+        real_cancel = transitions.cancel
+
+        def flaky(order, actor=None):
+            if order.pk == o1.pk:  # simulate: paid between the query and cancel()
+                raise transitions.TransitionError("raced to paid")
+            return real_cancel(order, actor=actor)
+
+        with patch(
+            "orders.management.commands.release_expired_orders.transitions.cancel",
+            side_effect=flaky,
+        ):
+            call_command("release_expired_orders")
+
+        o2.refresh_from_db()
+        # The raced o1 was skipped; the batch still released o2 instead of aborting.
+        self.assertEqual(o2.status, Order.Status.CANCELLED)
 
 
 class OrderLifecycleTests(APITestCase):

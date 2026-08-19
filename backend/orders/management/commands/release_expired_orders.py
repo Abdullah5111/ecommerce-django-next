@@ -33,8 +33,13 @@ class Command(BaseCommand):
         released = 0
         for order in stale:
             # cancel() restocks every line and deletes the coupon redemption; an
-            # unpaid order takes the no-refund branch.
-            transitions.cancel(order)
+            # unpaid order takes the no-refund branch. An order that raced to PAID
+            # (or was already cancelled) since the query fails cancel()'s state
+            # check — skip it instead of aborting the whole batch.
+            try:
+                transitions.cancel(order)
+            except transitions.TransitionError:
+                continue
             released += 1
 
         self.stdout.write(f"Released {released} expired pending order(s).")
