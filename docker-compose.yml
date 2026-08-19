@@ -29,9 +29,15 @@ services:
              gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 3"
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        # Client (browser) calls the published backend port; baked into the bundle.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api}
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000/api
+      # Server-side rendering runs inside the container — reach the backend service
+      # directly, not the frontend's own localhost.
+      INTERNAL_API_URL: http://backend:8000/api
     depends_on:
       - backend
     ports:

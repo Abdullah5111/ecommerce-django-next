@@ -1,6 +1,13 @@
 import { auth } from "./auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+// Client bundles call the browser-facing URL (inlined at build via NEXT_PUBLIC_*).
+// Server components run inside the container/instance: they use INTERNAL_API_URL
+// when set (e.g. http://backend:8000/api under docker compose) so they don't hit
+// the frontend's own localhost, falling back to the public URL for plain deploys.
+const API_URL =
+  (typeof window === "undefined"
+    ? process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL
+    : process.env.NEXT_PUBLIC_API_URL) || "http://localhost:8000/api";
 
 export type Category = {
   id: number;
