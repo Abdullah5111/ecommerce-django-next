@@ -3,13 +3,17 @@
 ``notify()`` records an in-app Notification, emails, and web-pushes — best-effort
 on the side channels, so a failed email/push never breaks the caller. Order
 transitions call ``notify_order()`` from ``on_commit`` (never on a rollback).
+
+The in-app row is written synchronously; email + push are handed to
+``dispatch.run`` so they can leave the request path when ``NOTIFICATIONS_ASYNC``
+is on (inline otherwise).
 """
 import logging
 
 from django.conf import settings
 from django.core.mail import send_mail
 
-from . import push
+from . import dispatch, push
 from .models import Notification
 
 logger = logging.getLogger(__name__)
@@ -20,10 +24,15 @@ def notify(user, kind, title, body="", order=None, email=True):
     notification = Notification.objects.create(
         user=user, kind=kind, title=title, body=body, order=order
     )
+    dispatch.run(_deliver, user, title, body, order, email)
+    return notification
+
+
+def _deliver(user, title, body, order, email):
+    """The side-channel fan-out — runs inline or in a background thread."""
     if email and user.email:
         _send_email(user, title, body, order)
     _send_push(user, title, body, order)
-    return notification
 
 
 def _send_email(user, title, body, order):

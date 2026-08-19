@@ -178,6 +178,12 @@ EMAIL_BACKEND = config(
 )
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@example.com")
 
+# Deliver notification email + web push off the request path via a small thread
+# pool. Off by default so tests (and local dev) deliver inline and deterministically;
+# turn on in production so order transitions don't block on SMTP / push endpoints.
+NOTIFICATIONS_ASYNC = config("NOTIFICATIONS_ASYNC", default=False, cast=bool)
+NOTIFICATIONS_WORKERS = config("NOTIFICATIONS_WORKERS", default=4, cast=int)
+
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
     default="http://localhost:3000",

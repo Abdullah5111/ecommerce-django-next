@@ -6,7 +6,7 @@ from django.core import mail
 from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
-from notifications import push
+from notifications import dispatch, push
 from notifications.models import Notification, PushSubscription
 from notifications.service import notify
 from orders.models import Order
@@ -35,6 +35,11 @@ class NotifyServiceTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].subject, "Order #1 confirmed")
         self.assertEqual(mail.outbox[0].to, ["buyer@example.com"])
+
+    def test_notify_routes_delivery_through_dispatch(self):
+        with patch("notifications.service.dispatch.run") as run:
+            notify(self.user, Notification.Kind.ORDER_PAID, "t", "b")
+        run.assert_called_once()
 
     def test_refund_copy_distinguishes_partial(self):
         import types
@@ -67,6 +72,20 @@ class NotifyServiceTests(TestCase):
         with patch.object(push, "send", return_value=True) as send:
             notify(self.user, Notification.Kind.ORDER_SHIPPED, "shipped", "on its way")
         self.assertEqual(send.call_count, 2)
+
+
+class DispatchTests(TestCase):
+    def test_run_is_synchronous_by_default(self):
+        box = []
+        self.assertIsNone(dispatch.run(box.append, 1))
+        self.assertEqual(box, [1])
+
+    @override_settings(NOTIFICATIONS_ASYNC=True)
+    def test_run_executes_task_in_background_when_async(self):
+        box = []
+        future = dispatch.run(box.append, 1)
+        future.result(timeout=5)  # a real Future — the pool ran it off-thread
+        self.assertEqual(box, [1])
 
 
 class OrderEventNotificationTests(APITestCase):
