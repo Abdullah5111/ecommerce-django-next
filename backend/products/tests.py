@@ -388,7 +388,11 @@ class RecommendedTests(APITestCase):
         self.assertGreaterEqual(len(res.data), 1)
 
     def test_recommendations_from_purchase_history(self):
-        order = Order.objects.create(user=self.user, shipping_address="x")
+        # A real (paid) purchase — only SOLD_STATUSES orders count as "owned",
+        # so a pending order would (correctly) not exclude the product.
+        order = Order.objects.create(
+            user=self.user, shipping_address="x", status=Order.Status.PAID
+        )
         OrderItem.objects.create(order=order, product=self.phone, quantity=1, unit_price=Decimal("500"))
         self.client.force_authenticate(self.user)
         res = self.client.get("/api/products/recommended/")
