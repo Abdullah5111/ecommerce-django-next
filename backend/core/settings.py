@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "django_filters",
+    "drf_spectacular",
     "accounts",
     "products",
     "orders",
@@ -152,6 +153,7 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 12,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     # Applied per-view via throttle_classes. State lives in the cache, so with
     # the default LocMemCache limits are per-instance (use Redis for cluster-wide).
     "DEFAULT_THROTTLE_RATES": {
@@ -162,6 +164,26 @@ REST_FRAMEWORK = {
         "auth-register": "10/hour",
         "auth-password": "10/hour",
     },
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Commerce API",
+    "DESCRIPTION": (
+        "REST API for a full-stack storefront: catalog & search, cart, coupons, "
+        "orders with a state machine, returns/refunds, Stripe payments (with a "
+        "keyless mock mode), and notifications. JWT auth via the /api/auth/token/ "
+        "endpoints — click Authorize and paste an access token."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,  # don't list the schema endpoint in itself
+    "SWAGGER_UI_SETTINGS": {"persistAuthorization": True},
+    "TAGS": [
+        {"name": "auth", "description": "Registration, login, tokens, profile, addresses."},
+        {"name": "products", "description": "Catalog, search, categories, reviews."},
+        {"name": "orders", "description": "Checkout, order lifecycle, payments."},
+        {"name": "coupons", "description": "Discount quoting and validation."},
+        {"name": "returns", "description": "Return requests and refunds."},
+    ],
 }
 
 SIMPLE_JWT = {
