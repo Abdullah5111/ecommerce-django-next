@@ -20,7 +20,11 @@ class PushSubscriptionSerializer(serializers.ModelSerializer):
     def to_internal_value(self, data):
         """Accept the browser's shape `{ endpoint, keys: { p256dh, auth } }` → flat fields."""
         if not isinstance(data, dict):
-            raise serializers.ValidationError("Expected an object with an endpoint and keys.")
+            # Dict-shaped so .errors (a ReturnDict) can render it; a bare string
+            # makes self._errors a list and ReturnDict() then raises ValueError.
+            raise serializers.ValidationError(
+                {"non_field_errors": ["Expected an object with an endpoint and keys."]}
+            )
         keys = data.get("keys") if isinstance(data.get("keys"), dict) else {}
         return super().to_internal_value({
             "endpoint": data.get("endpoint"),
