@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
+from asgiref.sync import sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -286,7 +287,9 @@ class WebSocketPushTests(TransactionTestCase):
         comm = self._comm(self.user)
         connected, _ = await comm.connect()
         self.assertTrue(connected)
-        notify(self.user, Notification.Kind.ORDER_PAID, "Order #1 confirmed", "Thanks!")
+        await sync_to_async(notify)(
+            self.user, Notification.Kind.ORDER_PAID, "Order #1 confirmed", "Thanks!"
+        )
         msg = await comm.receive_json_from()
         self.assertEqual(msg["type"], "notification")
         self.assertEqual(msg["notification"]["kind"], "order_paid")
@@ -314,21 +317,25 @@ class WebSocketPushTests(TransactionTestCase):
         self.assertFalse(connected)
         self.assertEqual(code, 4001)
 
+    def _ship_order(self):
+        """Sync helper: two real transactions — on_commit fires naturally here."""
+        order = _order(self.user)
+        transitions.mark_paid(order)
+        transitions.ship(order, tracking_number="1Z")
+        return order.id
+
     async def test_transition_pushes_notification_after_commit(self):
         comm = self._comm(self.user)
         connected, _ = await comm.connect()
         self.assertTrue(connected)
-        order = _order(self.user)
-        with self.captureOnCommitCallbacks(execute=True):
-            transitions.mark_paid(order)
-            transitions.ship(order, tracking_number="1Z")
+        order_id = await sync_to_async(self._ship_order)()
         first = await comm.receive_json_from()
         second = await comm.receive_json_from()
         self.assertEqual(
             [m["notification"]["kind"] for m in (first, second)],
             ["order_paid", "order_shipped"],
         )
-        self.assertEqual(second["notification"]["order"], order.id)
+        self.assertEqual(second["notification"]["order"], order_id)
         self.assertEqual(second["unread_count"], 2)
         await comm.disconnect()
 
@@ -336,7 +343,7 @@ class WebSocketPushTests(TransactionTestCase):
         comm = self._comm(self.other)
         connected, _ = await comm.connect()
         self.assertTrue(connected)
-        notify(self.user, Notification.Kind.ORDER_PAID, "private", "body")
+        await sync_to_async(notify)(self.user, Notification.Kind.ORDER_PAID, "private", "body")
         with self.assertRaises(asyncio.TimeoutError):
             await comm.receive_json_from(timeout=0.1)
         await comm.disconnect()
