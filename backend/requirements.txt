@@ -15,3 +15,8 @@ google-auth==2.49.0
 # Only imported when GS_BUCKET_NAME is set; local disk needs neither.
 django-storages==1.14.4
 google-cloud-storage==2.18.2
+# Realtime (WebSockets): Channels routing + daphne ASGI server.
+channels==4.2.2
+daphne==4.2.3
+# Only imported when REDIS_URL is set; the default InMemory layer needs none.
+channels-redis==5.0.0

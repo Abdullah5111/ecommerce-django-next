@@ -1,6 +1,6 @@
 # Deployment — Google Cloud Run
 
-This deploys the backend and frontend as two Cloud Run services backed by a single Cloud SQL Postgres instance.
+This deploys the backend and frontend as two Cloud Run services backed by a single Cloud SQL Postgres instance. The backend serves via daphne (ASGI), which the realtime WebSocket channel requires — Cloud Run supports WebSocket sessions natively.
 
 ## Prerequisites
 

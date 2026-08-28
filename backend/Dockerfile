@@ -19,4 +19,4 @@ RUN python manage.py collectstatic --noinput || true
 
 EXPOSE 8000
 
-CMD exec gunicorn core.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3
+CMD exec daphne -b 0.0.0.0 -p ${PORT:-8000} core.asgi:application

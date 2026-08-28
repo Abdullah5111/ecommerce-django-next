@@ -15,18 +15,30 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build: ./backend
     env_file: ./backend/.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       - "8000:8000"
     command: >
       sh -c "python manage.py migrate &&
              python manage.py shell < seed.py &&
-             gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+             daphne -b 0.0.0.0 -p 8000 core.asgi:application"
 
   frontend:
     build:

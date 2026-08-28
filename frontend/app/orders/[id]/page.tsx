@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { api, type Order, type ReturnRequest, type ReturnReason } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
+import { realtime } from "@/lib/realtime";
 
 const REASONS: { value: ReturnReason; label: string }[] = [
   { value: "defective", label: "Defective" },
@@ -47,6 +48,11 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     load();
+    const off = realtime.subscribe((m) => {
+      // Status changes arrive as notifications carrying this order's id.
+      if (m.type === "notification" && m.notification.order === id) load();
+    });
+    return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
