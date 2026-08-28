@@ -6,7 +6,7 @@ from unittest.mock import patch
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.core import mail
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
@@ -261,8 +261,13 @@ class PushApiTests(APITestCase):
         self.assertEqual(PushSubscription.objects.count(), 0)
 
 
-class WebSocketPushTests(TestCase):
-    """The /ws/notifications/ socket: token auth, live push, group isolation."""
+class WebSocketPushTests(TransactionTestCase):
+    """The /ws/notifications/ socket: token auth, live push, group isolation.
+
+    TransactionTestCase, not TestCase: the socket handshake hits the DB from
+    the middleware's database_sync_to_async path, which needs a real
+    connection, not TestCase's per-test transaction.
+    """
 
     def setUp(self):
         self.user = User.objects.create_user(
