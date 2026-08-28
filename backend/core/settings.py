@@ -11,12 +11,15 @@ DEBUG = config("DEBUG", default=True, cast=bool)
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*", cast=Csv())
 
 INSTALLED_APPS = [
+    # daphne must be first so its runserver (ASGI) wins over staticfiles'.
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "channels",
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
@@ -140,6 +143,19 @@ CACHES = {
         ),
         "LOCATION": config("CACHE_LOCATION", default="ecommerce-cache"),
     }
+}
+
+ASGI_APPLICATION = "core.asgi.application"
+
+# Realtime fan-out: Redis when REDIS_URL is set (multi-process safe), else the
+# per-process InMemory layer (dev, tests, and single-process deploys).
+REDIS_URL = config("REDIS_URL", default="")
+CHANNEL_LAYERS = {
+    "default": (
+        {"BACKEND": "channels_redis.core.RedisChannelLayer", "CONFIG": {"hosts": [REDIS_URL]}}
+        if REDIS_URL
+        else {"BACKEND": "channels.layers.InMemoryChannelLayer"}
+    )
 }
 
 REST_FRAMEWORK = {

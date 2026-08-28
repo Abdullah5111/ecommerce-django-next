@@ -1,14 +1,21 @@
+from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
+from asgiref.sync import sync_to_async
+from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.core import mail
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APITestCase
+from rest_framework_simplejwt.tokens import AccessToken
 
+from core.asgi import application
 from notifications import dispatch, push
 from notifications.models import Notification, PushSubscription
 from notifications.service import notify
+from orders import transitions
 from orders.models import Order
 from products.models import Category, Product
 
@@ -252,3 +259,89 @@ class PushApiTests(APITestCase):
         )
         self.assertEqual(res.status_code, 204)
         self.assertEqual(PushSubscription.objects.count(), 0)
+
+
+class WebSocketPushTests(TransactionTestCase):
+    """The /ws/notifications/ socket: token auth, live push, group isolation.
+
+    TransactionTestCase, not TestCase: the socket handshake hits the DB from
+    the middleware's database_sync_to_async path, which needs a real
+    connection, not TestCase's per-test transaction.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="buyer", email="buyer@example.com", password="pw-123456"
+        )
+        self.other = User.objects.create_user(
+            username="other", email="other@example.com", password="pw-123456"
+        )
+
+    def _comm(self, user):
+        token = str(AccessToken.for_user(user))
+        # The communicator parses the query out of the path into scope["query_string"].
+        return WebsocketCommunicator(application, f"/ws/notifications/?token={token}")
+
+    async def test_connects_with_valid_token_and_receives_broadcast(self):
+        comm = self._comm(self.user)
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        await sync_to_async(notify)(
+            self.user, Notification.Kind.ORDER_PAID, "Order #1 confirmed", "Thanks!"
+        )
+        msg = await comm.receive_json_from()
+        self.assertEqual(msg["type"], "notification")
+        self.assertEqual(msg["notification"]["kind"], "order_paid")
+        self.assertEqual(msg["notification"]["title"], "Order #1 confirmed")
+        self.assertEqual(msg["unread_count"], 1)
+        await comm.disconnect()
+
+    async def test_missing_token_rejected(self):
+        comm = WebsocketCommunicator(application, "/ws/notifications/")
+        connected, code = await comm.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4001)
+
+    async def test_garbage_token_rejected(self):
+        comm = WebsocketCommunicator(application, "/ws/notifications/?token=not-a-jwt")
+        connected, code = await comm.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4001)
+
+    async def test_expired_token_rejected(self):
+        token = AccessToken.for_user(self.user)
+        token.set_exp(from_time=timezone.now() - timedelta(hours=3), lifetime=timedelta(hours=1))
+        comm = WebsocketCommunicator(application, f"/ws/notifications/?token={token}")
+        connected, code = await comm.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4001)
+
+    def _ship_order(self):
+        """Sync helper: two real transactions — on_commit fires naturally here."""
+        order = _order(self.user)
+        transitions.mark_paid(order)
+        transitions.ship(order, tracking_number="1Z")
+        return order.id
+
+    async def test_transition_pushes_notification_after_commit(self):
+        comm = self._comm(self.user)
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        order_id = await sync_to_async(self._ship_order)()
+        first = await comm.receive_json_from()
+        second = await comm.receive_json_from()
+        self.assertEqual(
+            [m["notification"]["kind"] for m in (first, second)],
+            ["order_paid", "order_shipped"],
+        )
+        self.assertEqual(second["notification"]["order"], order_id)
+        self.assertEqual(second["unread_count"], 2)
+        await comm.disconnect()
+
+    async def test_other_users_socket_receives_nothing(self):
+        comm = self._comm(self.other)
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        await sync_to_async(notify)(self.user, Notification.Kind.ORDER_PAID, "private", "body")
+        self.assertTrue(await comm.receive_nothing(timeout=0.2))
+        await comm.disconnect()

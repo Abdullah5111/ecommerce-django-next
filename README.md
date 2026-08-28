@@ -7,7 +7,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-A production-shaped, full-stack storefront — Django REST Framework + Next.js 14 — built to demonstrate **correctness under concurrency, money-handling you can trust, and security done properly**, not just CRUD. Catalog & faceted search, cart, coupons, an order state machine, returns/refunds, Stripe payments, and multi-channel notifications, all covered by ~250 tests running on Postgres in CI.
+A production-shaped, full-stack storefront — Django REST Framework + Next.js 14 — built to demonstrate **correctness under concurrency, money-handling you can trust, and security done properly**, not just CRUD. Catalog & faceted search, cart, coupons, an order state machine, returns/refunds, Stripe payments, and multi-channel notifications, all covered by ~255 tests running on Postgres in CI.
 
 > **The whole app runs with zero external credentials.** Stripe, Google sign-in, and Web Push each degrade to a keyless mock so you can clone it and check out end-to-end in one command.
 
@@ -45,6 +45,7 @@ The parts that took real thought — each is backed by tests and, where it's sub
 
 **Architecture & ops**
 - Notification fan-out (email + Web Push) runs **off the request path** via a bounded thread pool (opt-in, no broker) so order transitions don't block on SMTP/push I/O.
+- **Realtime**: notifications and order-status changes push over an authenticated **Django Channels WebSocket** (`/ws/notifications/?token=`) — the header badge, toast, and any open order page update live, no polling. Per-process InMemory channel layer by default; `REDIS_URL` switches to Redis for multi-instance.
 - **OpenAPI 3** schema with Swagger UI / ReDoc; Dockerized; CI runs the suite on **Postgres 16** (so the full-text path is exercised, not just SQLite).
 
 ## Stack
@@ -52,7 +53,7 @@ The parts that took real thought — each is backed by tests and, where it's sub
 | Layer     | Tech                                                          |
 |-----------|---------------------------------------------------------------|
 | Frontend  | Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS   |
-| Backend   | Django 5, Django REST Framework, SimpleJWT (+ token blacklist)|
+| Backend   | Django 5, Django REST Framework, Django Channels, SimpleJWT (+ token blacklist)|
 | Database  | PostgreSQL 16 (SQLite for the simplest dev path)             |
 | Search    | Postgres `SearchVector` + `SearchRank` (icontains fallback), header typeahead |
 | API docs  | OpenAPI 3 via drf-spectacular — Swagger UI + ReDoc            |
@@ -216,6 +217,8 @@ Returns are accepted only on delivered orders within `RETURN_WINDOW_DAYS` (defau
 | GET    | /api/push/config/                      | —    | `{enabled, public_key}` — VAPID key for subscribing  |
 | POST/DELETE | /api/push/subscribe/              | JWT  | Register / remove a browser `PushSubscription`       |
 
+Realtime push: **`/ws/notifications/?token=<access>`** (WebSocket). Browsers can't send an `Authorization` header on a WS handshake, so the access token goes as a query param and is validated by `notifications/middleware.py` (anonymous → close 4001). On every `notify()` the server pushes `{"type": "notification", "notification": {...}, "unread_count": N}`; on reconnect clients re-fetch `unread_count` over REST as catch-up.
+
 </details>
 
 <details>
@@ -255,6 +258,7 @@ Returns are accepted only on delivered orders within `RETURN_WINDOW_DAYS` (defau
 ### Notifications
 - Every lifecycle event fans out to in-app + email + Web Push from one `notify()` call (off the request path)
 - In-app center (header bell + `/account/notifications`), console/SMTP email, VAPID Web Push — each degrades gracefully
+- Live **WebSocket** push (Django Channels) to the header bell + open order pages — replaces polling
 
 ### Auth & profile
 - Register, login by username **or** email, logout (refresh-token blacklist), **Google sign-in**, JWT auto-refresh
@@ -282,7 +286,7 @@ All three are **off by default and the app runs fine without them.** Set the env
 
 ## Testing & CI
 
-- **~250 backend tests** (DRF `APITestCase`) across auth, catalog, variants, cart, orders, coupons, tax, returns, reviews, notifications, payments, and the concurrency paths — plus a smoke test that the OpenAPI schema builds.
+- **~255 backend tests** (DRF `APITestCase`) across auth, catalog, variants, cart, orders, coupons, tax, returns, reviews, notifications, payments, and the concurrency paths — plus a smoke test that the OpenAPI schema builds.
 - **GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) on every push/PR: a backend job on **Postgres 16** (exercising the full-text path) and a frontend job running `tsc --noEmit` + `next build`.
 
 ```bash

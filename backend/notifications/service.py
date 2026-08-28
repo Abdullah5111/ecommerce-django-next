@@ -10,6 +10,7 @@ is on (inline otherwise).
 """
 import logging
 
+from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core.mail import send_mail
 
@@ -20,12 +21,51 @@ logger = logging.getLogger(__name__)
 
 
 def notify(user, kind, title, body="", order=None, email=True):
-    """Create a Notification and fan out to email + web push (best-effort)."""
+    """Create a Notification and fan out to websocket + email + web push (best-effort)."""
     notification = Notification.objects.create(
         user=user, kind=kind, title=title, body=body, order=order
     )
+    _broadcast(notification)
     dispatch.run(_deliver, user, title, body, order, email)
     return notification
+
+
+def _broadcast(notification):
+    """Push the new notification to its owner's websocket group (best-effort).
+
+    Runs synchronously on the caller thread (notify() is invoked from
+    on_commit callbacks, which execute on the worker thread), so
+    async_to_sync is safe in every context that reaches us.
+    """
+    try:
+        from channels.layers import get_channel_layer
+
+        layer = get_channel_layer()
+        if layer is None:
+            return
+        async_to_sync(layer.group_send)(
+            f"user_{notification.user_id}",
+            {
+                "type": "notification",
+                "json": {
+                    "type": "notification",
+                    "notification": {
+                        "id": notification.id,
+                        "kind": notification.kind,
+                        "title": notification.title,
+                        "body": notification.body,
+                        "order": notification.order_id,
+                        "is_read": notification.is_read,
+                        "created_at": notification.created_at.isoformat(),
+                    },
+                    "unread_count": Notification.objects.filter(
+                        user_id=notification.user_id, is_read=False
+                    ).count(),
+                },
+            },
+        )
+    except Exception:  # never let the socket layer break the caller
+        logger.exception("Websocket fan-out failed for notification %s", notification.pk)
 
 
 def _deliver(user, title, body, order, email):

@@ -5,11 +5,12 @@ import Link from "next/link";
 import { api, type AppNotification } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
-
-const POLL_MS = 30_000;
+import { realtime } from "@/lib/realtime";
+import { useToast } from "@/lib/useToast";
 
 export default function NotificationBell() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<AppNotification[] | null>(null);
@@ -18,26 +19,34 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!user) {
       setUnread(0);
+      realtime.disconnect();
       return;
     }
     let active = true;
-    const tick = async () => {
-      const token = auth.get();
-      if (!token) return;
-      try {
-        const { unread } = await api.unreadNotificationCount(token);
-        if (active) setUnread(unread);
-      } catch {
-        /* ignore transient errors */
+    const token = auth.get();
+    if (token) {
+      api
+        .unreadNotificationCount(token)
+        .then(({ unread }) => {
+          if (active) setUnread(unread);
+        })
+        .catch(() => {});
+    }
+    realtime.connect();
+    const off = realtime.subscribe((msg) => {
+      if (msg.type === "notification") {
+        setUnread(msg.unread_count); // server truth, includes this one
+        setItems((prev) => (prev ? [msg.notification, ...prev].slice(0, 8) : prev));
+        toast(msg.notification.title, "success");
+      } else if (msg.type === "unread_count") {
+        setUnread(msg.unread);
       }
-    };
-    tick();
-    const id = setInterval(tick, POLL_MS);
+    });
     return () => {
       active = false;
-      clearInterval(id);
+      off();
     };
-  }, [user]);
+  }, [user, toast]);
 
   useEffect(() => {
     if (!open) return;

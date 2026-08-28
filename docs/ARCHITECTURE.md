@@ -36,9 +36,9 @@ backend/
 │   └── migrations/
 ├── orders/                # Order, OrderItem + create/list/pay (with shipping snapshot)
 ├── payments/              # Stripe gateway (mock fallback) + PaymentIntent action + webhook
-├── notifications/         # in-app feed + email + Web Push fan-out on order events
+├── notifications/         # in-app feed + email + Web Push + WebSocket fan-out (service.py, consumers.py, middleware.py)
 ├── seed.py                # idempotent hierarchical seeder + reviews + specs
-├── Dockerfile             # python:3.12-slim + gunicorn
+├── Dockerfile             # python:3.12-slim + daphne (ASGI, for websockets)
 └── cloudbuild.yaml        # Cloud Build pipeline to Cloud Run
 ```
 
@@ -165,7 +165,7 @@ frontend/
 │   ├── FreeShippingBar.tsx              # cart progress toward free shipping
 │   ├── EmptyState.tsx                    # reusable empty state (icon + copy + CTA)
 │   ├── Header.tsx, MegaMenu.tsx          # nav; primary links desktop-only (mobile uses bottom nav)
-│   ├── NotificationBell.tsx              # unread badge + dropdown (polls unread count)
+│   ├── NotificationBell.tsx              # unread badge + dropdown (live via WebSocket)
 │   ├── ProductCard.tsx, RailCard.tsx     # price-forward card, wishlist heart, urgency, "X sold"
 │   ├── RecommendedRail.tsx               # personalized rail (logged-in)
 │   ├── StripePaymentForm.tsx             # Stripe Elements card form (live mode)
@@ -285,6 +285,14 @@ The legacy free-text `shipping_address` path on `POST /api/orders/` still works 
 `CACHES` is configured in `core/settings.py` and driven by `CACHE_BACKEND` / `CACHE_LOCATION` env vars (LocMem default; flip to `django.core.cache.backends.redis.RedisCache` + a Memorystore URL in production).
 
 Caching is used on `featured`, `bestsellers`, and per-product `related` (5-minute TTL). Invalidation is TTL-only; a `post_save` signal that calls `cache.delete(...)` per affected product is the obvious next step when writes need to land instantly.
+
+## Realtime
+
+Django Channels over daphne (ASGI). One consumer, one group per user — REST stays the source of truth, the socket is server-push only.
+
+- **Socket**: `ws/notifications/?token=<access>`. Browser WebSockets can't send an `Authorization` header, so `notifications/middleware.py` validates the `?token=` JWT (signature + expiry) into `scope["user"]`; anonymous handshakes close with code 4001. Trade-off: the token can appear in access logs — swap for one-time connect tickets if ever exposed publicly.
+- **Push**: `notify()` broadcasts `{type: "notification", notification: {...}, unread_count}` to group `user_<id>` right after writing the row, best-effort (a channel-layer failure logs, never breaks the caller). Every order status change already flows through `notify()` from `on_commit`, so transitions and refunds push for free — the order-detail page refetches when a notification carrying its id arrives.
+- **Scaling**: per-process `InMemoryChannelLayer` by default (dev/tests/single process); set `REDIS_URL` to switch to the Redis channel layer, required once more than one process/instance serves sockets.
 
 ## Search
 
