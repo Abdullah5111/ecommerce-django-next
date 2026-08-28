@@ -1,4 +1,3 @@
-import asyncio
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -344,6 +343,5 @@ class WebSocketPushTests(TransactionTestCase):
         connected, _ = await comm.connect()
         self.assertTrue(connected)
         await sync_to_async(notify)(self.user, Notification.Kind.ORDER_PAID, "private", "body")
-        with self.assertRaises(asyncio.TimeoutError):
-            await comm.receive_json_from(timeout=0.1)
+        self.assertTrue(await comm.receive_nothing(timeout=0.2))
         await comm.disconnect()
