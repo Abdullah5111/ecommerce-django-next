@@ -19,4 +19,4 @@ google-cloud-storage==2.18.2
 channels==4.2.2
 daphne==4.2.3
 # Only imported when REDIS_URL is set; the default InMemory layer needs none.
-channels-redis==5.0.0
+channels-redis==4.3.0
