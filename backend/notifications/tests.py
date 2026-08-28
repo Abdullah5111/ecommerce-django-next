@@ -279,9 +279,8 @@ class WebSocketPushTests(TransactionTestCase):
 
     def _comm(self, user):
         token = str(AccessToken.for_user(user))
-        return WebsocketCommunicator(
-            application, "/ws/notifications/", query_string=f"token={token}".encode()
-        )
+        # The communicator parses the query out of the path into scope["query_string"].
+        return WebsocketCommunicator(application, f"/ws/notifications/?token={token}")
 
     async def test_connects_with_valid_token_and_receives_broadcast(self):
         comm = self._comm(self.user)
@@ -302,9 +301,7 @@ class WebSocketPushTests(TransactionTestCase):
         self.assertEqual(code, 4001)
 
     async def test_garbage_token_rejected(self):
-        comm = WebsocketCommunicator(
-            application, "/ws/notifications/", query_string=b"token=not-a-jwt"
-        )
+        comm = WebsocketCommunicator(application, "/ws/notifications/?token=not-a-jwt")
         connected, code = await comm.connect()
         self.assertFalse(connected)
         self.assertEqual(code, 4001)
@@ -312,9 +309,7 @@ class WebSocketPushTests(TransactionTestCase):
     async def test_expired_token_rejected(self):
         token = AccessToken.for_user(self.user)
         token.set_exp(from_time=timezone.now() - timedelta(hours=3), lifetime=timedelta(hours=1))
-        comm = WebsocketCommunicator(
-            application, "/ws/notifications/", query_string=f"token={token}".encode()
-        )
+        comm = WebsocketCommunicator(application, f"/ws/notifications/?token={token}")
         connected, code = await comm.connect()
         self.assertFalse(connected)
         self.assertEqual(code, 4001)
