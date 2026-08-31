@@ -29,6 +29,9 @@ class UserSerializer(serializers.ModelSerializer):
             "bio",
             "date_of_birth",
             "gender",
+            # Read-only AND exposed: /staff UI needs it; if it were writable,
+            # PATCH /auth/me/ {"is_staff": true} would be a privilege hole.
+            "is_staff",
         )
         read_only_fields = (
             "id",
@@ -37,6 +40,7 @@ class UserSerializer(serializers.ModelSerializer):
             "phone",
             "phone_verified",
             "avatar",
+            "is_staff",
         )
 
     def get_avatar(self, obj):

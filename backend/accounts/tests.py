@@ -353,3 +353,21 @@ class PasswordResetRevokesSessionsTests(APITestCase):
         # The pre-reset refresh token can no longer mint access tokens.
         refreshed = self.client.post("/api/auth/token/refresh/", {"refresh": refresh})
         self.assertEqual(refreshed.status_code, 401)
+
+
+class MeStaffFlagTests(APITestCase):
+    """is_staff is exposed for the staff-inbox UI — and must be read-only,
+    or PATCH /auth/me/ {"is_staff": true} would be a privilege hole."""
+
+    def test_is_staff_exposed_but_not_writable(self):
+        user = User.objects.create_user(
+            username="pleb", email="pleb@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(user)
+        res = self.client.get("/api/auth/me/")
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data["is_staff"])
+        res = self.client.patch("/api/auth/me/", {"is_staff": True}, format="json")
+        self.assertEqual(res.status_code, 200)
+        user.refresh_from_db()
+        self.assertFalse(user.is_staff)
