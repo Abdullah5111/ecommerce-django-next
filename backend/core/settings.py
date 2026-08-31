@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     "wishlist",
     "payments",
     "notifications",
+    "chat",
 ]
 
 MIDDLEWARE = [
@@ -179,6 +180,7 @@ REST_FRAMEWORK = {
         "auth-login": "10/min",
         "auth-register": "10/hour",
         "auth-password": "10/hour",
+        "chat-send": "30/min",
     },
 }
 

@@ -37,6 +37,7 @@ backend/
 ├── orders/                # Order, OrderItem + create/list/pay (with shipping snapshot)
 ├── payments/              # Stripe gateway (mock fallback) + PaymentIntent action + webhook
 ├── notifications/         # in-app feed + email + Web Push + WebSocket fan-out (service.py, consumers.py, middleware.py)
+├── chat/                  # customer↔store support chat: models, REST, ChatConsumer (ws/chat/)
 ├── seed.py                # idempotent hierarchical seeder + reviews + specs
 ├── Dockerfile             # python:3.12-slim + daphne (ASGI, for websockets)
 └── cloudbuild.yaml        # Cloud Build pipeline to Cloud Run
@@ -293,6 +294,8 @@ Django Channels over daphne (ASGI). One consumer, one group per user — REST st
 - **Socket**: `ws/notifications/?token=<access>`. Browser WebSockets can't send an `Authorization` header, so `notifications/middleware.py` validates the `?token=` JWT (signature + expiry) into `scope["user"]`; anonymous handshakes close with code 4001. Trade-off: the token can appear in access logs — swap for one-time connect tickets if ever exposed publicly.
 - **Push**: `notify()` broadcasts `{type: "notification", notification: {...}, unread_count}` to group `user_<id>` right after writing the row, best-effort (a channel-layer failure logs, never breaks the caller). Every order status change already flows through `notify()` from `on_commit`, so transitions and refunds push for free — the order-detail page refetches when a notification carrying its id arrives.
 - **Scaling**: per-process `InMemoryChannelLayer` by default (dev/tests/single process); set `REDIS_URL` to switch to the Redis channel layer, required once more than one process/instance serves sockets.
+
+**Chat** rides a second consumer on the same auth middleware (`ws/chat/` → `chat/consumers.py`). Groups: `chat_u_<customer_id>` (buyers join their own at connect; staff join by watching — membership is the authorization) and a shared `chat_staff` inbox feed. Messages are created over REST (`POST /api/chat/messages/`, throttled) and broadcast on commit; the socket relays typing, read receipts (per-message `read_at` — also the source of unread counts), and presence. Client→server frame handlers are private (`_ws_*`) so they can't collide with the group-event dispatchers (`chat_*`).
 
 ## Search
 

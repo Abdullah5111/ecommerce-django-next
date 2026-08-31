@@ -9,6 +9,7 @@ export type AuthUser = {
   username: string;
   email: string;
   email_verified: boolean;
+  is_staff: boolean;
 };
 
 type AuthContextValue = {
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         username: me.username,
         email: me.email,
         email_verified: me.email_verified,
+        is_staff: me.is_staff,
       });
     } catch {
       auth.clear();

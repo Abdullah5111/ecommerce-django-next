@@ -10,6 +10,7 @@ import { AuthProvider } from "@/lib/useAuth";
 import { ToastProvider } from "@/lib/useToast";
 import { WishlistProvider } from "@/lib/useWishlist";
 import ToastContainer from "@/components/ToastContainer";
+import ChatWidget from "@/components/chat/ChatWidget";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Footer />
                 <MobileTabBar />
                 <ToastContainer />
+                <ChatWidget />
               </ToastProvider>
             </WishlistProvider>
           </CartProvider>

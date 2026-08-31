@@ -284,6 +284,27 @@ export type Me = {
   bio: string;
   date_of_birth: string | null;
   gender: Gender;
+  is_staff: boolean;
+};
+
+export type ChatThread = {
+  id: number;
+  user: number;
+  username: string;
+  unread: number;
+  last_message_at: string | null;
+  last_message_body: string | null;
+  created_at: string;
+};
+
+export type ChatMessage = {
+  id: number;
+  thread_user_id: number;
+  sender: number | null;
+  sender_username: string;
+  body: string;
+  read_at: string | null;
+  created_at: string;
 };
 
 export type Paginated<T> = { count: number; next: string | null; previous: string | null; results: T[] };
@@ -623,6 +644,30 @@ export const api = {
   markAllNotificationsRead: (token: string) =>
     request<{ marked_read: number }>(`/notifications/read-all/`, {
       method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  getChatThread: (token: string) =>
+    request<ChatThread>("/chat/thread/", {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  listChatMessages: (token: string, opts?: { thread?: number; cursor?: string }) => {
+    const q = new URLSearchParams();
+    if (opts?.thread) q.set("thread", String(opts.thread));
+    if (opts?.cursor) q.set("cursor", opts.cursor);
+    const qs = q.toString();
+    return request<{ next: string | null; previous: string | null; results: ChatMessage[] }>(
+      `/chat/messages/${qs ? `?${qs}` : ""}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  },
+  sendChatMessage: (token: string, body: string, thread?: number) =>
+    request<ChatMessage>("/chat/messages/", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(thread ? { body, thread } : { body }),
+    }),
+  listChatThreads: (token: string) =>
+    request<ChatThread[]>("/chat/threads/", {
       headers: { Authorization: `Bearer ${token}` },
     }),
   getPushConfig: () => request<PushConfig>(`/push/config/`, {}),

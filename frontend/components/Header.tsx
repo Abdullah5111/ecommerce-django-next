@@ -50,6 +50,11 @@ export default function Header() {
           {loading ? null : user ? (
             <div className="flex items-center gap-3">
               <NotificationBell />
+              {user.is_staff && (
+                <Link href="/staff/chat" className="hidden md:inline text-zinc-600 hover:underline">
+                  Inbox
+                </Link>
+              )}
               <Link href="/account" className="hidden md:inline text-zinc-600 hover:underline">
                 Hi, {user.username}
               </Link>

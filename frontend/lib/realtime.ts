@@ -1,11 +1,18 @@
 "use client";
 
-import { api, type AppNotification } from "./api";
+import { api, type AppNotification, type ChatMessage } from "./api";
 import { auth } from "./auth";
 
 export type RealtimeMessage =
   | { type: "notification"; notification: AppNotification; unread_count: number }
-  | { type: "unread_count"; unread: number };
+  | { type: "unread_count"; unread: number }
+  // chat — see backend/chat/consumers.py for the server side
+  | { type: "chat.message"; message: ChatMessage }
+  | { type: "chat.typing"; user_id: number; thread_user_id: number }
+  | { type: "chat.read"; thread_user_id: number; reader_id: number; read_at: string }
+  | { type: "chat.presence"; user_id: number; online: boolean }
+  // emitted on every (re)connect so subscribers can catch up on missed events
+  | { type: "realtime.open" };
 
 type Listener = (msg: RealtimeMessage) => void;
 
@@ -58,6 +65,7 @@ export const realtime = {
     };
     ws.onopen = () => {
       retry = 0;
+      emit({ type: "realtime.open" });
       resync();
     };
     ws.onclose = () => {
@@ -77,5 +85,12 @@ export const realtime = {
     return () => {
       listeners.delete(fn);
     };
+  },
+  // Ephemeral client→server frames (typing, read receipts, thread watch).
+  // Dropped while disconnected — reconnect's resync re-derives state anyway.
+  send(obj: Record<string, unknown>) {
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(obj));
+    }
   },
 };
