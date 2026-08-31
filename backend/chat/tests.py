@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 from asgiref.sync import sync_to_async
@@ -151,12 +152,17 @@ class ChatSocketTests(TransactionTestCase):
             thread=thread, sender=sender, body=body
         )
 
-    async def _recv_until(self, comm, pred, tries=5):
+    async def _recv_until(self, comm, pred, tries=6, timeout=0.5):
+        seen = []
         for _ in range(tries):
-            event = await comm.receive_json_from()
+            try:
+                event = await comm.receive_json_from(timeout=timeout)
+            except asyncio.TimeoutError:
+                continue
+            seen.append(event)
             if pred(event):
                 return event
-        raise AssertionError("expected event never arrived")
+        raise AssertionError(f"expected event never arrived; saw: {seen}")
 
     async def test_unauthenticated_rejected(self):
         comm = WebsocketCommunicator(application, "/ws/chat/")
