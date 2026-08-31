@@ -259,7 +259,14 @@ class ChatSocketTests(TransactionTestCase):
         self.assertIsNotNone(reloaded.read_at)
         await comm.disconnect()
 
-    async def test_presence_flows_both_ways(self):
+    # Presence: two minimal single-hop tests — one recv on one socket after
+    # setup, matching the shape of the (stable) typing relay test. Longer
+    # multi-phase choreography trips the harness's app-task lifecycle (the
+    # app future gets cancelled mid-test), and the offline broadcast on
+    # disconnect is the same _staff_feed call as online, so it isn't
+    # asserted through teardown at all.
+
+    async def test_buyer_presence_reaches_watching_staff(self):
         await self._thread(self.buyer)
         staff_comm = self._comm(self.staff)
         connected, _ = await staff_comm.connect()
@@ -270,22 +277,29 @@ class ChatSocketTests(TransactionTestCase):
         buyer_comm = self._comm(self.buyer)
         connected, _ = await buyer_comm.connect()
         self.assertTrue(connected)
-        # buyer's connect presence reaches the watching staff (staff feed)
         event = await self._recv_until(
             staff_comm,
             lambda e: e["type"] == "chat.presence" and e["user_id"] == self.buyer.id,
         )
         self.assertTrue(event["online"])
-        # staff's watch presence reaches the buyer (thread group)
+        await buyer_comm.disconnect(timeout=5)
+        await staff_comm.disconnect(timeout=5)
+
+    async def test_staff_presence_reaches_buyer_thread(self):
+        await self._thread(self.buyer)
+        buyer_comm = self._comm(self.buyer)
+        connected, _ = await buyer_comm.connect()
+        self.assertTrue(connected)
+        staff_comm = self._comm(self.staff)
+        connected, _ = await staff_comm.connect()
+        self.assertTrue(connected)
+        await staff_comm.send_to(
+            text_data=json.dumps({"type": "chat.watch", "thread_user_id": self.buyer.id})
+        )
         event = await self._recv_until(
             buyer_comm,
             lambda e: e["type"] == "chat.presence" and e["user_id"] == self.staff.id,
         )
         self.assertTrue(event["online"])
-        # The offline broadcast on disconnect is deliberately not asserted
-        # here: it is the same _staff_feed("chat.presence", ...) call as the
-        # online one above, and the test harness's app-task teardown
-        # (wait_for cancels the app future) makes cross-communicator asserts
-        # after disconnect unreliable.
-        await buyer_comm.disconnect(timeout=5)
         await staff_comm.disconnect(timeout=5)
+        await buyer_comm.disconnect(timeout=5)
