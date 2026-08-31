@@ -282,11 +282,14 @@ class ChatSocketTests(TransactionTestCase):
             lambda e: e["type"] == "chat.presence" and e["user_id"] == self.staff.id,
         )
         self.assertTrue(event["online"])
-        await buyer_comm.disconnect()
+        # Generous timeout: disconnect() waits for the consumer to finish, and
+        # on a loaded runner the default 1s wait_for can cancel the app task
+        # mid-broadcast, losing the offline event.
+        await buyer_comm.disconnect(timeout=5)
         event = await self._recv_until(
             staff_comm,
             lambda e: e["type"] == "chat.presence"
             and e["user_id"] == self.buyer.id
             and not e["online"],
         )
-        await staff_comm.disconnect()
+        await staff_comm.disconnect(timeout=5)
