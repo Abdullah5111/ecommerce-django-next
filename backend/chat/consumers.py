@@ -38,7 +38,8 @@ class ChatConsumer(JsonWebsocketConsumer):
         self.watching = set()  # customer ids this (staff) connection follows
         layer = self.channel_layer
         async_to_sync(layer.group_add)(thread_group(user.id), self.channel_name)
-        async_to_sync(layer.group_add)(STAFF_GROUP, self.channel_name)
+        if user.is_staff:  # staff only — buyers must never see other threads
+            async_to_sync(layer.group_add)(STAFF_GROUP, self.channel_name)
         self.accept()
         if not user.is_staff:
             self._staff_feed("chat.presence", {"user_id": user.id, "online": True})
@@ -55,7 +56,10 @@ class ChatConsumer(JsonWebsocketConsumer):
                 )
         else:
             self._staff_feed("chat.presence", {"user_id": user.id, "online": False})
-        for group in (thread_group(user.id), STAFF_GROUP):
+        groups = [thread_group(user.id)]
+        if user.is_staff:
+            groups.append(STAFF_GROUP)
+        for group in groups:
             async_to_sync(self.channel_layer.group_discard)(group, self.channel_name)
 
     # -- client → server. Private names on purpose: the public methods below

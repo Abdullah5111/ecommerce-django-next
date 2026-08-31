@@ -78,6 +78,7 @@ class ChatApiTests(APITestCase):
         self.assertEqual(res.status_code, 403)
 
     def test_staff_reply_sets_buyer_unread(self):
+        self.client.get("/api/chat/thread/")  # the buyer's thread must exist first
         res = self._post_as(self.staff, "hello from support", thread=self.buyer.id)
         self.assertEqual(res.status_code, 201)
         self.assertEqual(res.data["sender"], self.staff.id)
