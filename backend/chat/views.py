@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Count, F, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions
 from rest_framework.exceptions import ValidationError
@@ -41,12 +41,20 @@ def _thread_qs(viewer_is_staff):
 
 
 class ThreadView(APIView):
-    """GET /api/chat/thread/ — the caller's own thread (get-or-create)."""
+    """GET /api/chat/thread/ — the caller's own thread, if it exists yet (404
+    otherwise; the widget treats that as "no unread").
+
+    Threads are created by the first message (POST), not by this endpoint —
+    get-or-create here would spawn an empty row for every visitor who merely
+    loads a page with the widget mounted, cluttering the staff inbox.
+    """
 
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        thread, _ = ChatThread.objects.get_or_create(user=request.user)
+        thread = ChatThread.objects.filter(user=request.user).first()
+        if thread is None:
+            return Response(status=404)
         return Response(
             ChatThreadSerializer(_thread_qs(request.user.is_staff).get(pk=thread.pk)).data
         )
@@ -99,4 +107,8 @@ class ThreadsView(generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        return _thread_qs(viewer_is_staff=True).order_by("-last_message_at", "-id")
+        # nulls_last: threads with no messages yet (idle visitors) must not
+        # sort above active conversations — Postgres puts NULLs first on DESC.
+        return _thread_qs(viewer_is_staff=True).order_by(
+            F("last_message_at").desc(nulls_last=True), "-id"
+        )

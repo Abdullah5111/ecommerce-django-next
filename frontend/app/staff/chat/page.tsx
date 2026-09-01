@@ -17,11 +17,18 @@ export default function StaffChatPage() {
   const [threads, setThreads] = useState<ChatThread[] | null>(null);
   const [selected, setSelected] = useState<number | null>(null); // customer user id
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
+  const [olderCursor, setOlderCursor] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [typingFrom, setTypingFrom] = useState<number | null>(null);
   const [presence, setPresence] = useState<Record<number, boolean>>({});
   const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const lastTypingSent = useRef(0);
+  const threadsRef = useRef<ChatThread[] | null>(null);
+  const selectedRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
 
   useEffect(() => {
     if (!authLoading && (!user || !user.is_staff)) router.replace("/");
@@ -38,15 +45,30 @@ export default function StaffChatPage() {
   }, []);
 
   const loadMessages = useCallback(async (uid: number) => {
+    selectedRef.current = uid;
     const token = auth.get();
     if (!token) return;
     try {
       const page = await api.listChatMessages(token, { thread: uid });
-      setMessages(page.results);
+      // Rapid thread switching: only the newest selection may paint.
+      if (selectedRef.current !== uid) return;
+      // The API returns newest-first; render chronologically (oldest at top).
+      setMessages([...page.results].reverse());
+      setOlderCursor(page.next ? new URL(page.next).searchParams.get("cursor") : null);
     } catch {
-      setMessages([]);
+      if (selectedRef.current === uid) setMessages([]);
     }
   }, []);
+
+  const loadOlder = async () => {
+    const token = auth.get();
+    const uid = selected;
+    if (!token || uid === null || !olderCursor) return;
+    const page = await api.listChatMessages(token, { thread: uid, cursor: olderCursor });
+    if (selectedRef.current !== uid) return; // switched threads mid-fetch
+    setMessages((prev) => (prev ? [...[...page.results].reverse(), ...prev] : prev));
+    setOlderCursor(page.next ? new URL(page.next).searchParams.get("cursor") : null);
+  };
 
   const clearUnread = useCallback((uid: number) => {
     setThreads((prev) => prev?.map((t) => (t.user === uid ? { ...t, unread: 0 } : t)) ?? prev);
@@ -80,6 +102,9 @@ export default function StaffChatPage() {
     return realtime.subscribe((msg) => {
       if (msg.type === "chat.message") {
         const m = msg.message;
+        // A customer's first message creates a thread we don't have listed
+        // yet — refetch, or the conversation never shows up.
+        if (!threadsRef.current?.some((t) => t.user === m.thread_user_id)) loadThreads();
         setThreads((prev) =>
           prev?.map((t) =>
             t.user === m.thread_user_id
@@ -216,7 +241,14 @@ export default function StaffChatPage() {
               {messages === null ? (
                 <p className="text-zinc-500 text-sm text-center py-10">Loading…</p>
               ) : (
-                <MessageList messages={messages} meId={user.id} typing={typingFrom === selected} className="flex-1" />
+                <>
+                  {olderCursor && (
+                    <button onClick={loadOlder} className="text-xs text-brand hover:underline pt-2 self-center">
+                      Load older messages
+                    </button>
+                  )}
+                  <MessageList messages={messages} meId={user.id} typing={typingFrom === selected} className="flex-1" />
+                </>
               )}
               <form
                 onSubmit={(e) => {

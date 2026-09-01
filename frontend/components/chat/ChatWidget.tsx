@@ -13,6 +13,7 @@ export default function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
+  const [olderCursor, setOlderCursor] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [unread, setUnread] = useState(0);
   const [typing, setTyping] = useState(false);
@@ -43,11 +44,21 @@ export default function ChatWidget() {
     if (!token) return;
     try {
       const page = await api.listChatMessages(token);
-      setMessages(page.results);
+      // The API returns newest-first; render chronologically (oldest at top).
+      setMessages([...page.results].reverse());
+      setOlderCursor(page.next ? new URL(page.next).searchParams.get("cursor") : null);
     } catch {
       setMessages([]);
     }
   }, []);
+
+  const loadOlder = async () => {
+    const token = auth.get();
+    if (!token || !olderCursor) return;
+    const page = await api.listChatMessages(token, { cursor: olderCursor });
+    setMessages((prev) => (prev ? [...[...page.results].reverse(), ...prev] : prev));
+    setOlderCursor(page.next ? new URL(page.next).searchParams.get("cursor") : null);
+  };
 
   useEffect(() => {
     if (!user || user.is_staff) return;
@@ -155,7 +166,14 @@ export default function ChatWidget() {
           {messages === null ? (
             <p className="text-zinc-500 text-sm text-center py-10">Loading…</p>
           ) : (
-            <MessageList messages={messages} meId={user.id} typing={typing} className="flex-1" />
+            <>
+              {olderCursor && (
+                <button onClick={loadOlder} className="text-xs text-brand hover:underline pt-2 self-center">
+                  Load older messages
+                </button>
+              )}
+              <MessageList messages={messages} meId={user.id} typing={typing} className="flex-1" />
+            </>
           )}
 
           <form

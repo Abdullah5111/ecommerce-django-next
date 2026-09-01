@@ -10,6 +10,7 @@ from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
 from unittest.mock import patch
 
+from chat import consumers
 from chat.models import ChatMessage, ChatThread
 from chat.service import broadcast_message
 from chat.throttling import ChatSendThrottle
@@ -34,7 +35,12 @@ class ChatApiTests(APITestCase):
     def _post(self, body, **extra):
         return self.client.post("/api/chat/messages/", {"body": body, **extra}, format="json")
 
-    def test_thread_get_or_create_is_idempotent(self):
+    def test_thread_appears_only_after_first_message(self):
+        # Opening the widget must NOT create a thread — otherwise every
+        # logged-in visitor spawns an empty row in the staff inbox.
+        self.assertEqual(self.client.get("/api/chat/thread/").status_code, 404)
+        self.assertEqual(ChatThread.objects.count(), 0)
+        self.assertEqual(self._post("hi").status_code, 201)
         first = self.client.get("/api/chat/thread/")
         second = self.client.get("/api/chat/thread/")
         self.assertEqual(first.status_code, 200)
@@ -78,8 +84,18 @@ class ChatApiTests(APITestCase):
         res = self.client.get("/api/chat/threads/")
         self.assertEqual(res.status_code, 403)
 
+    def test_empty_threads_sort_below_active_ones(self):
+        idle = User.objects.create_user(
+            username="idle", email="idle@example.com", password="pw-123456"
+        )
+        ChatThread.objects.create(user=idle)  # opened the widget, never messaged
+        self._post("active conversation")
+        self.client.force_authenticate(self.staff)
+        res = self.client.get("/api/chat/threads/")
+        self.assertEqual([t["username"] for t in res.data], ["buyer", "idle"])
+
     def test_staff_reply_sets_buyer_unread(self):
-        self.client.get("/api/chat/thread/")  # the buyer's thread must exist first
+        self._post("opening message")  # the buyer's thread must exist first
         res = self._post_as(self.staff, "hello from support", thread=self.buyer.id)
         self.assertEqual(res.status_code, 201)
         self.assertEqual(res.data["sender"], self.staff.id)
@@ -130,6 +146,10 @@ class ChatSocketTests(TransactionTestCase):
     """
 
     def setUp(self):
+        # The presence registry is module-global — like the cache, it is NOT
+        # rolled back between tests, so a leaked count would suppress
+        # later broadcasts.
+        consumers._online.clear()
         self.buyer = User.objects.create_user(
             username="ws_buyer", email="ws_buyer@example.com", password="pw-123456"
         )
@@ -303,3 +323,40 @@ class ChatSocketTests(TransactionTestCase):
         self.assertTrue(event["online"])
         await staff_comm.disconnect(timeout=5)
         await buyer_comm.disconnect(timeout=5)
+
+    async def test_presence_counts_connections_not_sockets(self):
+        # Multiple tabs count; "offline" only fires (broadcast-side) when the
+        # last one closes. Registry asserts directly — no teardown flakiness.
+        await self._thread(self.buyer)
+        buyer1 = self._comm(self.buyer)
+        connected, _ = await buyer1.connect()
+        self.assertTrue(connected)
+        buyer2 = self._comm(self.buyer)
+        connected, _ = await buyer2.connect()
+        self.assertTrue(connected)
+        self.assertEqual(consumers._online.get(self.buyer.id), 2)
+        await buyer1.disconnect()
+        self.assertEqual(consumers._online.get(self.buyer.id), 1)  # tab 2 still live
+        await buyer2.disconnect()
+        self.assertEqual(consumers._online.get(self.buyer.id, 0), 0)
+
+    async def test_watch_reports_current_presence(self):
+        # Presence events fire on transitions only, so a staff member opening
+        # a thread must get the customer's *current* state with the watch.
+        await self._thread(self.buyer)
+        buyer_comm = self._comm(self.buyer)
+        connected, _ = await buyer_comm.connect()
+        self.assertTrue(connected)
+        staff_comm = self._comm(self.staff)
+        connected, _ = await staff_comm.connect()
+        self.assertTrue(connected)
+        await staff_comm.send_to(
+            text_data=json.dumps({"type": "chat.watch", "thread_user_id": self.buyer.id})
+        )
+        event = await self._recv_until(
+            staff_comm,
+            lambda e: e["type"] == "chat.presence" and e["user_id"] == self.buyer.id,
+        )
+        self.assertTrue(event["online"])
+        await buyer_comm.disconnect(timeout=5)
+        await staff_comm.disconnect(timeout=5)
