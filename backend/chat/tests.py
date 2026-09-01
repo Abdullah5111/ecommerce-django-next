@@ -297,9 +297,13 @@ class ChatSocketTests(TransactionTestCase):
         buyer_comm = self._comm(self.buyer)
         connected, _ = await buyer_comm.connect()
         self.assertTrue(connected)
+        # the watch reply first reports the customer's current (offline) state;
+        # wait for the connect transition specifically
         event = await self._recv_until(
             staff_comm,
-            lambda e: e["type"] == "chat.presence" and e["user_id"] == self.buyer.id,
+            lambda e: e["type"] == "chat.presence"
+            and e["user_id"] == self.buyer.id
+            and e["online"],
         )
         self.assertTrue(event["online"])
         await buyer_comm.disconnect(timeout=5)
