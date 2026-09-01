@@ -22,6 +22,13 @@ from .models import ChatThread
 
 STAFF_GROUP = "chat_staff"
 
+# Process-local presence: user_id → live connection count. Broadcasts fire on
+# transitions only (first connect / last disconnect), so multiple tabs don't
+# flap. Under the InMemory layer this is per-process; REDIS_URL makes group
+# delivery cluster-wide but this counter stays local — Redis heartbeat keys
+# are the upgrade if that ever matters.
+_online: dict[int, int] = {}
+
 
 def thread_group(user_id):
     """Group name for a customer's thread — keyed by user id, so it exists
@@ -36,18 +43,26 @@ class ChatConsumer(JsonWebsocketConsumer):
             self.close(code=4001)  # unauthenticated — reject the handshake
             return
         self.watching = set()  # customer ids this (staff) connection follows
+        _online[user.id] = _online.get(user.id, 0) + 1
         layer = self.channel_layer
         async_to_sync(layer.group_add)(thread_group(user.id), self.channel_name)
         if user.is_staff:  # staff only — buyers must never see other threads
             async_to_sync(layer.group_add)(STAFF_GROUP, self.channel_name)
         self.accept()
-        if not user.is_staff:
+        if not user.is_staff and _online[user.id] == 1:
             self._staff_feed("chat.presence", {"user_id": user.id, "online": True})
 
     def disconnect(self, code):
         user = self.scope["user"]
         if not user.is_authenticated:
             return
+        count = max(0, _online.get(user.id, 0) - 1)
+        if count:
+            _online[user.id] = count
+        else:
+            _online.pop(user.id, None)
+            if not user.is_staff:
+                self._staff_feed("chat.presence", {"user_id": user.id, "online": False})
         if user.is_staff:
             for uid in list(self.watching):
                 self._thread(uid, "chat.presence", {"user_id": user.id, "online": False})
@@ -94,6 +109,11 @@ class ChatConsumer(JsonWebsocketConsumer):
         self.watching.add(uid)
         async_to_sync(self.channel_layer.group_add)(thread_group(uid), self.channel_name)
         self._thread(uid, "chat.presence", {"user_id": user.id, "online": True})
+        # Presence events fire on transitions only, so a newly watching
+        # connection needs the customer's current state, not just future ones.
+        self.send_json(
+            {"type": "chat.presence", "user_id": uid, "online": _online.get(uid, 0) > 0}
+        )
 
     def _ws_unwatch(self, msg):
         user = self.scope["user"]

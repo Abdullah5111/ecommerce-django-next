@@ -10,6 +10,7 @@ from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
 from unittest.mock import patch
 
+from chat import consumers
 from chat.models import ChatMessage, ChatThread
 from chat.service import broadcast_message
 from chat.throttling import ChatSendThrottle
@@ -145,6 +146,10 @@ class ChatSocketTests(TransactionTestCase):
     """
 
     def setUp(self):
+        # The presence registry is module-global — like the cache, it is NOT
+        # rolled back between tests, so a leaked count would suppress
+        # later broadcasts.
+        consumers._online.clear()
         self.buyer = User.objects.create_user(
             username="ws_buyer", email="ws_buyer@example.com", password="pw-123456"
         )
@@ -318,3 +323,40 @@ class ChatSocketTests(TransactionTestCase):
         self.assertTrue(event["online"])
         await staff_comm.disconnect(timeout=5)
         await buyer_comm.disconnect(timeout=5)
+
+    async def test_presence_counts_connections_not_sockets(self):
+        # Multiple tabs count; "offline" only fires (broadcast-side) when the
+        # last one closes. Registry asserts directly — no teardown flakiness.
+        await self._thread(self.buyer)
+        buyer1 = self._comm(self.buyer)
+        connected, _ = await buyer1.connect()
+        self.assertTrue(connected)
+        buyer2 = self._comm(self.buyer)
+        connected, _ = await buyer2.connect()
+        self.assertTrue(connected)
+        self.assertEqual(consumers._online.get(self.buyer.id), 2)
+        await buyer1.disconnect()
+        self.assertEqual(consumers._online.get(self.buyer.id), 1)  # tab 2 still live
+        await buyer2.disconnect()
+        self.assertEqual(consumers._online.get(self.buyer.id, 0), 0)
+
+    async def test_watch_reports_current_presence(self):
+        # Presence events fire on transitions only, so a staff member opening
+        # a thread must get the customer's *current* state with the watch.
+        await self._thread(self.buyer)
+        buyer_comm = self._comm(self.buyer)
+        connected, _ = await buyer_comm.connect()
+        self.assertTrue(connected)
+        staff_comm = self._comm(self.staff)
+        connected, _ = await staff_comm.connect()
+        self.assertTrue(connected)
+        await staff_comm.send_to(
+            text_data=json.dumps({"type": "chat.watch", "thread_user_id": self.buyer.id})
+        )
+        event = await self._recv_until(
+            staff_comm,
+            lambda e: e["type"] == "chat.presence" and e["user_id"] == self.buyer.id,
+        )
+        self.assertTrue(event["online"])
+        await buyer_comm.disconnect(timeout=5)
+        await staff_comm.disconnect(timeout=5)
