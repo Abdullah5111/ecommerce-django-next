@@ -34,7 +34,12 @@ class ChatApiTests(APITestCase):
     def _post(self, body, **extra):
         return self.client.post("/api/chat/messages/", {"body": body, **extra}, format="json")
 
-    def test_thread_get_or_create_is_idempotent(self):
+    def test_thread_appears_only_after_first_message(self):
+        # Opening the widget must NOT create a thread — otherwise every
+        # logged-in visitor spawns an empty row in the staff inbox.
+        self.assertEqual(self.client.get("/api/chat/thread/").status_code, 404)
+        self.assertEqual(ChatThread.objects.count(), 0)
+        self.assertEqual(self._post("hi").status_code, 201)
         first = self.client.get("/api/chat/thread/")
         second = self.client.get("/api/chat/thread/")
         self.assertEqual(first.status_code, 200)
@@ -78,8 +83,18 @@ class ChatApiTests(APITestCase):
         res = self.client.get("/api/chat/threads/")
         self.assertEqual(res.status_code, 403)
 
+    def test_empty_threads_sort_below_active_ones(self):
+        idle = User.objects.create_user(
+            username="idle", email="idle@example.com", password="pw-123456"
+        )
+        ChatThread.objects.create(user=idle)  # opened the widget, never messaged
+        self._post("active conversation")
+        self.client.force_authenticate(self.staff)
+        res = self.client.get("/api/chat/threads/")
+        self.assertEqual([t["username"] for t in res.data], ["buyer", "idle"])
+
     def test_staff_reply_sets_buyer_unread(self):
-        self.client.get("/api/chat/thread/")  # the buyer's thread must exist first
+        self._post("opening message")  # the buyer's thread must exist first
         res = self._post_as(self.staff, "hello from support", thread=self.buyer.id)
         self.assertEqual(res.status_code, 201)
         self.assertEqual(res.data["sender"], self.staff.id)
