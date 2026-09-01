@@ -22,6 +22,11 @@ export default function StaffChatPage() {
   const [presence, setPresence] = useState<Record<number, boolean>>({});
   const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const lastTypingSent = useRef(0);
+  const threadsRef = useRef<ChatThread[] | null>(null);
+
+  useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
 
   useEffect(() => {
     if (!authLoading && (!user || !user.is_staff)) router.replace("/");
@@ -80,6 +85,9 @@ export default function StaffChatPage() {
     return realtime.subscribe((msg) => {
       if (msg.type === "chat.message") {
         const m = msg.message;
+        // A customer's first message creates a thread we don't have listed
+        // yet — refetch, or the conversation never shows up.
+        if (!threadsRef.current?.some((t) => t.user === m.thread_user_id)) loadThreads();
         setThreads((prev) =>
           prev?.map((t) =>
             t.user === m.thread_user_id
