@@ -23,6 +23,7 @@ export default function StaffChatPage() {
   const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const lastTypingSent = useRef(0);
   const threadsRef = useRef<ChatThread[] | null>(null);
+  const selectedRef = useRef<number | null>(null);
 
   useEffect(() => {
     threadsRef.current = threads;
@@ -43,13 +44,16 @@ export default function StaffChatPage() {
   }, []);
 
   const loadMessages = useCallback(async (uid: number) => {
+    selectedRef.current = uid;
     const token = auth.get();
     if (!token) return;
     try {
       const page = await api.listChatMessages(token, { thread: uid });
+      // Rapid thread switching: only the newest selection may paint.
+      if (selectedRef.current !== uid) return;
       setMessages(page.results);
     } catch {
-      setMessages([]);
+      if (selectedRef.current === uid) setMessages([]);
     }
   }, []);
 
