@@ -21,12 +21,8 @@ class ChatMessageCursorPagination(CursorPagination):
 
 
 def _thread_qs(viewer_is_staff):
-    """Thread annotations shared by both surfaces.
-
-    ``unread`` counts the *other* side's messages still missing a read
-    receipt: for the buyer it's staff messages, for staff it's customer
-    messages (a shared staff inbox — any staff read clears it for all).
-    """
+    """Thread annotations; ``unread`` counts the *other* side's unread
+    messages (any staff read clears it — shared inbox)."""
     unread_senders = (
         Q(messages__sender__is_staff=False)
         if viewer_is_staff
@@ -41,13 +37,8 @@ def _thread_qs(viewer_is_staff):
 
 
 class ThreadView(APIView):
-    """GET /api/chat/thread/ — the caller's own thread, if it exists yet (404
-    otherwise; the widget treats that as "no unread").
-
-    Threads are created by the first message (POST), not by this endpoint —
-    get-or-create here would spawn an empty row for every visitor who merely
-    loads a page with the widget mounted, cluttering the staff inbox.
-    """
+    """GET /api/chat/thread/ — the caller's thread, or 404 if they have none.
+    Threads are created by the first message (POST), never by this endpoint."""
 
     permission_classes = [permissions.IsAuthenticated]
 

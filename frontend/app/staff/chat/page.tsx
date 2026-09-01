@@ -102,8 +102,7 @@ export default function StaffChatPage() {
     return realtime.subscribe((msg) => {
       if (msg.type === "chat.message") {
         const m = msg.message;
-        // A customer's first message creates a thread we don't have listed
-        // yet — refetch, or the conversation never shows up.
+        // a first-ever message creates a thread we don't have listed yet
         if (!threadsRef.current?.some((t) => t.user === m.thread_user_id)) loadThreads();
         setThreads((prev) =>
           prev?.map((t) =>

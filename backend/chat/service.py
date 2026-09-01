@@ -1,4 +1,3 @@
-"""Server → socket fan-out for chat (mirrors notifications.service._broadcast)."""
 import logging
 
 from asgiref.sync import async_to_sync
@@ -10,11 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 def broadcast_message(message):
-    """Push a new message to its thread group + the staff inbox (best-effort).
-
-    Called from ``transaction.on_commit`` in the POST view, so a rolled-back
-    insert never broadcasts.
-    """
+    """Push a new message to its thread group + staff inbox (best-effort)."""
     try:
         from channels.layers import get_channel_layer
 

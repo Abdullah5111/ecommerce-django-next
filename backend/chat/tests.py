@@ -36,8 +36,6 @@ class ChatApiTests(APITestCase):
         return self.client.post("/api/chat/messages/", {"body": body, **extra}, format="json")
 
     def test_thread_appears_only_after_first_message(self):
-        # Opening the widget must NOT create a thread — otherwise every
-        # logged-in visitor spawns an empty row in the staff inbox.
         self.assertEqual(self.client.get("/api/chat/thread/").status_code, 404)
         self.assertEqual(ChatThread.objects.count(), 0)
         self.assertEqual(self._post("hi").status_code, 201)
@@ -137,18 +135,12 @@ class ChatThrottleTests(APITestCase):
 
 
 class ChatSocketTests(TransactionTestCase):
-    """The /ws/chat/ socket: auth, isolation, and the typing/read/presence relays.
-
-    TransactionTestCase, not TestCase — the handshake hits the DB via
-    database_sync_to_async (see notifications.tests for the full story).
-    Staff may receive events twice (thread group + staff feed); the FE dedupes
-    message ids and treats the rest as idempotent, so tests use receive-until.
-    """
+    """The /ws/chat/ socket. TransactionTestCase, not TestCase — the handshake
+    hits the DB via database_sync_to_async. Staff may receive events twice
+    (thread group + staff feed); tests use receive-until."""
 
     def setUp(self):
-        # The presence registry is module-global — like the cache, it is NOT
-        # rolled back between tests, so a leaked count would suppress
-        # later broadcasts.
+        # module-global, like the cache — not rolled back between tests
         consumers._online.clear()
         self.buyer = User.objects.create_user(
             username="ws_buyer", email="ws_buyer@example.com", password="pw-123456"
@@ -279,12 +271,9 @@ class ChatSocketTests(TransactionTestCase):
         self.assertIsNotNone(reloaded.read_at)
         await comm.disconnect()
 
-    # Presence: two minimal single-hop tests — one recv on one socket after
-    # setup, matching the shape of the (stable) typing relay test. Longer
-    # multi-phase choreography trips the harness's app-task lifecycle (the
-    # app future gets cancelled mid-test), and the offline broadcast on
-    # disconnect is the same _staff_feed call as online, so it isn't
-    # asserted through teardown at all.
+    # Presence tests stay single-hop: multi-phase choreography trips the
+    # harness's app-task lifecycle, and the offline broadcast is the same
+    # _staff_feed call as online (asserted via the registry instead).
 
     async def test_buyer_presence_reaches_watching_staff(self):
         await self._thread(self.buyer)
@@ -297,8 +286,7 @@ class ChatSocketTests(TransactionTestCase):
         buyer_comm = self._comm(self.buyer)
         connected, _ = await buyer_comm.connect()
         self.assertTrue(connected)
-        # the watch reply first reports the customer's current (offline) state;
-        # wait for the connect transition specifically
+        # the watch reply first reports the current (offline) state
         event = await self._recv_until(
             staff_comm,
             lambda e: e["type"] == "chat.presence"

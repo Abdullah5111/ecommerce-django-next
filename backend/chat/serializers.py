@@ -22,9 +22,8 @@ class ChatMessageSerializer(serializers.ModelSerializer):
 
 
 class ChatThreadSerializer(serializers.ModelSerializer):
-    """Expects the ``unread`` / ``last_message_at`` / ``last_message_body``
-    annotations from ``views._thread_qs`` — unread counts the *other* side's
-    messages still missing a read receipt."""
+    """Expects the annotations from ``views._thread_qs``."""
+
 
     username = serializers.CharField(source="user.username", read_only=True)
     unread = serializers.SerializerMethodField()

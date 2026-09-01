@@ -1,10 +1,4 @@
-"""Customer ↔ store support chat.
-
-One thread per customer (``ChatThread``). Messages carry a per-message
-``read_at`` — the recipient's read receipt — and both unread counts and the
-✓✓ ticks derive from it, so there are no redundant read-watermarks on the
-thread. (Staff is a shared inbox: any staff read clears it for all staff.)
-"""
+"""Customer ↔ store support chat: one thread per customer."""
 from django.conf import settings
 from django.db import models
 

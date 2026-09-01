@@ -16,8 +16,7 @@ export default function MessageList({
   className?: string;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
-  // Track the newest message id, not the length: prepending an "load older"
-  // page changes length but shouldn't yank the scroll away from the reader.
+  // scroll on new messages, not on "load older" prepends
   const lastId = messages.length ? messages[messages.length - 1].id : 0;
 
   useEffect(() => {

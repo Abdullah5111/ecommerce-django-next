@@ -1,16 +1,13 @@
 """Customer ↔ store support chat over a WebSocket.
 
-Groups: ``chat_u_<customer_id>`` — buyers join their own at connect, staff
-join by watching a thread, so group membership is the authorization — plus a
-shared ``chat_staff`` inbox group. Messages are created over REST (the POST
-view broadcasts on commit); the socket also carries ephemeral traffic:
-typing, read receipts, presence.
+Groups: ``chat_u_<customer_id>`` (buyers join their own at connect; staff
+join by watching — membership is the authorization) and a shared
+``chat_staff`` inbox feed. Messages are created over REST; the socket
+carries message broadcasts plus ephemeral typing / read receipts / presence.
 
-ponytail: presence is per-process under the InMemory layer (cluster-wide for
-free once REDIS_URL is set); "online" means "has a live socket". Staff
-presence only reaches a buyer while that staff member is watching their
-thread. Client→server frames are trusted for shape only — handlers validate
-ownership/type before acting.
+ponytail: presence is per-process under the InMemory layer (cluster-wide
+once REDIS_URL is set); staff presence only reaches a buyer while that staff
+member is watching their thread.
 """
 import json
 
@@ -22,11 +19,8 @@ from .models import ChatThread
 
 STAFF_GROUP = "chat_staff"
 
-# Process-local presence: user_id → live connection count. Broadcasts fire on
-# transitions only (first connect / last disconnect), so multiple tabs don't
-# flap. Under the InMemory layer this is per-process; REDIS_URL makes group
-# delivery cluster-wide but this counter stays local — Redis heartbeat keys
-# are the upgrade if that ever matters.
+# user_id → live connection count; broadcasts fire on transitions only, so
+# multiple tabs don't flap. Per-process (see module docstring).
 _online: dict[int, int] = {}
 
 
@@ -77,10 +71,8 @@ class ChatConsumer(JsonWebsocketConsumer):
         for group in groups:
             async_to_sync(self.channel_layer.group_discard)(group, self.channel_name)
 
-    # -- client → server. Private names on purpose: the public methods below
-    # are group-event handlers dispatched by the event "type" — sharing a
-    # name would make a received frame trigger the broadcast handler and
-    # vice versa.
+    # -- client → server (private names: the public methods below are the
+    # group-event handlers dispatched by each event's "type").
 
     def receive(self, text_data=None, bytes_data=None):
         try:
@@ -109,8 +101,7 @@ class ChatConsumer(JsonWebsocketConsumer):
         self.watching.add(uid)
         async_to_sync(self.channel_layer.group_add)(thread_group(uid), self.channel_name)
         self._thread(uid, "chat.presence", {"user_id": user.id, "online": True})
-        # Presence events fire on transitions only, so a newly watching
-        # connection needs the customer's current state, not just future ones.
+        # a new watcher needs the customer's current state, not just future ones
         self.send_json(
             {"type": "chat.presence", "user_id": uid, "online": _online.get(uid, 0) > 0}
         )
