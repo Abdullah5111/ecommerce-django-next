@@ -16,10 +16,13 @@ export default function MessageList({
   className?: string;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
+  // Track the newest message id, not the length: prepending an "load older"
+  // page changes length but shouldn't yank the scroll away from the reader.
+  const lastId = messages.length ? messages[messages.length - 1].id : 0;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length, typing]);
+  }, [lastId, typing]);
 
   return (
     <div className={`overflow-y-auto px-3 py-2 ${className}`}>

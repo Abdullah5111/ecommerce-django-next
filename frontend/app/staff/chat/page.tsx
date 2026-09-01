@@ -17,6 +17,7 @@ export default function StaffChatPage() {
   const [threads, setThreads] = useState<ChatThread[] | null>(null);
   const [selected, setSelected] = useState<number | null>(null); // customer user id
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
+  const [olderCursor, setOlderCursor] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [typingFrom, setTypingFrom] = useState<number | null>(null);
   const [presence, setPresence] = useState<Record<number, boolean>>({});
@@ -51,11 +52,23 @@ export default function StaffChatPage() {
       const page = await api.listChatMessages(token, { thread: uid });
       // Rapid thread switching: only the newest selection may paint.
       if (selectedRef.current !== uid) return;
-      setMessages(page.results);
+      // The API returns newest-first; render chronologically (oldest at top).
+      setMessages([...page.results].reverse());
+      setOlderCursor(page.next ? new URL(page.next).searchParams.get("cursor") : null);
     } catch {
       if (selectedRef.current === uid) setMessages([]);
     }
   }, []);
+
+  const loadOlder = async () => {
+    const token = auth.get();
+    const uid = selected;
+    if (!token || uid === null || !olderCursor) return;
+    const page = await api.listChatMessages(token, { thread: uid, cursor: olderCursor });
+    if (selectedRef.current !== uid) return; // switched threads mid-fetch
+    setMessages((prev) => (prev ? [...[...page.results].reverse(), ...prev] : prev));
+    setOlderCursor(page.next ? new URL(page.next).searchParams.get("cursor") : null);
+  };
 
   const clearUnread = useCallback((uid: number) => {
     setThreads((prev) => prev?.map((t) => (t.user === uid ? { ...t, unread: 0 } : t)) ?? prev);
@@ -228,7 +241,14 @@ export default function StaffChatPage() {
               {messages === null ? (
                 <p className="text-zinc-500 text-sm text-center py-10">Loading…</p>
               ) : (
-                <MessageList messages={messages} meId={user.id} typing={typingFrom === selected} className="flex-1" />
+                <>
+                  {olderCursor && (
+                    <button onClick={loadOlder} className="text-xs text-brand hover:underline pt-2 self-center">
+                      Load older messages
+                    </button>
+                  )}
+                  <MessageList messages={messages} meId={user.id} typing={typingFrom === selected} className="flex-1" />
+                </>
               )}
               <form
                 onSubmit={(e) => {
