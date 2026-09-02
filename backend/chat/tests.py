@@ -392,6 +392,27 @@ class ChatSocketTests(TransactionTestCase):
         await buyer2.disconnect()
         self.assertEqual(consumers._online.get(self.buyer.id, 0), 0)
 
+    async def test_offline_fires_once_on_last_tab_close(self):
+        await self._thread(self.buyer)
+        staff_comm = self._comm(self.staff)
+        connected, _ = await staff_comm.connect()
+        self.assertTrue(connected)
+        buyer1 = self._comm(self.buyer)
+        connected, _ = await buyer1.connect()
+        self.assertTrue(connected)
+        await self._recv_until(
+            staff_comm, lambda e: e["type"] == "chat.presence" and e["user_id"] == self.buyer.id
+        )
+        buyer2 = self._comm(self.buyer)
+        connected, _ = await buyer2.connect()
+        self.assertTrue(connected)
+        await buyer1.disconnect()
+        # tab 2 still live: no offline broadcast, count stays at 1
+        self.assertTrue(await staff_comm.receive_nothing(timeout=0.3))
+        self.assertEqual(consumers._online.get(self.buyer.id), 1)
+        await buyer2.disconnect()
+        await staff_comm.disconnect()
+
     async def test_watch_reports_current_presence(self):
         # Presence events fire on transitions only, so a staff member opening
         # a thread must get the customer's *current* state with the watch.

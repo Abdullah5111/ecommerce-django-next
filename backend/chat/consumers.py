@@ -71,15 +71,13 @@ class ChatConsumer(JsonWebsocketConsumer):
             _online[user.id] = count
         else:
             _online.pop(user.id, None)
-            if not user.is_staff:
-                self._staff_feed("chat.presence", {"user_id": user.id, "online": False})
         if user.is_staff:
             for uid in list(self.watching):
                 self._thread(uid, "chat.presence", {"user_id": user.id, "online": False})
                 async_to_sync(self.channel_layer.group_discard)(
                     thread_group(uid), self.channel_name
                 )
-        else:
+        elif not count:  # last tab closed — offline fires once, not per tab
             self._staff_feed("chat.presence", {"user_id": user.id, "online": False})
         groups = [thread_group(user.id)]
         if user.is_staff:
