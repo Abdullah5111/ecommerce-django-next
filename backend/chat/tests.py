@@ -264,6 +264,22 @@ class ChatSocketTests(TransactionTestCase):
         self.assertTrue(event)
         await comm.disconnect()
 
+    async def test_frame_flood_is_throttled(self):
+        await self._thread(self.buyer)
+        staff_comm = self._comm(self.staff)
+        connected, _ = await staff_comm.connect()
+        self.assertTrue(connected)
+        buyer_comm = self._comm(self.buyer)
+        connected, _ = await buyer_comm.connect()
+        self.assertTrue(connected)
+        await buyer_comm.send_to(text_data=json.dumps({"type": "chat.typing"}))
+        await buyer_comm.send_to(text_data=json.dumps({"type": "chat.typing"}))  # < gap: dropped
+        event = await self._recv_until(staff_comm, lambda e: e["type"] == "chat.typing")
+        self.assertEqual(event["user_id"], self.buyer.id)
+        self.assertTrue(await staff_comm.receive_nothing(timeout=0.3))
+        await buyer_comm.disconnect()
+        await staff_comm.disconnect()
+
     async def test_typing_relays_between_parties(self):
         await self._thread(self.buyer)
         staff_comm = self._comm(self.staff)

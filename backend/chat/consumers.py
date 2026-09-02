@@ -10,6 +10,7 @@ once REDIS_URL is set); staff presence only reaches a buyer while that staff
 member is watching their thread.
 """
 import json
+import time
 
 from asgiref.sync import async_to_sync
 from channels.generic.websocket import JsonWebsocketConsumer
@@ -30,6 +31,12 @@ def thread_group(user_id):
     return f"chat_u_{user_id}"
 
 
+# Minimum gap between accepted client frames. Legit clients send typing at
+# most every 2.5s; this stops a hostile client from turning the socket into a
+# broadcast amplifier. A dropped read self-heals on the next read/resync.
+MIN_FRAME_SECONDS = 0.2
+
+
 def _safe_uid(value):
     try:
         return int(value or 0)
@@ -44,6 +51,7 @@ class ChatConsumer(JsonWebsocketConsumer):
             self.close(code=4001)  # unauthenticated — reject the handshake
             return
         self.watching = set()  # customer ids this (staff) connection follows
+        self._last_frame = 0.0
         _online[user.id] = _online.get(user.id, 0) + 1
         layer = self.channel_layer
         async_to_sync(layer.group_add)(thread_group(user.id), self.channel_name)
@@ -82,6 +90,10 @@ class ChatConsumer(JsonWebsocketConsumer):
     # group-event handlers dispatched by each event's "type").
 
     def receive(self, text_data=None, bytes_data=None):
+        now = time.monotonic()
+        if now - self._last_frame < MIN_FRAME_SECONDS:
+            return
+        self._last_frame = now
         try:
             msg = json.loads(text_data or "")
         except ValueError:
