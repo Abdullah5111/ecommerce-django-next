@@ -14,6 +14,7 @@ import time
 
 from asgiref.sync import async_to_sync
 from channels.generic.websocket import JsonWebsocketConsumer
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import ChatThread
@@ -152,11 +153,10 @@ class ChatConsumer(JsonWebsocketConsumer):
         except ChatThread.DoesNotExist:
             return
         unread = thread.messages.filter(read_at__isnull=True)
-        unread = (
-            unread.filter(sender__is_staff=False)
-            if user.is_staff
-            else unread.filter(sender__is_staff=True)
-        )
+        if user.is_staff:
+            unread = unread.filter(Q(sender__is_staff=False) | Q(sender__isnull=True))
+        else:
+            unread = unread.filter(sender__is_staff=True)
         read_at = timezone.now()
         unread.update(read_at=read_at)
         payload = {

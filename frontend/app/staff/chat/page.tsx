@@ -119,8 +119,9 @@ export default function StaffChatPage() {
             setTypingFrom(null);
             realtime.send({ type: "chat.read", thread_user_id: m.thread_user_id });
           }
-        } else if (m.sender === m.thread_user_id) {
-          // customer message in an unopened thread — badge it
+        } else if (m.sender === null || m.sender === m.thread_user_id) {
+          // customer message (null sender = deleted user) in an unopened thread
+
           setThreads((prev) =>
             prev?.map((t) => (t.user === m.thread_user_id ? { ...t, unread: t.unread + 1 } : t)) ??
             prev,

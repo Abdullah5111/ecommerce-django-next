@@ -109,6 +109,16 @@ class ChatApiTests(APITestCase):
         self.assertEqual(self._post("x" * 2001).status_code, 400)
         self.assertEqual(self._post("").status_code, 400)
 
+    def test_deleted_sender_messages_count_as_customer_unread(self):
+        self._post("opening message")
+        thread = ChatThread.objects.get(user=self.buyer)
+        ChatMessage.objects.create(thread=thread, sender=None, body="ghost")  # user deleted
+        self.client.force_authenticate(self.staff)
+        row = next(
+            t for t in self.client.get("/api/chat/threads/").data if t["username"] == "buyer"
+        )
+        self.assertEqual(row["unread"], 2)
+
     def test_anonymous_is_unauthorized(self):
         self.client.force_authenticate(user=None)
         self.assertEqual(self.client.get("/api/chat/thread/").status_code, 401)
@@ -351,6 +361,20 @@ class ChatSocketTests(TransactionTestCase):
         self.assertTrue(event["online"])
         await staff_comm.disconnect(timeout=5)
         await buyer_comm.disconnect(timeout=5)
+
+    async def test_staff_read_covers_deleted_sender_messages(self):
+        thread = await self._thread(self.buyer)
+        ghost = await self._msg(thread, None, "ghost message")
+        comm = self._comm(self.staff)
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        await comm.send_to(
+            text_data=json.dumps({"type": "chat.read", "thread_user_id": self.buyer.id})
+        )
+        await self._recv_until(comm, lambda e: e["type"] == "chat.read")
+        reloaded = await sync_to_async(ChatMessage.objects.get)(pk=ghost.pk)
+        self.assertIsNotNone(reloaded.read_at)
+        await comm.disconnect()
 
     async def test_presence_counts_connections_not_sockets(self):
         # Multiple tabs count; "offline" only fires (broadcast-side) when the

@@ -23,11 +23,11 @@ class ChatMessageCursorPagination(CursorPagination):
 def _thread_qs(viewer_is_staff):
     """Thread annotations; ``unread`` counts the *other* side's unread
     messages (any staff read clears it — shared inbox)."""
-    unread_senders = (
-        Q(messages__sender__is_staff=False)
-        if viewer_is_staff
-        else Q(messages__sender__is_staff=True)
-    )
+    if viewer_is_staff:
+        # NULL sender (deleted user) counts as a customer message.
+        unread_senders = Q(messages__sender__is_staff=False) | Q(messages__sender__isnull=True)
+    else:
+        unread_senders = Q(messages__sender__is_staff=True)
     last = ChatMessage.objects.filter(thread=OuterRef("pk")).order_by("-created_at", "-id")
     return ChatThread.objects.select_related("user").annotate(
         unread=Count("messages", filter=Q(messages__read_at__isnull=True) & unread_senders),
