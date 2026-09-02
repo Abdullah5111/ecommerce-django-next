@@ -30,6 +30,13 @@ def thread_group(user_id):
     return f"chat_u_{user_id}"
 
 
+def _safe_uid(value):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0  # never a real id — handlers no-op on it
+
+
 class ChatConsumer(JsonWebsocketConsumer):
     def connect(self):
         user = self.scope["user"]
@@ -95,7 +102,7 @@ class ChatConsumer(JsonWebsocketConsumer):
         user = self.scope["user"]
         if not user.is_staff:
             return  # buyers are already in their own thread group
-        uid = int(msg.get("thread_user_id") or 0)
+        uid = _safe_uid(msg.get("thread_user_id"))
         if not ChatThread.objects.filter(user_id=uid).exists():
             return
         self.watching.add(uid)
@@ -110,7 +117,7 @@ class ChatConsumer(JsonWebsocketConsumer):
         user = self.scope["user"]
         if not user.is_staff:
             return
-        uid = int(msg.get("thread_user_id") or 0)
+        uid = _safe_uid(msg.get("thread_user_id"))
         self.watching.discard(uid)
         async_to_sync(self.channel_layer.group_discard)(thread_group(uid), self.channel_name)
         self._thread(uid, "chat.presence", {"user_id": user.id, "online": False})
@@ -118,7 +125,7 @@ class ChatConsumer(JsonWebsocketConsumer):
     def _ws_typing(self, msg):
         user = self.scope["user"]
         if user.is_staff:
-            uid = int(msg.get("thread_user_id") or 0)
+            uid = _safe_uid(msg.get("thread_user_id"))
             self._thread(uid, "chat.typing", {"user_id": user.id, "thread_user_id": uid})
         else:
             self._staff_feed("chat.typing", {"user_id": user.id, "thread_user_id": user.id})
@@ -127,7 +134,7 @@ class ChatConsumer(JsonWebsocketConsumer):
         """Flip read receipts — each side reads the other's messages — then
         tell both groups so ticks flip and badges clear live."""
         user = self.scope["user"]
-        uid = user.id if not user.is_staff else int(msg.get("thread_user_id") or 0)
+        uid = user.id if not user.is_staff else _safe_uid(msg.get("thread_user_id"))
         try:
             thread = ChatThread.objects.get(user_id=uid)
         except ChatThread.DoesNotExist:

@@ -244,6 +244,26 @@ class ChatSocketTests(TransactionTestCase):
         self.assertEqual(event["message"]["body"], "still there?")
         await comm.disconnect()
 
+    async def test_non_integer_frame_values_dont_kill_socket(self):
+        await self._thread(self.buyer)
+        comm = self._comm(self.staff)
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        for frame in (
+            {"type": "chat.watch", "thread_user_id": "not-a-number"},
+            {"type": "chat.typing", "thread_user_id": "not-a-number"},
+            {"type": "chat.read", "thread_user_id": [1, 2]},
+        ):
+            await comm.send_to(text_data=json.dumps(frame))
+        msg = await self._msg(await sync_to_async(ChatThread.objects.get)(user=self.buyer),
+                              self.buyer, "still open?")
+        await sync_to_async(broadcast_message)(msg)
+        event = await self._recv_until(
+            comm, lambda e: e["type"] == "chat.message" and e["message"]["body"] == "still open?"
+        )
+        self.assertTrue(event)
+        await comm.disconnect()
+
     async def test_typing_relays_between_parties(self):
         await self._thread(self.buyer)
         staff_comm = self._comm(self.staff)
