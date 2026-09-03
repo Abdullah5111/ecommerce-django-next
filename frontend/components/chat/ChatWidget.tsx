@@ -70,7 +70,7 @@ export default function ChatWidget() {
   useEffect(() => {
     if (!user || user.is_staff) return;
     const meId = user.id;
-    return realtime.subscribe((msg) => {
+    const off = realtime.subscribe((msg) => {
       if (msg.type === "chat.message") {
         const m = msg.message;
         setMessages((prev) =>
@@ -107,6 +107,10 @@ export default function ChatWidget() {
         if (open) loadMessages().then(markRead);
       }
     });
+    return () => {
+      off();
+      clearTimeout(typingTimer.current);
+    };
   }, [user, open, loadThread, loadMessages, markRead]);
 
   useEffect(() => {

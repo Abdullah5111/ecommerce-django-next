@@ -99,7 +99,7 @@ export default function StaffChatPage() {
 
   useEffect(() => {
     if (!user?.is_staff) return;
-    return realtime.subscribe((msg) => {
+    const off = realtime.subscribe((msg) => {
       if (msg.type === "chat.message") {
         const m = msg.message;
         // a first-ever message creates a thread we don't have listed yet
@@ -119,8 +119,8 @@ export default function StaffChatPage() {
             setTypingFrom(null);
             realtime.send({ type: "chat.read", thread_user_id: m.thread_user_id });
           }
-        } else if (m.sender === m.thread_user_id) {
-          // customer message in an unopened thread — badge it
+        } else if (m.sender === null || m.sender === m.thread_user_id) {
+          // customer message (null sender = deleted user) in an unopened thread
           setThreads((prev) =>
             prev?.map((t) => (t.user === m.thread_user_id ? { ...t, unread: t.unread + 1 } : t)) ??
             prev,
@@ -139,6 +139,10 @@ export default function StaffChatPage() {
         if (selected !== null) openThread(selected);
       }
     });
+    return () => {
+      off();
+      clearTimeout(typingTimer.current);
+    };
   }, [user, selected, loadThreads, openThread, clearUnread]);
 
   const send = async () => {

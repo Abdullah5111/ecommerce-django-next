@@ -20,7 +20,7 @@ export default function MessageList({
   const lastId = messages.length ? messages[messages.length - 1].id : 0;
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
+    endRef.current?.scrollIntoView({ block: "nearest" }); // nearest: never scroll the page
   }, [lastId, typing]);
 
   return (
@@ -30,7 +30,7 @@ export default function MessageList({
           No messages yet — say hello!
         </p>
       )}
-      <ul className="space-y-2">
+      <ul className="space-y-2" aria-live="polite">
         {messages.map((m) => {
           const mine = m.sender === meId;
           return (

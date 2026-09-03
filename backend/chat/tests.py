@@ -109,6 +109,16 @@ class ChatApiTests(APITestCase):
         self.assertEqual(self._post("x" * 2001).status_code, 400)
         self.assertEqual(self._post("").status_code, 400)
 
+    def test_deleted_sender_messages_count_as_customer_unread(self):
+        self._post("opening message")
+        thread = ChatThread.objects.get(user=self.buyer)
+        ChatMessage.objects.create(thread=thread, sender=None, body="ghost")  # user deleted
+        self.client.force_authenticate(self.staff)
+        row = next(
+            t for t in self.client.get("/api/chat/threads/").data if t["username"] == "buyer"
+        )
+        self.assertEqual(row["unread"], 2)
+
     def test_anonymous_is_unauthorized(self):
         self.client.force_authenticate(user=None)
         self.assertEqual(self.client.get("/api/chat/thread/").status_code, 401)
@@ -244,6 +254,42 @@ class ChatSocketTests(TransactionTestCase):
         self.assertEqual(event["message"]["body"], "still there?")
         await comm.disconnect()
 
+    async def test_non_integer_frame_values_dont_kill_socket(self):
+        await self._thread(self.buyer)
+        comm = self._comm(self.staff)
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        for frame in (
+            {"type": "chat.watch", "thread_user_id": "not-a-number"},
+            {"type": "chat.typing", "thread_user_id": "not-a-number"},
+            {"type": "chat.read", "thread_user_id": [1, 2]},
+        ):
+            await comm.send_to(text_data=json.dumps(frame))
+        msg = await self._msg(await sync_to_async(ChatThread.objects.get)(user=self.buyer),
+                              self.buyer, "still open?")
+        await sync_to_async(broadcast_message)(msg)
+        event = await self._recv_until(
+            comm, lambda e: e["type"] == "chat.message" and e["message"]["body"] == "still open?"
+        )
+        self.assertTrue(event)
+        await comm.disconnect()
+
+    async def test_frame_flood_is_throttled(self):
+        await self._thread(self.buyer)
+        staff_comm = self._comm(self.staff)
+        connected, _ = await staff_comm.connect()
+        self.assertTrue(connected)
+        buyer_comm = self._comm(self.buyer)
+        connected, _ = await buyer_comm.connect()
+        self.assertTrue(connected)
+        await buyer_comm.send_to(text_data=json.dumps({"type": "chat.typing"}))
+        await buyer_comm.send_to(text_data=json.dumps({"type": "chat.typing"}))  # < gap: dropped
+        event = await self._recv_until(staff_comm, lambda e: e["type"] == "chat.typing")
+        self.assertEqual(event["user_id"], self.buyer.id)
+        self.assertTrue(await staff_comm.receive_nothing(timeout=0.3))
+        await buyer_comm.disconnect()
+        await staff_comm.disconnect()
+
     async def test_typing_relays_between_parties(self):
         await self._thread(self.buyer)
         staff_comm = self._comm(self.staff)
@@ -316,6 +362,20 @@ class ChatSocketTests(TransactionTestCase):
         await staff_comm.disconnect(timeout=5)
         await buyer_comm.disconnect(timeout=5)
 
+    async def test_staff_read_covers_deleted_sender_messages(self):
+        thread = await self._thread(self.buyer)
+        ghost = await self._msg(thread, None, "ghost message")
+        comm = self._comm(self.staff)
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        await comm.send_to(
+            text_data=json.dumps({"type": "chat.read", "thread_user_id": self.buyer.id})
+        )
+        await self._recv_until(comm, lambda e: e["type"] == "chat.read")
+        reloaded = await sync_to_async(ChatMessage.objects.get)(pk=ghost.pk)
+        self.assertIsNotNone(reloaded.read_at)
+        await comm.disconnect()
+
     async def test_presence_counts_connections_not_sockets(self):
         # Multiple tabs count; "offline" only fires (broadcast-side) when the
         # last one closes. Registry asserts directly — no teardown flakiness.
@@ -331,6 +391,27 @@ class ChatSocketTests(TransactionTestCase):
         self.assertEqual(consumers._online.get(self.buyer.id), 1)  # tab 2 still live
         await buyer2.disconnect()
         self.assertEqual(consumers._online.get(self.buyer.id, 0), 0)
+
+    async def test_offline_fires_once_on_last_tab_close(self):
+        await self._thread(self.buyer)
+        staff_comm = self._comm(self.staff)
+        connected, _ = await staff_comm.connect()
+        self.assertTrue(connected)
+        buyer1 = self._comm(self.buyer)
+        connected, _ = await buyer1.connect()
+        self.assertTrue(connected)
+        await self._recv_until(
+            staff_comm, lambda e: e["type"] == "chat.presence" and e["user_id"] == self.buyer.id
+        )
+        buyer2 = self._comm(self.buyer)
+        connected, _ = await buyer2.connect()
+        self.assertTrue(connected)
+        await buyer1.disconnect()
+        # tab 2 still live: no offline broadcast, count stays at 1
+        self.assertTrue(await staff_comm.receive_nothing(timeout=0.3))
+        self.assertEqual(consumers._online.get(self.buyer.id), 1)
+        await buyer2.disconnect()
+        await staff_comm.disconnect()
 
     async def test_watch_reports_current_presence(self):
         # Presence events fire on transitions only, so a staff member opening
