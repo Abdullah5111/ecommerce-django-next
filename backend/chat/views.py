@@ -6,6 +6,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema
 
 from .models import ChatMessage, ChatThread
 from .serializers import ChatMessageSerializer, ChatThreadSerializer
@@ -42,6 +43,10 @@ class ThreadView(APIView):
 
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        responses={200: ChatThreadSerializer, 404: None},
+        description="The caller's thread, if any. Created by the first message, not here.",
+    )
     def get(self, request):
         thread = ChatThread.objects.filter(user=request.user).first()
         if thread is None:

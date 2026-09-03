@@ -24,7 +24,6 @@ class ChatMessageSerializer(serializers.ModelSerializer):
 class ChatThreadSerializer(serializers.ModelSerializer):
     """Expects the annotations from ``views._thread_qs``."""
 
-
     username = serializers.CharField(source="user.username", read_only=True)
     unread = serializers.SerializerMethodField()
     last_message_at = serializers.SerializerMethodField()
