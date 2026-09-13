@@ -100,6 +100,14 @@ export default function AccountHubPage() {
           title="Communication preferences"
           subtitle="Emails and order alerts"
         />
+        {user.is_staff && (
+          <AccountCard
+            href="/staff/chat"
+            icon="💬"
+            title="Support inbox"
+            subtitle="Answer customer conversations"
+          />
+        )}
       </div>
     </div>
   );
