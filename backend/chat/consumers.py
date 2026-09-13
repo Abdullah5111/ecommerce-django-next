@@ -10,9 +10,11 @@ once REDIS_URL is set); staff presence only reaches a buyer while that staff
 member is watching their thread.
 """
 import json
+import time
 
 from asgiref.sync import async_to_sync
 from channels.generic.websocket import JsonWebsocketConsumer
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import ChatThread
@@ -30,6 +32,19 @@ def thread_group(user_id):
     return f"chat_u_{user_id}"
 
 
+# Minimum gap between accepted client frames. Legit clients send typing at
+# most every 2.5s; this stops a hostile client from turning the socket into a
+# broadcast amplifier. A dropped read self-heals on the next read/resync.
+MIN_FRAME_SECONDS = 0.2
+
+
+def _safe_uid(value):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0  # never a real id — handlers no-op on it
+
+
 class ChatConsumer(JsonWebsocketConsumer):
     def connect(self):
         user = self.scope["user"]
@@ -37,6 +52,7 @@ class ChatConsumer(JsonWebsocketConsumer):
             self.close(code=4001)  # unauthenticated — reject the handshake
             return
         self.watching = set()  # customer ids this (staff) connection follows
+        self._last_frame = 0.0
         _online[user.id] = _online.get(user.id, 0) + 1
         layer = self.channel_layer
         async_to_sync(layer.group_add)(thread_group(user.id), self.channel_name)
@@ -55,15 +71,13 @@ class ChatConsumer(JsonWebsocketConsumer):
             _online[user.id] = count
         else:
             _online.pop(user.id, None)
-            if not user.is_staff:
-                self._staff_feed("chat.presence", {"user_id": user.id, "online": False})
         if user.is_staff:
             for uid in list(self.watching):
                 self._thread(uid, "chat.presence", {"user_id": user.id, "online": False})
                 async_to_sync(self.channel_layer.group_discard)(
                     thread_group(uid), self.channel_name
                 )
-        else:
+        elif not count:  # last tab closed — offline fires once, not per tab
             self._staff_feed("chat.presence", {"user_id": user.id, "online": False})
         groups = [thread_group(user.id)]
         if user.is_staff:
@@ -75,6 +89,10 @@ class ChatConsumer(JsonWebsocketConsumer):
     # group-event handlers dispatched by each event's "type").
 
     def receive(self, text_data=None, bytes_data=None):
+        now = time.monotonic()
+        if now - self._last_frame < MIN_FRAME_SECONDS:
+            return
+        self._last_frame = now
         try:
             msg = json.loads(text_data or "")
         except ValueError:
@@ -95,7 +113,7 @@ class ChatConsumer(JsonWebsocketConsumer):
         user = self.scope["user"]
         if not user.is_staff:
             return  # buyers are already in their own thread group
-        uid = int(msg.get("thread_user_id") or 0)
+        uid = _safe_uid(msg.get("thread_user_id"))
         if not ChatThread.objects.filter(user_id=uid).exists():
             return
         self.watching.add(uid)
@@ -110,7 +128,7 @@ class ChatConsumer(JsonWebsocketConsumer):
         user = self.scope["user"]
         if not user.is_staff:
             return
-        uid = int(msg.get("thread_user_id") or 0)
+        uid = _safe_uid(msg.get("thread_user_id"))
         self.watching.discard(uid)
         async_to_sync(self.channel_layer.group_discard)(thread_group(uid), self.channel_name)
         self._thread(uid, "chat.presence", {"user_id": user.id, "online": False})
@@ -118,7 +136,7 @@ class ChatConsumer(JsonWebsocketConsumer):
     def _ws_typing(self, msg):
         user = self.scope["user"]
         if user.is_staff:
-            uid = int(msg.get("thread_user_id") or 0)
+            uid = _safe_uid(msg.get("thread_user_id"))
             self._thread(uid, "chat.typing", {"user_id": user.id, "thread_user_id": uid})
         else:
             self._staff_feed("chat.typing", {"user_id": user.id, "thread_user_id": user.id})
@@ -127,17 +145,16 @@ class ChatConsumer(JsonWebsocketConsumer):
         """Flip read receipts — each side reads the other's messages — then
         tell both groups so ticks flip and badges clear live."""
         user = self.scope["user"]
-        uid = user.id if not user.is_staff else int(msg.get("thread_user_id") or 0)
+        uid = user.id if not user.is_staff else _safe_uid(msg.get("thread_user_id"))
         try:
             thread = ChatThread.objects.get(user_id=uid)
         except ChatThread.DoesNotExist:
             return
         unread = thread.messages.filter(read_at__isnull=True)
-        unread = (
-            unread.filter(sender__is_staff=False)
-            if user.is_staff
-            else unread.filter(sender__is_staff=True)
-        )
+        if user.is_staff:
+            unread = unread.filter(Q(sender__is_staff=False) | Q(sender__isnull=True))
+        else:
+            unread = unread.filter(sender__is_staff=True)
         read_at = timezone.now()
         unread.update(read_at=read_at)
         payload = {
