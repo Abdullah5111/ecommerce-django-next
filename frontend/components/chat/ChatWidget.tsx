@@ -85,9 +85,13 @@ export default function ChatWidget() {
         );
         if (m.sender !== meId) {
           setTyping(false);
-          // open panel: receipt goes out immediately; closed: badge it
-          if (open) markRead();
-          else setUnread((u) => u + 1);
+          // open panel: receipt goes out immediately; closed: badge + toast
+          if (open) {
+            markRead();
+          } else {
+            setUnread((u) => u + 1);
+            toast(`Support: ${m.body.slice(0, 80)}${m.body.length > 80 ? "…" : ""}`);
+          }
         }
       } else if (msg.type === "chat.read") {
         // the other side read my messages — flip the ticks
