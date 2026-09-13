@@ -31,6 +31,10 @@ export default function StaffChatPage() {
   }, [threads]);
 
   useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
+
+  useEffect(() => {
     if (!authLoading && (!user || !user.is_staff)) router.replace("/");
   }, [authLoading, user, router]);
 
@@ -45,20 +49,19 @@ export default function StaffChatPage() {
   }, []);
 
   const loadMessages = useCallback(async (uid: number) => {
-    selectedRef.current = uid;
     const token = auth.get();
     if (!token) return;
     try {
       const page = await api.listChatMessages(token, { thread: uid });
       // Rapid thread switching: only the newest selection may paint.
-      if (selectedRef.current !== uid) return;
+      if (selectedRef.current !== uid || selected !== uid) return;
       // The API returns newest-first; render chronologically (oldest at top).
       setMessages([...page.results].reverse());
       setOlderCursor(page.next ? new URL(page.next).searchParams.get("cursor") : null);
     } catch {
       if (selectedRef.current === uid) setMessages([]);
     }
-  }, []);
+  }, [selected]);
 
   const loadOlder = async () => {
     const token = auth.get();
@@ -74,8 +77,18 @@ export default function StaffChatPage() {
     setThreads((prev) => prev?.map((t) => (t.user === uid ? { ...t, unread: 0 } : t)) ?? prev);
   }, []);
 
+  const unwatch = useCallback((uid: number | null) => {
+    if (uid !== null) realtime.send({ type: "chat.unwatch", thread_user_id: uid });
+  }, []);
+
   const openThread = useCallback(
     (uid: number) => {
+      // leaving a thread must unwatch it, or its presence dot stays lit and
+      // the connection keeps the group membership forever
+      if (selectedRef.current !== null && selectedRef.current !== uid) {
+        unwatch(selectedRef.current);
+      }
+      selectedRef.current = uid;
       setSelected(uid);
       setMessages(null);
       realtime.send({ type: "chat.watch", thread_user_id: uid });
@@ -83,12 +96,14 @@ export default function StaffChatPage() {
       clearUnread(uid);
       realtime.send({ type: "chat.read", thread_user_id: uid });
     },
-    [loadMessages, clearUnread],
+    [loadMessages, clearUnread, unwatch],
   );
 
-  const closeThread = useCallback((uid: number) => {
-    realtime.send({ type: "chat.unwatch", thread_user_id: uid });
-  }, []);
+  const closeThread = useCallback(() => {
+    unwatch(selectedRef.current);
+    selectedRef.current = null;
+    setSelected(null);
+  }, [unwatch]);
 
   useEffect(() => {
     if (!user?.is_staff) return;
@@ -237,8 +252,11 @@ export default function StaffChatPage() {
                   />
                   {selectedThread?.username ?? `Customer #${selected}`}
                 </p>
-                <button onClick={() => { closeThread(selected); setSelected(null); }} className="text-xs text-zinc-500 hover:underline md:hidden">
+                <button onClick={closeThread} className="text-xs text-zinc-500 hover:underline md:hidden">
                   Back
+                </button>
+                <button onClick={closeThread} aria-label="Close conversation" className="hidden md:inline text-zinc-400 hover:text-zinc-600 ml-3">
+                  ✕
                 </button>
               </div>
               {messages === null ? (
