@@ -5,11 +5,13 @@ import { api, type ChatMessage, type ChatThread } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { realtime } from "@/lib/realtime";
 import { useAuth } from "@/lib/useAuth";
+import { useToast } from "@/lib/useToast";
 import MessageList from "./MessageList";
 
 /** Buyer-side floating support chat (staff use /staff/chat instead). */
 export default function ChatWidget() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
@@ -133,6 +135,7 @@ export default function ChatWidget() {
       );
     } catch {
       setInput(body); // restore for retry
+      toast("Message couldn't be sent — try again", "error");
     }
   };
 

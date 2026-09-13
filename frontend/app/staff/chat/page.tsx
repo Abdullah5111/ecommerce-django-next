@@ -7,11 +7,13 @@ import { auth } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { realtime } from "@/lib/realtime";
 import { useAuth } from "@/lib/useAuth";
+import { useToast } from "@/lib/useToast";
 import MessageList from "@/components/chat/MessageList";
 
 /** Staff inbox: every customer thread, live. Gated on is_staff. */
 export default function StaffChatPage() {
   const { user, loading: authLoading } = useAuth();
+  const { toast } = useToast();
   const router = useRouter();
 
   const [threads, setThreads] = useState<ChatThread[] | null>(null);
@@ -177,6 +179,7 @@ export default function StaffChatPage() {
       );
     } catch {
       setInput(body); // restore for retry
+      toast("Reply couldn't be sent — try again", "error");
     }
   };
 
