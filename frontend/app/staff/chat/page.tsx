@@ -211,10 +211,16 @@ export default function StaffChatPage() {
               <button
                 key={t.id}
                 onClick={() => openThread(t.user)}
-                className={`w-full text-left px-4 py-3 hover:bg-zinc-50 ${t.user === selected ? "bg-brand-light" : ""}`}
+                className={`w-full text-left px-4 py-3 hover:bg-zinc-50 ${
+                  t.user === selected
+                    ? "bg-brand-light"
+                    : t.unread > 0
+                      ? "bg-brand-light/50"
+                      : ""
+                }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-sm flex items-center gap-1.5">
+                  <span className={`text-sm flex items-center gap-1.5 ${t.unread > 0 ? "font-semibold" : "font-medium"}`}>
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${presence[t.user] ? "bg-green-500" : "bg-zinc-300"}`}
                       aria-hidden
