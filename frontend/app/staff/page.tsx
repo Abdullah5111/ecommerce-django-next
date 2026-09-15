@@ -96,7 +96,7 @@ export default function StaffDashboardPage() {
                 <ul className="border rounded-xl divide-y">
                   {stats.low_stock.map((p) => (
                     <li key={p.id} className="px-4 py-2 flex items-center justify-between text-sm">
-                      <Link href={`/products/${p.id}`} className="hover:underline truncate mr-3">
+                      <Link href={`/products/${p.slug}`} className="hover:underline truncate mr-3">
                         {p.name}
                       </Link>
                       <span className={`shrink-0 font-medium ${p.stock === 0 ? "text-rose-600" : "text-amber-700"}`}>

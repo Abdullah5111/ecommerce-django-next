@@ -514,6 +514,7 @@ class StaffStatsTests(APITestCase):
         low = {row["id"]: row for row in res.data["low_stock"]}
         self.assertIn(self.p.id, low)
         self.assertEqual(low[self.p.id]["stock"], 3)
+        self.assertEqual(low[self.p.id]["slug"], self.p.slug)
 
     def test_customer_is_forbidden(self):
         self.client.force_authenticate(self.buyer)

@@ -315,7 +315,7 @@ export type StaffStats = {
   paid_orders: number;
   orders_by_status: Record<string, number>;
   total_orders: number;
-  low_stock: { id: number; name: string; stock: number }[];
+  low_stock: { id: number; slug: string; name: string; stock: number }[];
   open_chats: number;
 };
 

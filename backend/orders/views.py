@@ -29,7 +29,7 @@ class StaffStatsView(APIView):
         low_stock = list(
             Product.objects.filter(stock__lte=5)
             .order_by("stock", "id")
-            .values("id", "name", "stock")[:10]
+            .values("id", "slug", "name", "stock")[:10]
         )
         from chat.views import _thread_qs
 
