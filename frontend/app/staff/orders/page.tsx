@@ -36,6 +36,7 @@ export default function StaffOrdersPage() {
   const { toast } = useToast();
   const router = useRouter();
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [nextPage, setNextPage] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [filter, setFilter] = useState<string>("active");
   const [tracking, setTracking] = useState<Record<number, string>>({});
@@ -50,10 +51,24 @@ export default function StaffOrdersPage() {
     try {
       const page = await api.listOrders(token);
       setOrders(page.results);
+      setNextPage(page.next ? 2 : null);
     } catch {
       setOrders([]);
+      setNextPage(null);
     }
   }, []);
+
+  const loadMore = async () => {
+    const token = auth.get();
+    if (!token || nextPage === null) return;
+    try {
+      const page = await api.listOrders(token, nextPage);
+      setOrders((prev) => [...(prev ?? []), ...page.results]);
+      setNextPage(page.next ? nextPage + 1 : null);
+    } catch {
+      toast("Couldn't load more orders", "error");
+    }
+  };
 
   useEffect(() => {
     if (!user?.is_staff) return;
@@ -176,6 +191,13 @@ export default function StaffOrdersPage() {
             );
           })}
         </ul>
+      )}
+      {nextPage !== null && orders !== null && (
+        <div className="text-center">
+          <button onClick={loadMore} className="border rounded px-4 py-2 text-sm hover:bg-zinc-50">
+            Load more
+          </button>
+        </div>
       )}
     </div>
   );

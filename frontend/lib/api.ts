@@ -553,8 +553,8 @@ export const api = {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     }),
-  listOrders: (token: string) =>
-    request<Paginated<Order>>(`/orders/`, {
+  listOrders: (token: string, page?: number) =>
+    request<Paginated<Order>>(`/orders/${page ? `?page=${page}` : ""}`, {
       headers: { Authorization: `Bearer ${token}` },
     }),
   getOrder: (token: string, id: number) =>
