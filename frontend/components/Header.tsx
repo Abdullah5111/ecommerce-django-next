@@ -51,9 +51,17 @@ export default function Header() {
             <div className="flex items-center gap-3">
               <NotificationBell />
               {user.is_staff && (
-                <Link href="/staff/chat" className="hidden md:inline text-zinc-600 hover:underline">
-                  Inbox
-                </Link>
+                <>
+                  <Link href="/staff" className="hidden md:inline text-zinc-600 hover:underline">
+                    Dashboard
+                  </Link>
+                  <Link href="/staff/orders" className="hidden md:inline text-zinc-600 hover:underline">
+                    Orders
+                  </Link>
+                  <Link href="/staff/chat" className="hidden md:inline text-zinc-600 hover:underline">
+                    Inbox
+                  </Link>
+                </>
               )}
               <Link href="/account" className="hidden md:inline text-zinc-600 hover:underline">
                 Hi, {user.username}
