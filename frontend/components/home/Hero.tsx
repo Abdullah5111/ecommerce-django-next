@@ -14,9 +14,17 @@ export default function Hero() {
         <p className="mt-3 text-white/85">
           Free shipping over ${FREE_SHIPPING_THRESHOLD} · 30-day returns · secure checkout.
         </p>
-        <Link href="#catalog" className={buttonClasses("deal", "lg", "mt-6")}>
-          Shop now
-        </Link>
+        <div className="mt-6 flex items-center gap-3">
+          <Link href="#catalog" className={buttonClasses("deal", "lg")}>
+            Shop now
+          </Link>
+          <Link
+            href="#deals"
+            className="rounded-lg border border-white/50 px-5 h-12 inline-flex items-center text-sm font-medium hover:bg-white/10 transition-colors"
+          >
+            Today&apos;s deals ⚡
+          </Link>
+        </div>
       </div>
       <div className="pointer-events-none absolute -right-16 -top-20 w-72 h-72 rounded-full bg-white/10" />
       <div className="pointer-events-none absolute right-6 bottom-0 w-40 h-40 rounded-full bg-deal/40 blur-3xl" />

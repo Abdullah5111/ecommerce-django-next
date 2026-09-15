@@ -6,7 +6,7 @@ import CountdownTimer from "@/components/CountdownTimer";
 export default function DealsRail({ products }: { products: Product[] }) {
   if (products.length === 0) return null;
   return (
-    <section className="mb-8">
+    <section id="deals" className="mb-8 scroll-mt-4">
       <div className="flex items-center justify-between gap-4 mb-3">
         <h2 className="text-xl font-semibold text-deal-dark">⚡ Deals of the day</h2>
         <div className="flex items-center gap-2 text-sm text-zinc-500">
