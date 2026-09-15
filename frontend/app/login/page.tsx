@@ -12,13 +12,19 @@ function LoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/";
   const { refresh } = useAuth();
+
+  // Only same-site relative paths — "?next=//evil.com" must not redirect off-site.
+  const rawNext = params.get("next") || "/";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
+    setBusy(true);
     setError(null);
     try {
       const { access, refresh: refreshToken } = await api.login(username, password);
@@ -27,6 +33,8 @@ function LoginForm() {
       router.push(next);
     } catch (e) {
       setError("Invalid credentials");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -36,7 +44,9 @@ function LoginForm() {
       <form onSubmit={submit} className="space-y-4">
         <input className="w-full border rounded p-3" placeholder="Username or email" value={username} onChange={(e) => setUsername(e.target.value)} />
         <input className="w-full border rounded p-3" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        <button className="w-full bg-black text-white py-3 rounded font-medium">Sign in</button>
+        <button disabled={busy} className="w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50">
+          {busy ? "Signing in…" : "Sign in"}
+        </button>
       </form>
       {error && <p className="text-red-600 mt-4">{error}</p>}
       <GoogleSignInButton next={next} />

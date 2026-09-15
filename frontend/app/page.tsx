@@ -130,7 +130,7 @@ export default async function HomePage({
   return (
     <div>
       {browse ? (
-        <Hero />
+        <Hero hasDeals={deals.length > 0} />
       ) : (
         <h1 className="text-3xl font-bold mb-6">{heading}</h1>
       )}

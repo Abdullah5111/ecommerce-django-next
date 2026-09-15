@@ -71,7 +71,7 @@ export default function StaffDashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Tile label="Captured revenue" value={`$${Number(stats.revenue).toFixed(2)}`} sub="paid + shipped + delivered" />
             <Tile label="Paid orders" value={String(stats.paid_orders)} sub={`of ${stats.total_orders} total`} />
-            <Tile label="Awaiting action" value={String((stats.orders_by_status.pending ?? 0) + (stats.orders_by_status.paid ?? 0))} sub="pending + paid" />
+            <Tile label="Awaiting action" value={String((stats.orders_by_status.paid ?? 0) + (stats.orders_by_status.shipped ?? 0))} sub="to ship + to deliver" />
             <Tile label="Open chats" value={String(stats.open_chats)} sub="unread customer messages" />
           </div>
 
@@ -96,7 +96,7 @@ export default function StaffDashboardPage() {
                 <ul className="border rounded-xl divide-y">
                   {stats.low_stock.map((p) => (
                     <li key={p.id} className="px-4 py-2 flex items-center justify-between text-sm">
-                      <Link href={`/products/${p.id}`} className="hover:underline truncate mr-3">
+                      <Link href={`/products/${p.slug}`} className="hover:underline truncate mr-3">
                         {p.name}
                       </Link>
                       <span className={`shrink-0 font-medium ${p.stock === 0 ? "text-rose-600" : "text-amber-700"}`}>

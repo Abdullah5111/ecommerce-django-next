@@ -315,7 +315,7 @@ export type StaffStats = {
   paid_orders: number;
   orders_by_status: Record<string, number>;
   total_orders: number;
-  low_stock: { id: number; name: string; stock: number }[];
+  low_stock: { id: number; slug: string; name: string; stock: number }[];
   open_chats: number;
 };
 
@@ -553,8 +553,8 @@ export const api = {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     }),
-  listOrders: (token: string) =>
-    request<Paginated<Order>>(`/orders/`, {
+  listOrders: (token: string, page?: number) =>
+    request<Paginated<Order>>(`/orders/${page ? `?page=${page}` : ""}`, {
       headers: { Authorization: `Bearer ${token}` },
     }),
   getOrder: (token: string, id: number) =>

@@ -37,6 +37,7 @@ export default function CheckoutPage() {
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
   const [quote, setQuote] = useState<QuoteResult | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
+  const [quoteError, setQuoteError] = useState(false);
   const [quoting, setQuoting] = useState(false);
 
   useEffect(() => {
@@ -88,6 +89,7 @@ export default function CheckoutPage() {
         items: items.map((i) => ({ product: i.product.id, variant: i.variant?.id ?? null, quantity: i.quantity })),
       });
       setQuote(result);
+      setQuoteError(false);
       if (code) {
         if (result.coupon_error) {
           setPromoError(result.coupon_error);
@@ -97,7 +99,10 @@ export default function CheckoutPage() {
         }
       }
     } catch (e) {
-      setPromoError(e instanceof Error ? e.message : "Could not apply code");
+      // A failed quote must not brick the button forever — surface a retry
+      // instead of leaving quote null ("Calculating total…") permanently.
+      setPromoError(e instanceof Error ? e.message : "Could not calculate totals");
+      setQuoteError(true);
     } finally {
       setQuoting(false);
     }
@@ -134,10 +139,18 @@ export default function CheckoutPage() {
   const finalizeOrder = async (orderId: number) => {
     const token = auth.get();
     if (!token) return;
-    await api.payOrder(token, orderId);
+    try {
+      await api.payOrder(token, orderId);
+    } catch {
+      // The charge may have gone through; the webhook backstop can still mark
+      // it paid — send the user somewhere useful instead of failing silently.
+      toast("Order received — confirmation is on its way", "error");
+      router.push(`/orders/${orderId}`);
+      return;
+    }
     clear();
     toast("Order placed", "success");
-    router.push("/");
+    router.push(`/orders/${orderId}`);
   };
 
   // Kick off payment for a new order: mock confirms immediately, live surfaces the PaymentElement.
@@ -369,6 +382,14 @@ export default function CheckoutPage() {
                   <span>{quote ? `$${quote.grand_total}` : "—"}</span>
                 </div>
               </div>
+              {quoteError && !quoting && (
+                <div className="flex items-center justify-between gap-2 text-sm text-red-600">
+                  <span>Couldn&apos;t calculate totals.</span>
+                  <button onClick={() => refreshQuote(appliedCode ?? undefined)} className="border rounded px-3 py-1 hover:bg-zinc-50">
+                    Retry
+                  </button>
+                </div>
+              )}
               <button
                 onClick={() => placeOrder()}
                 disabled={!selectedId || items.length === 0 || loading || !quote || quoting}

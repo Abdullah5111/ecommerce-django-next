@@ -39,8 +39,13 @@ function CardForm({
       return;
     }
     // Charge succeeded — let checkout finalize (backend verifies the intent; webhook is the backstop).
-    await onPaid();
-    setBusy(false);
+    try {
+      await onPaid();
+    } catch {
+      setError("Payment captured but the order couldn't be confirmed — contact support.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
