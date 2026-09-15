@@ -39,6 +39,7 @@ class ShipInputSerializer(serializers.Serializer):
 
 
 class OrderSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
     items = OrderItemSerializer(many=True)
     events = OrderEventSerializer(many=True, read_only=True)
     shipping_address = serializers.CharField(required=False, allow_blank=True)
@@ -50,7 +51,7 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = (
-            "id", "status", "shipping_address", "shipping_address_id",
+            "id", "username", "status", "shipping_address", "shipping_address_id",
             "ship_recipient", "ship_phone", "ship_line1", "ship_line2",
             "ship_city", "ship_state", "ship_postal_code", "ship_country",
             "subtotal", "discount_total", "tax_total", "shipping_total", "coupon_code",

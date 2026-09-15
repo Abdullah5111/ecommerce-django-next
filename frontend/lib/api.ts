@@ -175,6 +175,7 @@ export type WishlistEntry = { id: number; product: Product; created_at: string }
 
 export type Order = {
   id: number;
+  username: string;
   status: "pending" | "paid" | "shipped" | "delivered" | "cancelled" | "partially_refunded" | "refunded";
   shipping_address: string;
   ship_recipient: string;
