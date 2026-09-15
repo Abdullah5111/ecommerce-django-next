@@ -3,7 +3,7 @@ import { buttonClasses } from "@/components/ui/Button";
 import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
 
 /** Homepage hero — carries the page's single h1 in browse mode. */
-export default function Hero() {
+export default function Hero({ hasDeals = false }: { hasDeals?: boolean }) {
   return (
     <section className="relative overflow-hidden rounded-card bg-gradient-to-br from-brand to-brand-dark text-white p-8 md:p-12 mb-8">
       <div className="relative z-10 max-w-lg">
@@ -18,12 +18,14 @@ export default function Hero() {
           <Link href="#catalog" className={buttonClasses("deal", "lg")}>
             Shop now
           </Link>
-          <Link
-            href="#deals"
-            className="rounded-lg border border-white/50 px-5 h-12 inline-flex items-center text-sm font-medium hover:bg-white/10 transition-colors"
-          >
-            Today&apos;s deals ⚡
-          </Link>
+          {hasDeals && (
+            <Link
+              href="#deals"
+              className="rounded-lg border border-white/50 px-5 h-12 inline-flex items-center text-sm font-medium hover:bg-white/10 transition-colors"
+            >
+              Today&apos;s deals ⚡
+            </Link>
+          )}
         </div>
       </div>
       <div className="pointer-events-none absolute -right-16 -top-20 w-72 h-72 rounded-full bg-white/10" />

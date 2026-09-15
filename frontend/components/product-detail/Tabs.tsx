@@ -26,11 +26,18 @@ function hashToTab(hash: string): TabKey {
 
 export default function Tabs({ description, specifications, reviews }: Props) {
   const tabs = TABS.filter((t) => t.key !== "specifications" || !!specifications);
+  const available = new Set(tabs.map((t) => t.key));
+  // A hashed tab the product doesn't have (#specifications with no specs)
+  // would render a blank panel — fall back to description.
+  const resolve = (hash: string): TabKey => {
+    const t = hashToTab(hash);
+    return available.has(t) ? t : "description";
+  };
   const [active, setActive] = useState<TabKey>("description");
 
   useEffect(() => {
-    setActive(hashToTab(window.location.hash));
-    const onHash = () => setActive(hashToTab(window.location.hash));
+    setActive(resolve(window.location.hash));
+    const onHash = () => setActive(resolve(window.location.hash));
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
