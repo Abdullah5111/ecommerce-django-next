@@ -57,9 +57,13 @@ export default function ChatWidget() {
   const loadOlder = async () => {
     const token = auth.get();
     if (!token || !olderCursor) return;
-    const page = await api.listChatMessages(token, { cursor: olderCursor });
-    setMessages((prev) => (prev ? [...[...page.results].reverse(), ...prev] : prev));
-    setOlderCursor(page.next ? new URL(page.next).searchParams.get("cursor") : null);
+    try {
+      const page = await api.listChatMessages(token, { cursor: olderCursor });
+      setMessages((prev) => (prev ? [...[...page.results].reverse(), ...prev] : prev));
+      setOlderCursor(page.next ? new URL(page.next).searchParams.get("cursor") : null);
+    } catch {
+      toast("Couldn't load older messages", "error");
+    }
   };
 
   useEffect(() => {

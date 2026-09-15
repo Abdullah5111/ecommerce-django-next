@@ -69,10 +69,14 @@ export default function StaffChatPage() {
     const token = auth.get();
     const uid = selected;
     if (!token || uid === null || !olderCursor) return;
-    const page = await api.listChatMessages(token, { thread: uid, cursor: olderCursor });
-    if (selectedRef.current !== uid) return; // switched threads mid-fetch
-    setMessages((prev) => (prev ? [...[...page.results].reverse(), ...prev] : prev));
-    setOlderCursor(page.next ? new URL(page.next).searchParams.get("cursor") : null);
+    try {
+      const page = await api.listChatMessages(token, { thread: uid, cursor: olderCursor });
+      if (selectedRef.current !== uid) return; // switched threads mid-fetch
+      setMessages((prev) => (prev ? [...[...page.results].reverse(), ...prev] : prev));
+      setOlderCursor(page.next ? new URL(page.next).searchParams.get("cursor") : null);
+    } catch {
+      toast("Couldn't load older messages", "error");
+    }
   };
 
   const clearUnread = useCallback((uid: number) => {

@@ -27,8 +27,12 @@ export default function SignupPage() {
   const hasLetterAndDigit = /[A-Za-z]/.test(pw) && /\d/.test(pw);
   const notAllNumeric = pw.length > 0 && !/^\d+$/.test(pw);
 
+  const [busy, setBusy] = useState(false);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
+    setBusy(true);
     setError(null);
     try {
       await api.register(form);
@@ -38,6 +42,8 @@ export default function SignupPage() {
       router.push("/");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Signup failed");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -53,7 +59,9 @@ export default function SignupPage() {
           <Hint ok={hasLetterAndDigit} label="Includes a letter and a digit" />
           <Hint ok={notAllNumeric} label="Not all numeric" />
         </ul>
-        <button className="w-full bg-black text-white py-3 rounded font-medium">Sign up</button>
+        <button disabled={busy} className="w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50">
+          {busy ? "Creating account…" : "Sign up"}
+        </button>
       </form>
       {error && <p className="text-red-600 mt-4">{error}</p>}
       <GoogleSignInButton next="/" />
