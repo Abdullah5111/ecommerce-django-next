@@ -1,13 +1,49 @@
 from django.conf import settings
+from django.db.models import Count, Q, Sum
 from rest_framework import mixins, permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from payments import gateway
+from products.models import Product
 
 from . import transitions
 from .models import Order
 from .serializers import OrderSerializer, ShipInputSerializer
+
+
+class StaffStatsView(APIView):
+    """GET /api/staff/stats/ — the overview dashboard's numbers, one request."""
+
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        # Money actually captured: paid, in-flight, and delivered orders.
+        revenue = Order.objects.filter(
+            status__in=[Order.Status.PAID, Order.Status.SHIPPED, Order.Status.DELIVERED]
+        ).aggregate(total=Sum("total"), count=Count("id"))
+        by_status = dict(
+            Order.objects.values_list("status").annotate(n=Count("id")).values_list("status", "n")
+        )
+        low_stock = list(
+            Product.objects.filter(stock__lte=5)
+            .order_by("stock", "id")
+            .values("id", "name", "stock")[:10]
+        )
+        from chat.views import _thread_qs
+
+        open_chats = _thread_qs(viewer_is_staff=True).filter(unread__gt=0).count()
+        return Response(
+            {
+                "revenue": revenue["total"] or 0,
+                "paid_orders": revenue["count"] or 0,
+                "orders_by_status": by_status,
+                "total_orders": sum(by_status.values()),
+                "low_stock": low_stock,
+                "open_chats": open_chats,
+            }
+        )
 
 
 class OrderViewSet(

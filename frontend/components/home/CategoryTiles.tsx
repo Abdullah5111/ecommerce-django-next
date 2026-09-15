@@ -2,6 +2,29 @@ import Link from "next/link";
 
 type Cat = { id: number; name: string; full_slug: string };
 
+const ICONS: Record<string, string> = {
+  electronics: "🎧",
+  computers: "💻",
+  fashion: "👕",
+  apparel: "👕",
+  shoes: "👟",
+  beauty: "💄",
+  home: "🛋️",
+  "home & kitchen": "🍳",
+  kitchen: "🍳",
+  sports: "🏀",
+  outdoors: "🏕️",
+  toys: "🧸",
+  books: "📚",
+  gaming: "🎮",
+  grocery: "🛒",
+  pets: "🐾",
+  jewelry: "💎",
+  watches: "⌚",
+  phones: "📱",
+  audio: "🎤",
+};
+
 const TINTS = [
   "from-indigo-50",
   "from-amber-50",
@@ -23,7 +46,12 @@ export default function CategoryTiles({ categories }: { categories: Cat[] }) {
             href={`/c/${c.full_slug}`}
             className={`group rounded-card border border-zinc-200 bg-gradient-to-b ${TINTS[i % TINTS.length]} to-white p-4 flex items-center justify-center text-center hover:shadow-card-hover hover:-translate-y-0.5 transition-all`}
           >
-            <span className="text-sm font-medium group-hover:text-brand">{c.name}</span>
+            <span className="text-center">
+              <span className="block text-2xl mb-1" aria-hidden>
+                {ICONS[c.name.toLowerCase()] ?? "🛍️"}
+              </span>
+              <span className="text-sm font-medium group-hover:text-brand">{c.name}</span>
+            </span>
           </Link>
         ))}
       </div>

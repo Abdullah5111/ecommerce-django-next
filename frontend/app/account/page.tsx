@@ -101,12 +101,26 @@ export default function AccountHubPage() {
           subtitle="Emails and order alerts"
         />
         {user.is_staff && (
-          <AccountCard
-            href="/staff/chat"
-            icon="💬"
-            title="Support inbox"
-            subtitle="Answer customer conversations"
-          />
+          <>
+            <AccountCard
+              href="/staff"
+              icon="📊"
+              title="Store overview"
+              subtitle="Revenue, orders, low stock"
+            />
+            <AccountCard
+              href="/staff/orders"
+              icon="🚚"
+              title="Fulfillment"
+              subtitle="Ship and deliver orders"
+            />
+            <AccountCard
+              href="/staff/chat"
+              icon="💬"
+              title="Support inbox"
+              subtitle="Answer customer conversations"
+            />
+          </>
         )}
       </div>
     </div>

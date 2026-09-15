@@ -175,6 +175,7 @@ export type WishlistEntry = { id: number; product: Product; created_at: string }
 
 export type Order = {
   id: number;
+  username: string;
   status: "pending" | "paid" | "shipped" | "delivered" | "cancelled" | "partially_refunded" | "refunded";
   shipping_address: string;
   ship_recipient: string;
@@ -308,6 +309,15 @@ export type ChatMessage = {
 };
 
 export type Paginated<T> = { count: number; next: string | null; previous: string | null; results: T[] };
+
+export type StaffStats = {
+  revenue: number;
+  paid_orders: number;
+  orders_by_status: Record<string, number>;
+  total_orders: number;
+  low_stock: { id: number; name: string; stock: number }[];
+  open_chats: number;
+};
 
 async function request<T>(path: string, init: RequestInit = {}, _retry = false): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -549,6 +559,21 @@ export const api = {
     }),
   getOrder: (token: string, id: number) =>
     request<Order>(`/orders/${id}/`, { headers: { Authorization: `Bearer ${token}` } }),
+  shipOrder: (token: string, id: number, tracking: { tracking_carrier?: string; tracking_number?: string } = {}) =>
+    request<Order>(`/orders/${id}/ship/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(tracking),
+    }),
+  deliverOrder: (token: string, id: number) =>
+    request<Order>(`/orders/${id}/deliver/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  getStaffStats: (token: string) =>
+    request<StaffStats>("/staff/stats/", {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
   cancelOrder: (token: string, id: number) =>
     request<Order>(`/orders/${id}/cancel/`, {
       method: "POST",

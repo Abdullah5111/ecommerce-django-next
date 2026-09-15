@@ -469,3 +469,52 @@ class VariantOrderTests(APITestCase):
         q = quote([Line(self.tee, 1, self.large)], coupon, self.user)
         self.assertEqual(q.subtotal, Decimal("26.00"))
         self.assertEqual(q.discount_total, Decimal("2.60"))
+
+
+class StaffStatsTests(APITestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(
+            name="Widget", price=Decimal("40.00"), stock=3, category=self.cat
+        )
+        self.buyer = User.objects.create_user(
+            username="stat_buyer", email="stat_buyer@example.com", password="pw-123456"
+        )
+        self.staff = User.objects.create_user(
+            username="stat_staff", email="stat_staff@example.com", password="pw-123456", is_staff=True
+        )
+
+    def _order(self, status):
+        return Order.objects.create(
+            user=self.buyer,
+            shipping_address="123 Test St",
+            total=Decimal("80.00"),
+            status=status,
+        )
+
+    def test_stats_roll_up_revenue_status_and_low_stock(self):
+        from chat.models import ChatMessage, ChatThread
+
+        self._order(Order.Status.PENDING)
+        self._order(Order.Status.PAID)
+        self._order(Order.Status.DELIVERED)
+        self._order(Order.Status.CANCELLED)
+        thread = ChatThread.objects.create(user=self.buyer)
+        ChatMessage.objects.create(thread=thread, sender=self.buyer, body="hello")
+
+        self.client.force_authenticate(self.staff)
+        res = self.client.get("/api/staff/stats/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["revenue"], 160)  # paid + delivered, not pending/cancelled
+        self.assertEqual(res.data["paid_orders"], 2)
+        self.assertEqual(res.data["total_orders"], 4)
+        self.assertEqual(res.data["orders_by_status"]["pending"], 1)
+        self.assertEqual(res.data["orders_by_status"]["cancelled"], 1)
+        self.assertEqual(res.data["open_chats"], 1)
+        low = {row["id"]: row for row in res.data["low_stock"]}
+        self.assertIn(self.p.id, low)
+        self.assertEqual(low[self.p.id]["stock"], 3)
+
+    def test_customer_is_forbidden(self):
+        self.client.force_authenticate(self.buyer)
+        self.assertEqual(self.client.get("/api/staff/stats/").status_code, 403)
