@@ -519,3 +519,27 @@ class StaffStatsTests(APITestCase):
     def test_customer_is_forbidden(self):
         self.client.force_authenticate(self.buyer)
         self.assertEqual(self.client.get("/api/staff/stats/").status_code, 403)
+
+
+class SeedDemoTests(TestCase):
+    def test_seed_demo_is_idempotent_and_stages_the_full_story(self):
+        from django.core.management import call_command
+        from chat.models import ChatThread
+
+        call_command("seed_demo", verbosity=0)
+        call_command("seed_demo", verbosity=0)  # second run must not duplicate
+
+        staff = User.objects.get(username="staff")
+        self.assertTrue(staff.is_staff)
+        buyer = User.objects.get(username="buyer")
+        self.assertTrue(buyer.email_verified)
+        statuses = set(Order.objects.filter(user=buyer).values_list("status", flat=True))
+        self.assertLessEqual({"pending", "paid", "shipped", "delivered", "cancelled"}, statuses)
+        self.assertTrue(Order.objects.filter(user__username="casey").exists())
+        # idempotency in the count itself: exactly one delivered, not two
+        self.assertEqual(
+            Order.objects.filter(user=buyer, status=Order.Status.DELIVERED).count(), 1
+        )
+        thread = ChatThread.objects.get(user=buyer)
+        self.assertEqual(thread.messages.count(), 2)
+        self.assertEqual(Product.objects.filter(name="Denim Jacket", stock=4).count(), 1)
