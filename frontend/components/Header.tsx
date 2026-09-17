@@ -7,11 +7,13 @@ import { useAuth } from "@/lib/useAuth";
 import { useWishlist } from "@/lib/useWishlist";
 import MegaMenu from "@/components/MegaMenu";
 import NotificationBell from "@/components/NotificationBell";
+import { useToast } from "@/lib/useToast";
 
 export default function Header() {
   const { items } = useCart();
   const { items: wishItems } = useWishlist();
   const { user, loading, logout } = useAuth();
+  const { toast } = useToast();
   const router = useRouter();
   const count = items.reduce((s, i) => s + i.quantity, 0);
   const wishCount = wishItems.length;
@@ -44,6 +46,16 @@ export default function Header() {
             Wishlist
             {wishCount > 0 && <span className="ml-1 bg-brand text-brand-fg rounded-full px-2 text-xs">{wishCount}</span>}
           </Link>
+          <button
+            onClick={() => {
+              navigator.clipboard?.writeText("SAVE10").catch(() => {});
+              toast("Code SAVE10 copied — 10% off at checkout");
+            }}
+            className="hidden lg:inline-flex items-center gap-1 rounded-full bg-deal-light text-deal-fg border border-deal/40 px-2.5 py-0.5 text-xs font-medium hover:border-deal transition-colors"
+            title="Copy coupon code"
+          >
+            <span aria-hidden>⚡</span> SAVE10 · 10% off
+          </button>
           <Link href="/cart" className="hidden md:inline hover:underline">
             Cart {count > 0 && <span className="ml-1 bg-brand text-brand-fg rounded-full px-2 text-xs">{count}</span>}
           </Link>
