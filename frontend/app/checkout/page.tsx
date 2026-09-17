@@ -145,12 +145,12 @@ export default function CheckoutPage() {
       // The charge may have gone through; the webhook backstop can still mark
       // it paid — send the user somewhere useful instead of failing silently.
       toast("Order received — confirmation is on its way", "error");
-      router.push(`/orders/${orderId}`);
+      router.push(`/orders/${orderId}?placed=1`);
       return;
     }
     clear();
     toast("Order placed", "success");
-    router.push(`/orders/${orderId}`);
+    router.push(`/orders/${orderId}?placed=1`);
   };
 
   // Kick off payment for a new order: mock confirms immediately, live surfaces the PaymentElement.

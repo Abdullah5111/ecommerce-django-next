@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api, type Order, type ReturnRequest, type ReturnReason } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
@@ -17,8 +17,10 @@ const REASONS: { value: ReturnReason; label: string }[] = [
 
 export default function OrderDetailPage() {
   const router = useRouter();
+  const search = useSearchParams();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
+  const [justPlaced, setJustPlaced] = useState(search.get("placed") === "1");
 
   const [order, setOrder] = useState<Order | null>(null);
   const [returns, setReturns] = useState<ReturnRequest[]>([]);
@@ -108,6 +110,26 @@ export default function OrderDetailPage() {
 
   return (
     <div className="max-w-2xl space-y-6">
+      {justPlaced && (
+        <div className="border border-green-200 bg-green-50 text-green-800 rounded-xl p-4 flex items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold">Thanks! Your order is confirmed.</p>
+            <p className="text-sm mt-0.5">
+              We emailed you a receipt — track progress right here, live.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setJustPlaced(false);
+              router.replace(`/orders/${id}`);
+            }}
+            aria-label="Dismiss"
+            className="text-green-700 hover:text-green-900"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Order #{order.id}</h1>
         <span className="text-sm uppercase px-2 py-1 rounded bg-zinc-100">{order.status}</span>
