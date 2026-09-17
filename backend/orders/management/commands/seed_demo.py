@@ -6,12 +6,13 @@ status, a live-looking chat thread, and low stock for the dashboard.
 Idempotent — safe to re-run. Credentials are fixed so the demo script can
 print them. Catalog, reviews, and coupons come from the existing seed.py.
 """
-from decimal import Decimal
-
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
 import seed  # noqa: F401  # importing runs its idempotent catalog/coupon seeder
+from chat.models import ChatMessage, ChatThread
+from orders import transitions
+from orders.models import Order, OrderItem
 from products.models import Product
 
 User = get_user_model()
@@ -46,6 +47,13 @@ class Command(BaseCommand):
         for name, stock in LOW_STOCK.items():
             Product.objects.filter(name=name).update(stock=stock)
 
+        buyer = User.objects.get(username="buyer")
+        casey = User.objects.get(username="casey")
+        staff = User.objects.get(username="staff")
+        self._stage_orders(buyer)
+        self._stage_orders(casey, light=True)
+        self._stage_chat(buyer, staff)
+
         self.stdout.write(self.style.SUCCESS(
             "Demo seed complete.\n"
             "  staff : staff / demo-staff-123 (sees Dashboard/Orders/Inbox)\n"
@@ -53,3 +61,59 @@ class Command(BaseCommand):
             "  buyer : casey / demo-casey-123\n"
             "  coupon: SAVE10 (10% off)"
         ))
+
+    def _stage_orders(self, buyer, light=False):
+        """One order per interesting status, built through the real transitions
+        so audit events and notifications exist. Skipped once the user has any
+        orders (keeps re-runs idempotent)."""
+        if Order.objects.filter(user=buyer).exists():
+            return
+        headphones = Product.objects.get(name="Wireless Headphones")
+        press = Product.objects.get(name="French Press")
+        mug = Product.objects.get(name="Ceramic Mug Set")
+
+        def new_order(product, qty=1):
+            order = Order.objects.create(
+                user=buyer, shipping_address=ADDRESS,
+                ship_recipient=buyer.username,
+                subtotal=product.price * qty, total=product.price * qty,
+            )
+            OrderItem.objects.create(
+                order=order, product=product, quantity=qty, unit_price=product.price,
+            )
+            return order
+
+        # The full happy path — the demo's "delivered" order.
+        delivered = new_order(headphones)
+        transitions.mark_paid(delivered)
+        transitions.ship(delivered, tracking_number="1Z999AA10123456784", tracking_carrier="UPS")
+        transitions.deliver(delivered)
+
+        shipped = new_order(press, qty=2)
+        transitions.mark_paid(shipped)
+        transitions.ship(shipped, tracking_number="9400111899223197428490", tracking_carrier="USPS")
+
+        paid = new_order(mug, qty=4)
+        transitions.mark_paid(paid)
+
+        transitions.cancel(new_order(mug))  # cancelled while pending
+
+        if not light:
+            pending = new_order(press)
+            pending.status = Order.Status.PENDING  # already the default; explicit for clarity
+            pending.save(update_fields=["status"])
+
+    def _stage_chat(self, buyer, staff):
+        thread, _ = ChatThread.objects.get_or_create(user=buyer)
+        if thread.messages.exists():
+            return
+        ChatMessage.objects.create(
+            thread=thread, sender=buyer,
+            body="Hi! Is the Wireless Headphones in stock for immediate shipping?",
+        )
+        ChatMessage.objects.create(
+            thread=thread, sender=staff,
+            body="Hey! Yes — it ships same-day with free tracking. Any color preference?",
+        )
+        # left unread on both sides on purpose: lights up the buyer widget badge
+        # AND the staff inbox badge for the demo.
