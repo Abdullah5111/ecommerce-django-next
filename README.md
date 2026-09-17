@@ -14,10 +14,36 @@ A production-shaped, full-stack storefront — Django REST Framework + Next.js 1
 ## Live demo
 
 - **App:** _add your deployed URL here_ · **API docs:** `/<demo-host>/api/docs`
-- **Demo login:** _add demo credentials_ — then add to cart, apply coupon `SAVE10`, and check out (runs in keyless **mock payment** mode).
+- **Demo login:** `staff / demo-staff-123` (staff console) · `buyer / demo-buyer-123` (customer) — see the demo script below.
 
 <!-- Screenshots: drop 2–3 images in docs/screenshots/ and reference them here.
      A storefront/PDP shot + the checkout breakdown + Swagger UI reads best. -->
+
+### 60-second demo script
+
+Stage everything with one command (idempotent — safe to re-run):
+
+```bash
+docker compose exec backend python manage.py seed_demo
+```
+
+That guarantees demo accounts (`staff`/`buyer`/`casey`, all pre-verified), an order in every
+status, a customer support thread with unread badges on **both** sides, low stock for the
+dashboard, and coupon `SAVE10` (10% off).
+
+Then, in two browser windows:
+
+1. **Window A (staff):** log in as `staff` → the header shows **Dashboard · Orders · Inbox**.
+   The dashboard shows captured revenue, orders by status, low stock, open chats.
+2. **Window B (buyer):** log in as `buyer` → the order page (Orders → delivered order) shows the
+   full audit timeline. Add headphones to the cart, apply `SAVE10` (or click the ⚡ chip), check
+   out — payments run in keyless **mock mode**, so it completes instantly and lands on a
+   confirmation banner.
+3. **Live fulfillment:** in Window A → Orders → **Mark shipped** on the buyer's paid order.
+   Window B's order page, bell badge, and toast update **live** — no reload.
+4. **Live chat:** buyer opens the floating widget and sends a message → it appears in Window A's
+   Inbox with typing indicator and presence. Staff reply → ✓✓ read receipts and a preview toast
+   on the buyer side.
 
 ## Engineering highlights
 
@@ -73,11 +99,8 @@ docker compose up --build
 - API: http://localhost:8000/api/ · **Interactive docs: http://localhost:8000/api/docs**
 - Admin: http://localhost:8000/admin/
 
-The backend auto-migrates and seeds sample products on first boot. Create an admin with:
-
-```bash
-docker compose exec backend python manage.py createsuperuser
-```
+The backend auto-migrates and seeds sample products on first boot. For the full demo
+(accounts, orders, chat), run `python manage.py seed_demo` as shown above.
 
 <details>
 <summary><strong>Quick start without Docker</strong></summary>
