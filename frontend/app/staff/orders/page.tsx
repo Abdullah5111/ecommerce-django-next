@@ -9,26 +9,9 @@ import { formatDateTime } from "@/lib/format";
 import { realtime } from "@/lib/realtime";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/lib/useToast";
-
-const STATUS_TONES: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-800",
-  paid: "bg-blue-100 text-blue-800",
-  shipped: "bg-indigo-100 text-indigo-800",
-  delivered: "bg-green-100 text-green-800",
-  cancelled: "bg-zinc-200 text-zinc-600",
-  partially_refunded: "bg-orange-100 text-orange-800",
-  refunded: "bg-rose-100 text-rose-800",
-};
+import OrderStatusBadge from "@/components/ui/OrderStatusBadge";
 
 const ACTIONABLE = new Set(["pending", "paid", "shipped"]);
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs capitalize whitespace-nowrap ${STATUS_TONES[status] ?? "bg-zinc-100 text-zinc-600"}`}>
-      {status.replace("_", " ")}
-    </span>
-  );
-}
 
 /** Staff order console: the ship/deliver buttons that drive the live demo. */
 export default function StaffOrdersPage() {
@@ -142,7 +125,7 @@ export default function StaffOrdersPage() {
                       <Link href={`/orders/${o.id}`} className="hover:underline">
                         #{o.id}
                       </Link>
-                      <StatusBadge status={o.status} />
+                      <OrderStatusBadge status={o.status} />
                       <span className="text-zinc-500 font-normal">
                         {o.username} · {formatDateTime(o.created_at)} · ${o.total}
                       </span>

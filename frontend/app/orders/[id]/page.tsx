@@ -6,6 +6,7 @@ import { api, type Order, type ReturnRequest, type ReturnReason } from "@/lib/ap
 import { auth } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { realtime } from "@/lib/realtime";
+import OrderStatusBadge from "@/components/ui/OrderStatusBadge";
 
 const REASONS: { value: ReturnReason; label: string }[] = [
   { value: "defective", label: "Defective" },
@@ -132,7 +133,7 @@ export default function OrderDetailPage() {
       )}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Order #{order.id}</h1>
-        <span className="text-sm uppercase px-2 py-1 rounded bg-zinc-100">{order.status}</span>
+        <OrderStatusBadge status={order.status} />
       </div>
 
       {order.tracking_number && (

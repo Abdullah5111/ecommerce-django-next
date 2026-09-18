@@ -7,16 +7,7 @@ import { api, type Order } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import EmptyState from "@/components/EmptyState";
-
-const STATUS_STYLES: Record<Order["status"], string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  paid: "bg-blue-100 text-blue-800",
-  shipped: "bg-indigo-100 text-indigo-800",
-  delivered: "bg-green-100 text-green-800",
-  cancelled: "bg-zinc-200 text-zinc-700",
-  partially_refunded: "bg-orange-100 text-orange-800",
-  refunded: "bg-rose-100 text-rose-800",
-};
+import OrderStatusBadge from "@/components/ui/OrderStatusBadge";
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -80,11 +71,7 @@ export default function OrdersPage() {
                 </Link>
                 <div className="text-sm text-zinc-500">{formatDateTime(order.created_at)}</div>
               </div>
-              <span
-                className={`text-xs font-medium px-2 py-1 rounded-full uppercase ${STATUS_STYLES[order.status]}`}
-              >
-                {order.status}
-              </span>
+              <OrderStatusBadge status={order.status} />
             </div>
 
             <ul className="divide-y border-y">
