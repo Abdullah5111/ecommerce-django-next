@@ -171,7 +171,7 @@ export default function ChatWidget() {
               <p className="text-sm font-medium">Support</p>
               <p className="text-[11px] text-zinc-500 flex items-center gap-1">
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${staffOnline ? "bg-green-500" : "bg-zinc-300"}`}
+                  className={`h-1.5 w-1.5 rounded-full ${staffOnline ? "bg-success" : "bg-zinc-300"}`}
                   aria-hidden
                 />
                 {staffOnline ? "Online now" : "We typically reply within a day"}

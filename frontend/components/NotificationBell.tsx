@@ -37,7 +37,8 @@ export default function NotificationBell() {
       if (msg.type === "notification") {
         setUnread(msg.unread_count); // server truth, includes this one
         setItems((prev) => (prev ? [msg.notification, ...prev].slice(0, 8) : prev));
-        toast(msg.notification.title, "success");
+        const bad = msg.notification.kind === "order_cancelled" || msg.notification.kind === "order_refunded";
+        toast(msg.notification.title, bad ? "warning" : "success");
       } else if (msg.type === "unread_count") {
         setUnread(msg.unread);
       }
@@ -99,7 +100,7 @@ export default function NotificationBell() {
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
         {unread > 0 && (
-          <span className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full px-1.5 text-[10px] leading-tight">
+          <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full min-w-4 h-4 px-1 text-[10px] leading-4 text-center">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
@@ -127,7 +128,7 @@ export default function NotificationBell() {
                 const body = (
                   <div className={`px-4 py-3 border-b last:border-b-0 ${n.is_read ? "" : "bg-blue-50"}`}>
                     <div className="flex items-center gap-2">
-                      {!n.is_read && <span className="h-2 w-2 rounded-full bg-blue-600 shrink-0" aria-hidden />}
+                      {!n.is_read && <span className="h-2 w-2 rounded-full bg-brand shrink-0" aria-hidden />}
                       <span className="text-sm font-medium">{n.title}</span>
                     </div>
                     {n.body && <p className="text-xs text-zinc-600 mt-0.5">{n.body}</p>}

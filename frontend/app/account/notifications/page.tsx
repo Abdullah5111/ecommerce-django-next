@@ -125,7 +125,7 @@ export default function NotificationsPage() {
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{n.title}</span>
                     {!n.is_read && (
-                      <span className="h-2 w-2 rounded-full bg-blue-600" aria-label="unread" />
+                      <span className="h-2 w-2 rounded-full bg-brand" aria-label="unread" />
                     )}
                   </div>
                   {n.body && <p className="text-sm text-zinc-600">{n.body}</p>}

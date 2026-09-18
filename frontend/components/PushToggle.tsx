@@ -56,7 +56,7 @@ export default function PushToggle() {
       disabled={busy}
       className="text-sm border rounded px-3 py-1.5 hover:border-zinc-400 disabled:opacity-50"
     >
-      {busy ? "…" : on ? "🔔 Push on" : "🔕 Enable browser push"}
+      {busy ? "Working…" : on ? "🔔 Push on" : "🔕 Enable browser push"}
     </button>
   );
 }

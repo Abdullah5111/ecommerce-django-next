@@ -161,7 +161,7 @@ export default function StaffOrdersPage() {
                           disabled={busy}
                           className={buttonClasses("primary", "sm")}
                         >
-                          {busy ? "…" : "Mark shipped"}
+                          {busy ? "Shipping…" : "Mark shipped"}
                         </button>
                       </>
                     )}
@@ -171,7 +171,7 @@ export default function StaffOrdersPage() {
                         disabled={busy}
                         className={buttonClasses("primary", "sm")}
                       >
-                        {busy ? "…" : "Mark delivered"}
+                        {busy ? "Completing…" : "Mark delivered"}
                       </button>
                     )}
                   </div>

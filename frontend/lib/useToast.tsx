@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useState } from "react";
 
-export type ToastVariant = "default" | "success" | "error";
+export type ToastVariant = "default" | "success" | "warning" | "error";
 
 export type Toast = {
   id: number;

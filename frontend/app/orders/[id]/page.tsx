@@ -9,6 +9,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api, type Order, type ReturnRequest, type ReturnReason } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { formatDateTime, formatMoney } from "@/lib/format";
+import { useToast } from "@/lib/useToast";
 import { realtime } from "@/lib/realtime";
 import OrderStatusBadge from "@/components/ui/OrderStatusBadge";
 
@@ -22,6 +23,7 @@ const REASONS: { value: ReturnReason; label: string }[] = [
 
 export default function OrderDetailPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const search = useSearchParams();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
@@ -70,6 +72,7 @@ export default function OrderDetailPage() {
     setError(null);
     try {
       await api.cancelOrder(token, id);
+      toast("Order cancelled", "success");
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cancel failed");
@@ -96,6 +99,7 @@ export default function OrderDetailPage() {
     setError(null);
     try {
       await api.createReturn(token, { order: id, lines });
+      toast("Return requested", "success");
       setShowReturnForm(false);
       setReturnQty({});
       setReturnReason({});
@@ -218,7 +222,7 @@ export default function OrderDetailPage() {
       <div className="flex gap-3">
         {canCancel && (
           <button onClick={cancel} disabled={busy} className="border rounded px-4 py-2 text-sm disabled:opacity-50">
-            {busy ? "…" : "Cancel order"}
+            {busy ? "Cancelling…" : "Cancel order"}
           </button>
         )}
         {canReturn && !showReturnForm && (
@@ -257,7 +261,7 @@ export default function OrderDetailPage() {
           ))}
           <div className="flex gap-2">
             <button onClick={submitReturn} disabled={busy} className={buttonClasses("primary", "sm")}>
-              {busy ? "…" : "Submit return"}
+              {busy ? "Submitting…" : "Submit return"}
             </button>
             <button onClick={() => setShowReturnForm(false)} className="border rounded px-4 py-2 text-sm">Cancel</button>
           </div>

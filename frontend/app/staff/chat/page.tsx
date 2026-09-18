@@ -233,13 +233,13 @@ export default function StaffChatPage() {
                 <div className="flex items-center justify-between gap-2">
                   <span className={`text-sm flex items-center gap-1.5 ${t.unread > 0 ? "font-semibold" : "font-medium"}`}>
                     <span
-                      className={`h-1.5 w-1.5 rounded-full ${presence[t.user] ? "bg-green-500" : "bg-zinc-300"}`}
+                      className={`h-1.5 w-1.5 rounded-full ${presence[t.user] ? "bg-success" : "bg-zinc-300"}`}
                       aria-hidden
                     />
                     {t.username}
                   </span>
                   {t.unread > 0 && (
-                    <span className="bg-brand text-brand-fg rounded-full px-1.5 text-[10px] leading-tight">
+                    <span className="bg-red-600 text-white rounded-full px-1.5 text-[10px] leading-tight">
                       {t.unread}
                     </span>
                   )}
@@ -264,7 +264,7 @@ export default function StaffChatPage() {
               <div className="px-4 py-2.5 border-b flex items-center justify-between">
                 <p className="text-sm font-medium flex items-center gap-1.5">
                   <span
-                    className={`h-1.5 w-1.5 rounded-full ${presence[selected] ? "bg-green-500" : "bg-zinc-300"}`}
+                    className={`h-1.5 w-1.5 rounded-full ${presence[selected] ? "bg-success" : "bg-zinc-300"}`}
                     aria-hidden
                   />
                   {selectedThread?.username ?? `Customer #${selected}`}
