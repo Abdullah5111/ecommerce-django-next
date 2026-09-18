@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
 import { realtime } from "@/lib/realtime";
 import { useToast } from "@/lib/useToast";
+import { formatTimeAgo } from "@/lib/format";
 
 export default function NotificationBell() {
   const { user } = useAuth();
@@ -126,12 +127,13 @@ export default function NotificationBell() {
             <ul className="max-h-96 overflow-y-auto">
               {items.map((n) => {
                 const body = (
-                  <div className={`px-4 py-3 border-b last:border-b-0 ${n.is_read ? "" : "bg-blue-50"}`}>
+                  <div className={`px-4 py-3 border-b last:border-b-0 ${n.is_read ? "" : "bg-brand-light/50"}`}>
                     <div className="flex items-center gap-2">
                       {!n.is_read && <span className="h-2 w-2 rounded-full bg-brand shrink-0" aria-hidden />}
                       <span className="text-sm font-medium">{n.title}</span>
                     </div>
                     {n.body && <p className="text-xs text-zinc-600 mt-0.5">{n.body}</p>}
+                    <p className="text-[10px] text-zinc-400 mt-0.5">{formatTimeAgo(n.created_at)}</p>
                   </div>
                 );
                 return (

@@ -53,9 +53,9 @@ export default function SignupPage() {
     <div className="max-w-sm mx-auto">
       <h1 className="text-2xl font-bold mb-6">Create account</h1>
       <form onSubmit={submit} className="space-y-4">
-        <input className="w-full border rounded p-3" placeholder="Username" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
-        <input className="w-full border rounded p-3" type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-        <input className="w-full border rounded p-3" type="password" placeholder="Password (min 8 chars)" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+        <input className="w-full border rounded p-3" focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand placeholder="Username" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
+        <input className="w-full border rounded p-3" focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+        <input className="w-full border rounded p-3" focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand type="password" placeholder="Password (min 8 chars)" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
         <ul className="text-xs space-y-1 pl-1">
           <Hint ok={longEnough} label="At least 8 characters" />
           <Hint ok={hasLetterAndDigit} label="Includes a letter and a digit" />

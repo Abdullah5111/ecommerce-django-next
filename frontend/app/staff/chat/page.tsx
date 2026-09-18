@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type ChatMessage, type ChatThread } from "@/lib/api";
 import { auth } from "@/lib/auth";
-import { formatDateTime } from "@/lib/format";
+import { formatTimeAgo } from "@/lib/format";
 import { realtime } from "@/lib/realtime";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/lib/useToast";
@@ -248,7 +248,7 @@ export default function StaffChatPage() {
                   {t.last_message_body ?? "No messages yet"}
                 </p>
                 {t.last_message_at && (
-                  <p className="text-[10px] text-zinc-400">{formatDateTime(t.last_message_at)}</p>
+                  <p className="text-[10px] text-zinc-400">{t.last_message_at ? formatTimeAgo(t.last_message_at) : ""}</p>
                 )}
               </button>
             ))

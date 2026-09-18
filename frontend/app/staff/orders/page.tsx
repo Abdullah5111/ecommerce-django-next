@@ -153,7 +153,7 @@ export default function StaffOrdersPage() {
                           value={tracking[o.id] ?? ""}
                           onChange={(e) => setTracking((t) => ({ ...t, [o.id]: e.target.value }))}
                           placeholder="Tracking # (optional)"
-                          className="border rounded px-2 py-1 text-xs w-40"
+                          className="border rounded px-2 py-1 text-xs w-40 focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
                           aria-label={`Tracking number for order ${o.id}`}
                         />
                         <button
