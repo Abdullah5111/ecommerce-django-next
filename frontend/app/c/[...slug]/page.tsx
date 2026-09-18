@@ -4,6 +4,7 @@ import ProductCard from "@/components/ProductCard";
 import SearchBar from "@/components/SearchBar";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import CategoryFilters from "@/components/CategoryFilters";
+import BackendUnreachable from "@/components/BackendUnreachable";
 import EmptyState from "@/components/EmptyState";
 import SortDropdown from "@/components/SortDropdown";
 import ActiveFilters from "@/components/ActiveFilters";
@@ -95,12 +96,7 @@ export default async function CategoryPage({
 
   if (backendError || !category) {
     return (
-      <div className="text-center py-20">
-        <h2 className="text-2xl font-semibold">Backend unreachable</h2>
-        <p className="text-zinc-500 mt-2">
-          Start the Django API and refresh.
-        </p>
-      </div>
+<BackendUnreachable />
     );
   }
 

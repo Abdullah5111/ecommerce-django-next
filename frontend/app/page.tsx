@@ -12,6 +12,7 @@ import Hero from "@/components/home/Hero";
 import CategoryTiles from "@/components/home/CategoryTiles";
 import DealsRail from "@/components/home/DealsRail";
 import { PAGE_SIZE } from "@/lib/constants";
+import BackendUnreachable from "@/components/BackendUnreachable";
 import EmptyState from "@/components/EmptyState";
 
 function buildHomeHref(params: { search?: string }) {
@@ -76,12 +77,7 @@ export default async function HomePage({
       .slice(0, 10);
   } catch (e) {
     return (
-      <div className="text-center py-20">
-        <h2 className="text-2xl font-semibold">Backend unreachable</h2>
-        <p className="text-zinc-500 mt-2">
-          Start the Django API and refresh. See README for setup.
-        </p>
-      </div>
+<BackendUnreachable />
     );
   }
 

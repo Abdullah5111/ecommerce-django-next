@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import Loading from "@/components/ui/Loading";
 
 import { buttonClasses } from "@/components/ui/Button";
@@ -140,7 +142,10 @@ export default function OrderDetailPage() {
         </div>
       )}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Order #{order.id}</h1>
+        <h1 className="text-2xl font-bold">
+          <Link href="/orders" className="text-zinc-400 hover:text-zinc-600 mr-2" aria-label="All orders">←</Link>
+          Order #{order.id}
+        </h1>
         <OrderStatusBadge status={order.status} />
       </div>
 
