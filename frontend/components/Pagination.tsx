@@ -1,3 +1,4 @@
+import { buttonClasses } from "@/components/ui/Button";
 import Link from "next/link";
 
 type Props = {
@@ -47,7 +48,7 @@ export default function Pagination({ currentPage, totalPages, pathname, searchPa
 
   const baseBtn = "px-3 py-1.5 text-sm rounded border min-w-[2.25rem] text-center";
   const inactive = "bg-white border-zinc-200 hover:border-zinc-400 text-zinc-700";
-  const active = "bg-black text-white border-black";
+  const active = "bg-brand text-brand-fg border-brand";
   const disabled = "bg-zinc-50 text-zinc-300 border-zinc-100 pointer-events-none";
 
   return (

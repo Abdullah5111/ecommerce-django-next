@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api, type Order, type ReturnRequest, type ReturnReason } from "@/lib/api";
@@ -252,7 +254,7 @@ export default function OrderDetailPage() {
             </div>
           ))}
           <div className="flex gap-2">
-            <button onClick={submitReturn} disabled={busy} className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50">
+            <button onClick={submitReturn} disabled={busy} className={buttonClasses("primary", "sm")}>
               {busy ? "…" : "Submit return"}
             </button>
             <button onClick={() => setShowReturnForm(false)} className="border rounded px-4 py-2 text-sm">Cancel</button>

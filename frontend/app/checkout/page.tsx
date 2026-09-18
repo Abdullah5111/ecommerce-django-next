@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -237,7 +239,7 @@ export default function CheckoutPage() {
           </p>
           <Link
             href="/login?next=/checkout"
-            className="inline-block bg-black text-white px-4 py-2 rounded font-medium hover:bg-zinc-800"
+            className={buttonClasses("primary", "sm", "inline-block")}
           >
             Sign in to check out
           </Link>
@@ -393,7 +395,7 @@ export default function CheckoutPage() {
               <button
                 onClick={() => placeOrder()}
                 disabled={!selectedId || items.length === 0 || loading || !quote || quoting}
-                className="mt-6 w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50"
+                className={buttonClasses("primary", "md", "mt-6 w-full")}
               >
                 {loading ? "Placing order…" : quoting || !quote ? "Calculating total…" : "Place order"}
               </button>

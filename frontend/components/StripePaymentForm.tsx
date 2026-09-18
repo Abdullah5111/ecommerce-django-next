@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useMemo, useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import {
@@ -55,7 +57,7 @@ function CardForm({
       <button
         onClick={handlePay}
         disabled={!stripe || busy}
-        className="w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50"
+        className={buttonClasses("primary", "md", "w-full")}
       >
         {busy ? "Processing…" : `Pay ${amountLabel}`}
       </button>

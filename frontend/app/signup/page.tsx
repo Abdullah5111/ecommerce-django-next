@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
@@ -59,7 +61,7 @@ export default function SignupPage() {
           <Hint ok={hasLetterAndDigit} label="Includes a letter and a digit" />
           <Hint ok={notAllNumeric} label="Not all numeric" />
         </ul>
-        <button disabled={busy} className="w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50">
+        <button disabled={busy} className={buttonClasses("primary", "md", "w-full")}>
           {busy ? "Creating account…" : "Sign up"}
         </button>
       </form>

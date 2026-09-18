@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -124,7 +126,7 @@ export default function AddressesPage() {
               setAdding(true);
               setEditingId(null);
             }}
-            className="bg-black text-white py-2 px-4 rounded text-sm font-medium"
+            className={buttonClasses("primary", "sm")}
           >
             Add new address
           </button>

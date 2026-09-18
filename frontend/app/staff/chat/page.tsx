@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type ChatMessage, type ChatThread } from "@/lib/api";
@@ -302,7 +304,7 @@ export default function StaffChatPage() {
                 <button
                   type="submit"
                   disabled={!input.trim()}
-                  className="bg-brand text-brand-fg rounded px-3 py-1.5 text-sm disabled:opacity-50"
+                  className={buttonClasses("primary", "sm")}
                 >
                   Send
                 </button>

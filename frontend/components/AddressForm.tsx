@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useState } from "react";
 import type { AddressInput } from "@/lib/api";
 
@@ -178,7 +180,7 @@ export default function AddressForm({ initial, onSubmit, submitLabel, onCancel }
         <button
           type="submit"
           disabled={submitting}
-          className="bg-black text-white py-2 px-4 rounded text-sm font-medium disabled:opacity-60"
+          className={buttonClasses("primary", "sm")}
         >
           {submitting ? "Saving…" : submitLabel}
         </button>

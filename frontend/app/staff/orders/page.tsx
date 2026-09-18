@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -153,7 +155,7 @@ export default function StaffOrdersPage() {
                         <button
                           onClick={() => act(o, api.shipOrder, { tracking_number: tracking[o.id] ?? "" })}
                           disabled={busy}
-                          className="bg-brand text-brand-fg rounded px-3 py-1.5 text-sm disabled:opacity-50"
+                          className={buttonClasses("primary", "sm")}
                         >
                           {busy ? "…" : "Mark shipped"}
                         </button>
@@ -163,7 +165,7 @@ export default function StaffOrdersPage() {
                       <button
                         onClick={() => act(o, api.deliverOrder)}
                         disabled={busy}
-                        className="bg-green-700 text-white rounded px-3 py-1.5 text-sm disabled:opacity-50"
+                        className={buttonClasses("primary", "sm")}
                       >
                         {busy ? "…" : "Mark delivered"}
                       </button>

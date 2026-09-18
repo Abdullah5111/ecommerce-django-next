@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -44,7 +46,7 @@ function LoginForm() {
       <form onSubmit={submit} className="space-y-4">
         <input className="w-full border rounded p-3" placeholder="Username or email" value={username} onChange={(e) => setUsername(e.target.value)} />
         <input className="w-full border rounded p-3" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        <button disabled={busy} className="w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50">
+        <button disabled={busy} className={buttonClasses("primary", "md", "w-full")}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
