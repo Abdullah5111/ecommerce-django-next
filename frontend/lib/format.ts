@@ -19,3 +19,14 @@ export function formatMoney(value: string | number, freeText?: string): string {
   if (freeText && n === 0) return freeText;
   return `$${n.toFixed(2)}`;
 }
+
+/** "just now / 3m ago / 2h ago / 4d ago" — notifications and inbox rows. */
+export function formatTimeAgo(iso: string): string {
+  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (secs < 60) return "just now";
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}

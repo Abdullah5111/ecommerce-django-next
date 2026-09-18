@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { api, type AppNotification, type NotificationKind } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
+import { formatTimeAgo } from "@/lib/format";
 import EmptyState from "@/components/EmptyState";
 import { useToast } from "@/lib/useToast";
 import PushToggle from "@/components/PushToggle";
@@ -19,17 +20,6 @@ const ICONS: Record<NotificationKind, string> = {
   order_cancelled: "✖️",
   order_refunded: "💸",
 };
-
-function timeAgo(iso: string): string {
-  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (secs < 60) return "just now";
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 export default function NotificationsPage() {
   const router = useRouter();
@@ -129,7 +119,7 @@ export default function NotificationsPage() {
                     )}
                   </div>
                   {n.body && <p className="text-sm text-zinc-600">{n.body}</p>}
-                  <p className="text-xs text-zinc-400 mt-1">{timeAgo(n.created_at)}</p>
+                  <p className="text-xs text-zinc-400 mt-1">{formatTimeAgo(n.created_at)}</p>
                 </div>
               </div>
             );
