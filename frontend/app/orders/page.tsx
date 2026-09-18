@@ -31,7 +31,7 @@ export default function OrdersPage() {
   if (error) {
     return (
       <div className="py-12">
-        <h1 className="text-2xl font-bold mb-2">Your orders</h1>
+        <h1 className="text-3xl font-bold mb-2">Your orders</h1>
         <p className="text-red-600">{error}</p>
       </div>
     );
@@ -40,7 +40,7 @@ export default function OrdersPage() {
   if (orders === null) {
     return (
       <div className="py-12">
-        <h1 className="text-2xl font-bold mb-6">Your orders</h1>
+        <h1 className="text-3xl font-bold mb-6">Your orders</h1>
         <Loading />
       </div>
     );

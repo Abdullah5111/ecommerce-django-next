@@ -120,7 +120,7 @@ export default function SearchBar() {
         <ul
           id="search-suggestions"
           role="listbox"
-          className="absolute z-20 left-0 right-0 mt-1 bg-white border rounded shadow-lg overflow-hidden"
+          className="absolute z-20 left-0 right-0 mt-1 bg-white border rounded shadow-pop overflow-hidden"
         >
           {suggestions.length === 0 && (
             <li className="px-3 py-2 text-sm text-zinc-500">

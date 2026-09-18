@@ -7,6 +7,7 @@ import { useCart } from "@/lib/cart";
 import { useWishlist } from "@/lib/useWishlist";
 import type { Product } from "@/lib/api";
 import FreeShippingBar from "@/components/FreeShippingBar";
+import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
 import EmptyState from "@/components/EmptyState";
 
 export default function CartPage() {
@@ -38,7 +39,7 @@ export default function CartPage() {
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6h15l-1.5 9h-12zM6 6L5 3H2M9 20a1 1 0 1 0 0 .01M18 20a1 1 0 1 0 0 .01" /></svg>
         }
         title="Your cart is empty"
-        message="Browse the catalog and add something you love — free shipping over ${FREE_SHIPPING_THRESHOLD}."
+        message={`Browse the catalog and add something you love — free shipping over $${FREE_SHIPPING_THRESHOLD}.`}
         ctaHref="/"
         ctaLabel="Start shopping"
       />
@@ -47,6 +48,7 @@ export default function CartPage() {
 
   return (
     <div className="grid md:grid-cols-3 gap-8">
+      <h1 className="text-2xl font-bold mb-6 md:col-span-3">Your cart</h1>
       <div className="md:col-span-2 space-y-8">
         <section className="space-y-4">
           {items.length === 0 ? (

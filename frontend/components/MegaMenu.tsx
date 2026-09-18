@@ -86,7 +86,7 @@ export default function MegaMenu() {
 
       {open && (
         <div
-          className="hidden md:block absolute left-0 top-full mt-2 z-50 w-screen max-w-5xl bg-white border rounded shadow-lg p-6"
+          className="hidden md:block absolute left-0 top-full mt-2 z-50 w-screen max-w-5xl bg-white border rounded shadow-pop p-6"
           onMouseEnter={clearCloseTimer}
           onMouseLeave={scheduleClose}
         >
