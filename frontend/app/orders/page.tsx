@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Order } from "@/lib/api";
 import { auth } from "@/lib/auth";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatMoney } from "@/lib/format";
 import EmptyState from "@/components/EmptyState";
 import OrderStatusBadge from "@/components/ui/OrderStatusBadge";
 
@@ -80,7 +80,7 @@ export default function OrdersPage() {
                   <span>
                     {item.product_name} × {item.quantity}
                   </span>
-                  <span className="text-zinc-700">${item.subtotal}</span>
+                  <span className="text-zinc-700">{formatMoney(item.subtotal)}</span>
                 </li>
               ))}
             </ul>
@@ -107,21 +107,21 @@ export default function OrdersPage() {
               <div className="text-sm text-right whitespace-nowrap">
                 <div className="flex justify-end gap-6">
                   <span className="text-zinc-500">Subtotal</span>
-                  <span>${order.subtotal}</span>
+                  <span>{formatMoney(order.subtotal)}</span>
                 </div>
                 {Number(order.discount_total) > 0 && (
                   <div className="flex justify-end gap-6 text-green-700">
                     <span>Discount{order.coupon_code ? ` (${order.coupon_code})` : ""}</span>
-                    <span>−${order.discount_total}</span>
+                    <span>−{formatMoney(order.discount_total)}</span>
                   </div>
                 )}
                 <div className="flex justify-end gap-6">
                   <span className="text-zinc-500">Shipping</span>
-                  <span>{Number(order.shipping_total) === 0 ? "Free" : `$${order.shipping_total}`}</span>
+                  <span>{formatMoney(order.shipping_total, "Free")}</span>
                 </div>
                 <div className="flex justify-end gap-6 font-semibold border-t mt-1 pt-1">
                   <span>Total</span>
-                  <span>${order.total}</span>
+                  <span>{formatMoney(order.total)}</span>
                 </div>
               </div>
             </div>

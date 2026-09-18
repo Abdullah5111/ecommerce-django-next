@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, type Order } from "@/lib/api";
 import { auth } from "@/lib/auth";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatMoney } from "@/lib/format";
 import { realtime } from "@/lib/realtime";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/lib/useToast";
@@ -129,7 +129,7 @@ export default function StaffOrdersPage() {
                       </Link>
                       <OrderStatusBadge status={o.status} />
                       <span className="text-zinc-500 font-normal">
-                        {o.username} · {formatDateTime(o.created_at)} · ${o.total}
+                        {o.username} · {formatDateTime(o.created_at)} · {formatMoney(o.total)}
                       </span>
                     </p>
                     <p className="text-xs text-zinc-500 truncate mt-0.5">

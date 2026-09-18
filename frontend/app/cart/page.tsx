@@ -38,7 +38,7 @@ export default function CartPage() {
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6h15l-1.5 9h-12zM6 6L5 3H2M9 20a1 1 0 1 0 0 .01M18 20a1 1 0 1 0 0 .01" /></svg>
         }
         title="Your cart is empty"
-        message="Browse the catalog and add something you love — free shipping over $50."
+        message="Browse the catalog and add something you love — free shipping over ${FREE_SHIPPING_THRESHOLD}."
         ctaHref="/"
         ctaLabel="Start shopping"
       />

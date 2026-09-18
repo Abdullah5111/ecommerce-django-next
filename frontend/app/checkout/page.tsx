@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart";
 import { auth } from "@/lib/auth";
+import { formatMoney } from "@/lib/format";
 import { api, type Address, type AddressInput, type QuoteResult } from "@/lib/api";
 import { useToast } from "@/lib/useToast";
 import AddressForm from "@/components/AddressForm";
@@ -211,7 +212,7 @@ export default function CheckoutPage() {
   }
 
   if (payment) {
-    const amountLabel = quote ? `$${quote.grand_total}` : "—";
+    const amountLabel = quote ? formatMoney(quote.grand_total) : "—";
     return (
       <div className="max-w-lg">
         <h1 className="text-2xl font-bold mb-6">Payment</h1>
@@ -355,33 +356,27 @@ export default function CheckoutPage() {
               <div className="mt-4 space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
-                  <span>${quote ? quote.subtotal : total.toFixed(2)}</span>
+                  <span>{quote ? formatMoney(quote.subtotal) : formatMoney(total)}</span>
                 </div>
                 {quote && Number(quote.discount_total) > 0 && (
                   <div className="flex justify-between text-green-700">
                     <span>Discount{appliedCode ? ` (${appliedCode})` : ""}</span>
-                    <span>−${quote.discount_total}</span>
+                    <span>−{formatMoney(quote.discount_total)}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <span>Shipping</span>
-                  <span>
-                    {!quote
-                      ? "—"
-                      : Number(quote.shipping_total) === 0
-                        ? "Free"
-                        : `$${quote.shipping_total}`}
-                  </span>
+                  <span>{quote ? formatMoney(quote.shipping_total, "Free") : "—"}</span>
                 </div>
                 {quote && Number(quote.tax_total) > 0 && (
                   <div className="flex justify-between">
                     <span>Tax</span>
-                    <span>${quote.tax_total}</span>
+                    <span>{formatMoney(quote.tax_total)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-lg font-semibold border-t pt-2 mt-2">
                   <span>Total</span>
-                  <span>{quote ? `$${quote.grand_total}` : "—"}</span>
+                  <span>{quote ? formatMoney(quote.grand_total) : "—"}</span>
                 </div>
               </div>
               {quoteError && !quoting && (

@@ -11,3 +11,11 @@ export function formatSold(n: number): string {
   const k = n / 1000;
   return `${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)}k`;
 }
+
+/** "$12.34" — every rendered amount goes through this; backend decimals can
+ * arrive unrounded. `freeText` renders when the amount is zero (shipping). */
+export function formatMoney(value: string | number, freeText?: string): string {
+  const n = Number(value);
+  if (freeText && n === 0) return freeText;
+  return `$${n.toFixed(2)}`;
+}

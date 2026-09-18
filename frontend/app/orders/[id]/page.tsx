@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api, type Order, type ReturnRequest, type ReturnReason } from "@/lib/api";
 import { auth } from "@/lib/auth";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatMoney } from "@/lib/format";
 import { realtime } from "@/lib/realtime";
 import OrderStatusBadge from "@/components/ui/OrderStatusBadge";
 
@@ -156,22 +156,22 @@ export default function OrderDetailPage() {
                 )}
                 {" "}× {it.quantity}
               </span>
-              <span>${it.subtotal}</span>
+              <span>{formatMoney(it.subtotal)}</span>
             </li>
           ))}
         </ul>
         <div className="mt-2 text-sm space-y-1">
-          <div className="flex justify-between"><span>Subtotal</span><span>${order.subtotal}</span></div>
+          <div className="flex justify-between"><span>Subtotal</span><span>{formatMoney(order.subtotal)}</span></div>
           {Number(order.discount_total) > 0 && (
-            <div className="flex justify-between text-green-700"><span>Discount</span><span>−${order.discount_total}</span></div>
+            <div className="flex justify-between text-green-700"><span>Discount</span><span>−{formatMoney(order.discount_total)}</span></div>
           )}
-          <div className="flex justify-between"><span>Shipping</span><span>{Number(order.shipping_total) === 0 ? "Free" : `$${order.shipping_total}`}</span></div>
+          <div className="flex justify-between"><span>Shipping</span><span>{formatMoney(order.shipping_total, "Free")}</span></div>
           {Number(order.tax_total) > 0 && (
-            <div className="flex justify-between"><span>Tax</span><span>${order.tax_total}</span></div>
+            <div className="flex justify-between"><span>Tax</span><span>{formatMoney(order.tax_total)}</span></div>
           )}
-          <div className="flex justify-between font-semibold border-t pt-1"><span>Total</span><span>${order.total}</span></div>
+          <div className="flex justify-between font-semibold border-t pt-1"><span>Total</span><span>{formatMoney(order.total)}</span></div>
           {Number(order.refunded_total) > 0 && (
-            <div className="flex justify-between text-rose-700"><span>Refunded</span><span>−${order.refunded_total}</span></div>
+            <div className="flex justify-between text-rose-700"><span>Refunded</span><span>−{formatMoney(order.refunded_total)}</span></div>
           )}
         </div>
       </section>
@@ -196,7 +196,7 @@ export default function OrderDetailPage() {
               <li key={r.id} className="border rounded p-3">
                 <div className="flex justify-between">
                   <span>Return #{r.id} — <span className="uppercase">{r.status}</span></span>
-                  {Number(r.refund_amount) > 0 && <span className="text-rose-700">${r.refund_amount}</span>}
+                  {Number(r.refund_amount) > 0 && <span className="text-rose-700">{formatMoney(r.refund_amount)}</span>}
                 </div>
                 <ul className="text-zinc-600 mt-1">
                   {r.lines.map((l) => (
