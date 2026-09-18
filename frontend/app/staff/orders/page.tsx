@@ -114,7 +114,9 @@ export default function StaffOrdersPage() {
       {orders === null ? (
         <p className="text-zinc-600 py-12">Loading…</p>
       ) : visible.length === 0 ? (
-        <p className="text-zinc-500 py-12 text-center">Nothing here.</p>
+        <p className="text-zinc-500 py-12 text-center">
+          {filter === "active" ? "Nothing needs action right now." : "No orders in this view."}
+        </p>
       ) : (
         <ul className="space-y-3">
           {visible.map((o) => {

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { api, type AppNotification, type NotificationKind } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
+import EmptyState from "@/components/EmptyState";
 import { useToast } from "@/lib/useToast";
 import PushToggle from "@/components/PushToggle";
 
@@ -105,7 +106,7 @@ export default function NotificationsPage() {
       {error && <p className="text-red-600 mb-4">{error}</p>}
 
       {items.length === 0 ? (
-        <p className="text-zinc-500 py-12 text-center">No notifications yet.</p>
+        <EmptyState icon={<span className="text-2xl" aria-hidden>🔔</span>} title="No notifications yet" message="Order updates will show up here." />
       ) : (
         <ul className="space-y-2">
           {items.map((n) => {

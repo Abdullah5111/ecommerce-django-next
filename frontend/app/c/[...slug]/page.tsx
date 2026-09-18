@@ -4,6 +4,7 @@ import ProductCard from "@/components/ProductCard";
 import SearchBar from "@/components/SearchBar";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import CategoryFilters from "@/components/CategoryFilters";
+import EmptyState from "@/components/EmptyState";
 import SortDropdown from "@/components/SortDropdown";
 import ActiveFilters from "@/components/ActiveFilters";
 import Pagination from "@/components/Pagination";
@@ -151,10 +152,11 @@ export default async function CategoryPage({
           </div>
 
           {products.length === 0 ? (
-            <p className="text-zinc-500 py-12 text-center">
-              No products found in {category.name}
-              {search ? ` for “${search}”` : ""}.
-            </p>
+            <EmptyState
+              icon={<span className="text-2xl" aria-hidden>🔍</span>}
+              title="No products found"
+              message={`Nothing in ${category.name}${search ? ` for “${search}”` : ""}. Try a different search or another category.`}
+            />
           ) : (
             <>
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">

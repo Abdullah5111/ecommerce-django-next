@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { api, type Address, type AddressInput } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
+import EmptyState from "@/components/EmptyState";
 import { useToast } from "@/lib/useToast";
 import AddressForm from "@/components/AddressForm";
 
@@ -144,9 +145,7 @@ export default function AddressesPage() {
       {addresses === null ? (
         <p className="text-zinc-500 text-sm">Loading addresses…</p>
       ) : addresses.length === 0 ? (
-        <div className="border border-dashed border-zinc-300 rounded p-8 text-center">
-          <p className="text-zinc-500">No saved addresses yet.</p>
-        </div>
+        <EmptyState icon={<span className="text-2xl" aria-hidden>📍</span>} title="No saved addresses yet" message="Add one to speed through checkout." />
       ) : (
         <div className="space-y-3">
           {addresses.map((a) => (
