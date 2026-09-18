@@ -1,5 +1,7 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Me } from "@/lib/api";
@@ -31,7 +33,7 @@ export default function AccountHubPage() {
   }, [user]);
 
   if (loading || !user) {
-    return <p className="text-zinc-600">Loading…</p>;
+    return <Loading />;
   }
 
   const greetingName = me?.display_name || me?.first_name || user.username;

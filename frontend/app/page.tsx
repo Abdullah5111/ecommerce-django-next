@@ -12,6 +12,8 @@ import Hero from "@/components/home/Hero";
 import CategoryTiles from "@/components/home/CategoryTiles";
 import DealsRail from "@/components/home/DealsRail";
 import { PAGE_SIZE } from "@/lib/constants";
+import BackendUnreachable from "@/components/BackendUnreachable";
+import EmptyState from "@/components/EmptyState";
 
 function buildHomeHref(params: { search?: string }) {
   const qs = new URLSearchParams();
@@ -75,12 +77,7 @@ export default async function HomePage({
       .slice(0, 10);
   } catch (e) {
     return (
-      <div className="text-center py-20">
-        <h2 className="text-2xl font-semibold">Backend unreachable</h2>
-        <p className="text-zinc-500 mt-2">
-          Start the Django API and refresh. See README for setup.
-        </p>
-      </div>
+<BackendUnreachable />
     );
   }
 
@@ -107,10 +104,11 @@ export default async function HomePage({
   // the plain browse landing (no sidebar) keeps 4.
   const results =
     products.length === 0 ? (
-      <p className="text-zinc-500 py-12 text-center">
-        No products found{query ? ` for “${query}”` : ""}
-        {activeCategory ? ` in ${activeCategory.name}` : ""}.
-      </p>
+      <EmptyState
+        icon={<span className="text-2xl" aria-hidden>🔍</span>}
+        title="No products found"
+        message={`No matches${query ? ` for “${query}”` : ""}${activeCategory ? ` in ${activeCategory.name}` : ""}. Try a different search or browse all categories.`}
+      />
     ) : (
       <>
         <div className={`grid grid-cols-2 ${browse ? "lg:grid-cols-4" : "lg:grid-cols-3"} gap-4`}>

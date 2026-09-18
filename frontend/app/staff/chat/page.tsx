@@ -1,10 +1,14 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type ChatMessage, type ChatThread } from "@/lib/api";
 import { auth } from "@/lib/auth";
-import { formatDateTime } from "@/lib/format";
+import { formatTimeAgo } from "@/lib/format";
 import { realtime } from "@/lib/realtime";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/lib/useToast";
@@ -198,7 +202,7 @@ export default function StaffChatPage() {
   };
 
   if (authLoading || !user?.is_staff) {
-    return <p className="text-zinc-600 py-12">Loading…</p>;
+    return <Loading className="py-10 text-sm" />;
   }
 
   const selectedThread = threads?.find((t) => t.user === selected) ?? null;
@@ -210,9 +214,9 @@ export default function StaffChatPage() {
         {/* Thread list */}
         <aside className={`${selected !== null ? "hidden md:block" : ""} border rounded-xl divide-y max-h-[70vh] overflow-y-auto`}>
           {threads === null ? (
-            <p className="text-zinc-500 text-sm p-4">Loading…</p>
+            <Loading className="py-10 text-sm" />
           ) : threads.length === 0 ? (
-            <p className="text-zinc-500 text-sm p-4">No customer conversations yet.</p>
+            <p className="text-zinc-500 text-sm p-4">No customer conversations yet — they'll appear when someone messages.</p>
           ) : (
             threads.map((t) => (
               <button
@@ -229,13 +233,13 @@ export default function StaffChatPage() {
                 <div className="flex items-center justify-between gap-2">
                   <span className={`text-sm flex items-center gap-1.5 ${t.unread > 0 ? "font-semibold" : "font-medium"}`}>
                     <span
-                      className={`h-1.5 w-1.5 rounded-full ${presence[t.user] ? "bg-green-500" : "bg-zinc-300"}`}
+                      className={`h-1.5 w-1.5 rounded-full ${presence[t.user] ? "bg-success" : "bg-zinc-300"}`}
                       aria-hidden
                     />
                     {t.username}
                   </span>
                   {t.unread > 0 && (
-                    <span className="bg-brand text-brand-fg rounded-full px-1.5 text-[10px] leading-tight">
+                    <span className="bg-red-600 text-white rounded-full px-1.5 text-[10px] leading-tight">
                       {t.unread}
                     </span>
                   )}
@@ -244,7 +248,7 @@ export default function StaffChatPage() {
                   {t.last_message_body ?? "No messages yet"}
                 </p>
                 {t.last_message_at && (
-                  <p className="text-[10px] text-zinc-400">{formatDateTime(t.last_message_at)}</p>
+                  <p className="text-[10px] text-zinc-400">{t.last_message_at ? formatTimeAgo(t.last_message_at) : ""}</p>
                 )}
               </button>
             ))
@@ -260,7 +264,7 @@ export default function StaffChatPage() {
               <div className="px-4 py-2.5 border-b flex items-center justify-between">
                 <p className="text-sm font-medium flex items-center gap-1.5">
                   <span
-                    className={`h-1.5 w-1.5 rounded-full ${presence[selected] ? "bg-green-500" : "bg-zinc-300"}`}
+                    className={`h-1.5 w-1.5 rounded-full ${presence[selected] ? "bg-success" : "bg-zinc-300"}`}
                     aria-hidden
                   />
                   {selectedThread?.username ?? `Customer #${selected}`}
@@ -273,7 +277,7 @@ export default function StaffChatPage() {
                 </button>
               </div>
               {messages === null ? (
-                <p className="text-zinc-500 text-sm text-center py-10">Loading…</p>
+                <Loading className="py-10 text-sm" />
               ) : (
                 <>
                   {olderCursor && (
@@ -302,7 +306,7 @@ export default function StaffChatPage() {
                 <button
                   type="submit"
                   disabled={!input.trim()}
-                  className="bg-brand text-brand-fg rounded px-3 py-1.5 text-sm disabled:opacity-50"
+                  className={buttonClasses("primary", "sm")}
                 >
                   Send
                 </button>

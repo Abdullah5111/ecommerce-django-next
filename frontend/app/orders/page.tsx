@@ -1,22 +1,15 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Order } from "@/lib/api";
 import { auth } from "@/lib/auth";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatMoney } from "@/lib/format";
 import EmptyState from "@/components/EmptyState";
-
-const STATUS_STYLES: Record<Order["status"], string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  paid: "bg-blue-100 text-blue-800",
-  shipped: "bg-indigo-100 text-indigo-800",
-  delivered: "bg-green-100 text-green-800",
-  cancelled: "bg-zinc-200 text-zinc-700",
-  partially_refunded: "bg-orange-100 text-orange-800",
-  refunded: "bg-rose-100 text-rose-800",
-};
+import OrderStatusBadge from "@/components/ui/OrderStatusBadge";
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -38,7 +31,7 @@ export default function OrdersPage() {
   if (error) {
     return (
       <div className="py-12">
-        <h1 className="text-2xl font-bold mb-2">Your orders</h1>
+        <h1 className="text-3xl font-bold mb-2">Your orders</h1>
         <p className="text-red-600">{error}</p>
       </div>
     );
@@ -47,8 +40,8 @@ export default function OrdersPage() {
   if (orders === null) {
     return (
       <div className="py-12">
-        <h1 className="text-2xl font-bold mb-6">Your orders</h1>
-        <p className="text-zinc-500">Loading…</p>
+        <h1 className="text-3xl font-bold mb-6">Your orders</h1>
+        <Loading />
       </div>
     );
   }
@@ -80,11 +73,7 @@ export default function OrdersPage() {
                 </Link>
                 <div className="text-sm text-zinc-500">{formatDateTime(order.created_at)}</div>
               </div>
-              <span
-                className={`text-xs font-medium px-2 py-1 rounded-full uppercase ${STATUS_STYLES[order.status]}`}
-              >
-                {order.status}
-              </span>
+              <OrderStatusBadge status={order.status} />
             </div>
 
             <ul className="divide-y border-y">
@@ -93,7 +82,7 @@ export default function OrdersPage() {
                   <span>
                     {item.product_name} × {item.quantity}
                   </span>
-                  <span className="text-zinc-700">${item.subtotal}</span>
+                  <span className="text-zinc-700">{formatMoney(item.subtotal)}</span>
                 </li>
               ))}
             </ul>
@@ -120,21 +109,21 @@ export default function OrdersPage() {
               <div className="text-sm text-right whitespace-nowrap">
                 <div className="flex justify-end gap-6">
                   <span className="text-zinc-500">Subtotal</span>
-                  <span>${order.subtotal}</span>
+                  <span>{formatMoney(order.subtotal)}</span>
                 </div>
                 {Number(order.discount_total) > 0 && (
                   <div className="flex justify-end gap-6 text-green-700">
                     <span>Discount{order.coupon_code ? ` (${order.coupon_code})` : ""}</span>
-                    <span>−${order.discount_total}</span>
+                    <span>−{formatMoney(order.discount_total)}</span>
                   </div>
                 )}
                 <div className="flex justify-end gap-6">
                   <span className="text-zinc-500">Shipping</span>
-                  <span>{Number(order.shipping_total) === 0 ? "Free" : `$${order.shipping_total}`}</span>
+                  <span>{formatMoney(order.shipping_total, "Free")}</span>
                 </div>
                 <div className="flex justify-end gap-6 font-semibold border-t mt-1 pt-1">
                   <span>Total</span>
-                  <span>${order.total}</span>
+                  <span>{formatMoney(order.total)}</span>
                 </div>
               </div>
             </div>

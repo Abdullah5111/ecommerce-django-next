@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 
@@ -78,7 +80,7 @@ export default function CategoryFilters() {
         </div>
         <button
           type="submit"
-          className="mt-2 w-full bg-black text-white rounded px-3 py-1.5 text-sm font-medium hover:bg-zinc-800"
+          className={buttonClasses("primary", "sm", "mt-2 w-full")}
         >
           Apply
         </button>

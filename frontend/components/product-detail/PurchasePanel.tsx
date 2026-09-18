@@ -37,7 +37,7 @@ export default function PurchasePanel({ product }: { product: Product }) {
   useEffect(() => {
     const d = new Date();
     d.setDate(d.getDate() + 4);
-    setDeliveryBy(d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }));
+    setDeliveryBy(d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }));
   }, []);
 
   const variants = product.variants ?? [];

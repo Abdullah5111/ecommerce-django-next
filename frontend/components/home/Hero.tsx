@@ -12,7 +12,7 @@ export default function Hero({ hasDeals = false }: { hasDeals?: boolean }) {
           Everything you need, delivered fast.
         </h1>
         <p className="mt-3 text-white/85">
-          Free shipping over ${FREE_SHIPPING_THRESHOLD} · 30-day returns · secure checkout.
+          Free shipping over ${`$${FREE_SHIPPING_THRESHOLD}`} · 30-day returns · secure checkout.
         </p>
         <div className="mt-6 flex items-center gap-3">
           <Link href="#catalog" className={buttonClasses("deal", "lg")}>

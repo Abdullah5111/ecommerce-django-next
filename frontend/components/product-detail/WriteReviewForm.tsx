@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
@@ -200,7 +202,7 @@ export default function WriteReviewForm({ slug }: { slug: string }) {
       <button
         type="submit"
         disabled={submitting}
-        className="bg-black text-white px-4 py-2 rounded font-medium hover:bg-zinc-800 disabled:bg-zinc-400"
+        className={buttonClasses("primary", "sm")}
       >
         {submitting ? "Submitting…" : "Submit review"}
       </button>

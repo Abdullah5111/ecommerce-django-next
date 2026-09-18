@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useState } from "react";
 import type { AddressInput } from "@/lib/api";
 
@@ -71,7 +73,7 @@ export default function AddressForm({ initial, onSubmit, submitLabel, onCancel }
     }
   };
 
-  const inputCls = "w-full border border-zinc-300 rounded p-3 text-sm";
+  const inputCls = "w-full border border-zinc-300 rounded p-3 text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand";
   const labelCls = "block text-xs font-medium text-zinc-600 mb-1";
   const errCls = "text-xs text-red-600 mt-1";
 
@@ -178,7 +180,7 @@ export default function AddressForm({ initial, onSubmit, submitLabel, onCancel }
         <button
           type="submit"
           disabled={submitting}
-          className="bg-black text-white py-2 px-4 rounded text-sm font-medium disabled:opacity-60"
+          className={buttonClasses("primary", "sm")}
         >
           {submitting ? "Saving…" : submitLabel}
         </button>

@@ -1,21 +1,19 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, type StaffStats } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
+import { formatMoney } from "@/lib/format";
+import OrderStatusBadge from "@/components/ui/OrderStatusBadge";
 
-const STATUS_TONES: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-800",
-  paid: "bg-blue-100 text-blue-800",
-  shipped: "bg-indigo-100 text-indigo-800",
-  delivered: "bg-green-100 text-green-800",
-  cancelled: "bg-zinc-200 text-zinc-600",
-  partially_refunded: "bg-orange-100 text-orange-800",
-  refunded: "bg-rose-100 text-rose-800",
-};
+const STATUSES = [
+  "pending", "paid", "shipped", "delivered", "cancelled", "partially_refunded", "refunded",
+];
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -47,7 +45,7 @@ export default function StaffDashboardPage() {
       .catch(() => setError("Couldn't load stats."));
   }, [user]);
 
-  if (authLoading || !user?.is_staff) return <p className="text-zinc-600 py-12">Loading…</p>;
+  if (authLoading || !user?.is_staff) return <Loading />;
 
   return (
     <div className="space-y-6">
@@ -65,11 +63,11 @@ export default function StaffDashboardPage() {
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {!stats ? (
-        <p className="text-zinc-600 py-12">Loading…</p>
+        <Loading />
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Tile label="Captured revenue" value={`$${Number(stats.revenue).toFixed(2)}`} sub="paid + shipped + delivered" />
+            <Tile label="Captured revenue" value={formatMoney(stats.revenue)} sub="paid + shipped + delivered" />
             <Tile label="Paid orders" value={String(stats.paid_orders)} sub={`of ${stats.total_orders} total`} />
             <Tile label="Awaiting action" value={String((stats.orders_by_status.paid ?? 0) + (stats.orders_by_status.shipped ?? 0))} sub="to ship + to deliver" />
             <Tile label="Open chats" value={String(stats.open_chats)} sub="unread customer messages" />
@@ -79,9 +77,9 @@ export default function StaffDashboardPage() {
             <div>
               <h2 className="font-semibold mb-2">Orders by status</h2>
               <ul className="border rounded-xl divide-y">
-                {Object.entries(STATUS_TONES).map(([status, tone]) => (
+                {STATUSES.map((status) => (
                   <li key={status} className="px-4 py-2 flex items-center justify-between text-sm">
-                    <span className={`px-2 py-0.5 rounded text-xs capitalize ${tone}`}>{status.replace("_", " ")}</span>
+                    <OrderStatusBadge status={status} />
                     <span className="font-medium">{stats.orders_by_status[status] ?? 0}</span>
                   </li>
                 ))}

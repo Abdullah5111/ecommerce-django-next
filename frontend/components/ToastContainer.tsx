@@ -10,10 +10,12 @@ export default function ToastContainer() {
       {toasts.map((t) => {
         const accent =
           t.variant === "success"
-            ? "border-l-4 border-l-green-500"
-            : t.variant === "error"
-              ? "border-l-4 border-l-red-500"
-              : "border-l-4 border-l-zinc-400";
+            ? "border-l-4 border-l-success"
+            : t.variant === "warning"
+              ? "border-l-4 border-l-warning"
+              : t.variant === "error"
+                ? "border-l-4 border-l-danger"
+                : "border-l-4 border-l-zinc-400";
         return (
           <div
             key={t.id}

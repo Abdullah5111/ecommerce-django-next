@@ -1,5 +1,9 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Me, type Gender } from "@/lib/api";
@@ -141,7 +145,7 @@ export default function ProfilePage() {
     }
   };
 
-  if (loading || !user || !me) return <p className="text-zinc-600">Loading…</p>;
+  if (loading || !user || !me) return <Loading />;
 
   const displayName = form.display_name || form.first_name || user.username;
 
@@ -241,7 +245,7 @@ export default function ProfilePage() {
         </div>
         <button
           disabled={saving}
-          className="bg-black text-white py-2 px-4 rounded font-medium disabled:opacity-60"
+          className={buttonClasses("primary", "sm")}
         >
           {saving ? "Saving…" : "Save profile"}
         </button>
@@ -288,7 +292,7 @@ export default function ProfilePage() {
               type="button"
               onClick={verifyCode}
               disabled={code.trim().length !== 6}
-              className="bg-black text-white rounded px-4 disabled:opacity-50"
+              className={buttonClasses("primary", "sm")}
             >
               Verify
             </button>

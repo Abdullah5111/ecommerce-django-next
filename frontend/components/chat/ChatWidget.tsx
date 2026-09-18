@@ -1,5 +1,9 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type ChatMessage, type ChatThread } from "@/lib/api";
 import { auth } from "@/lib/auth";
@@ -167,7 +171,7 @@ export default function ChatWidget() {
               <p className="text-sm font-medium">Support</p>
               <p className="text-[11px] text-zinc-500 flex items-center gap-1">
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${staffOnline ? "bg-green-500" : "bg-zinc-300"}`}
+                  className={`h-1.5 w-1.5 rounded-full ${staffOnline ? "bg-success" : "bg-zinc-300"}`}
                   aria-hidden
                 />
                 {staffOnline ? "Online now" : "We typically reply within a day"}
@@ -179,7 +183,7 @@ export default function ChatWidget() {
           </div>
 
           {messages === null ? (
-            <p className="text-zinc-500 text-sm text-center py-10">Loading…</p>
+            <Loading className="py-10 text-sm" />
           ) : (
             <>
               {olderCursor && (
@@ -209,7 +213,7 @@ export default function ChatWidget() {
             <button
               type="submit"
               disabled={!input.trim()}
-              className="bg-brand text-brand-fg rounded px-3 py-1.5 text-sm disabled:opacity-50"
+              className={buttonClasses("primary", "sm")}
             >
               Send
             </button>

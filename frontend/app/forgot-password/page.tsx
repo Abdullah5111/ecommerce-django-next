@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -39,7 +41,7 @@ export default function ForgotPasswordPage() {
         />
         <button
           disabled={loading}
-          className="w-full bg-black text-white py-3 rounded font-medium disabled:opacity-60"
+          className={buttonClasses("primary", "md", "w-full")}
         >
           {loading ? "Sending…" : "Send reset link"}
         </button>

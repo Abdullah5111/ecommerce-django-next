@@ -1,11 +1,16 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, type Address, type AddressInput } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
+import EmptyState from "@/components/EmptyState";
 import { useToast } from "@/lib/useToast";
 import AddressForm from "@/components/AddressForm";
 
@@ -105,16 +110,13 @@ export default function AddressesPage() {
   };
 
   if (authLoading || !user) {
-    return <p className="text-zinc-600">Loading…</p>;
+    return <Loading />;
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Saved addresses</h1>
-        <Link href="/account" className="text-sm text-zinc-600 hover:underline">
-          ← Back to account
-        </Link>
       </div>
 
       <div className="mb-6">
@@ -124,7 +126,7 @@ export default function AddressesPage() {
               setAdding(true);
               setEditingId(null);
             }}
-            className="bg-black text-white py-2 px-4 rounded text-sm font-medium"
+            className={buttonClasses("primary", "sm")}
           >
             Add new address
           </button>
@@ -140,11 +142,9 @@ export default function AddressesPage() {
       {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
 
       {addresses === null ? (
-        <p className="text-zinc-500 text-sm">Loading addresses…</p>
+        <Loading label="Loading addresses" />
       ) : addresses.length === 0 ? (
-        <div className="border border-dashed border-zinc-300 rounded p-8 text-center">
-          <p className="text-zinc-500">No saved addresses yet.</p>
-        </div>
+        <EmptyState icon={<span className="text-2xl" aria-hidden>📍</span>} title="No saved addresses yet" message="Add one to speed through checkout." />
       ) : (
         <div className="space-y-3">
           {addresses.map((a) => (

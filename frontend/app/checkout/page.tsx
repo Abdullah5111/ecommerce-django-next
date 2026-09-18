@@ -1,10 +1,15 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart";
 import { auth } from "@/lib/auth";
+import { formatMoney } from "@/lib/format";
 import { api, type Address, type AddressInput, type QuoteResult } from "@/lib/api";
 import { useToast } from "@/lib/useToast";
 import AddressForm from "@/components/AddressForm";
@@ -144,12 +149,11 @@ export default function CheckoutPage() {
     } catch {
       // The charge may have gone through; the webhook backstop can still mark
       // it paid — send the user somewhere useful instead of failing silently.
-      toast("Order received — confirmation is on its way", "error");
+      toast("Order received — confirmation pending", "warning");
       router.push(`/orders/${orderId}?placed=1`);
       return;
     }
     clear();
-    toast("Order placed", "success");
     router.push(`/orders/${orderId}?placed=1`);
   };
 
@@ -205,11 +209,11 @@ export default function CheckoutPage() {
   };
 
   if (authed === null) {
-    return <p className="text-zinc-600">Loading…</p>;
+    return <Loading />;
   }
 
   if (payment) {
-    const amountLabel = quote ? `$${quote.grand_total}` : "—";
+    const amountLabel = quote ? formatMoney(quote.grand_total) : "—";
     return (
       <div className="max-w-lg">
         <h1 className="text-2xl font-bold mb-6">Payment</h1>
@@ -237,13 +241,13 @@ export default function CheckoutPage() {
           </p>
           <Link
             href="/login?next=/checkout"
-            className="inline-block bg-black text-white px-4 py-2 rounded font-medium hover:bg-zinc-800"
+            className={buttonClasses("primary", "sm", "inline-block")}
           >
             Sign in to check out
           </Link>
         </div>
       ) : addresses === null ? (
-        <p className="text-zinc-500 text-sm">Loading addresses…</p>
+        <Loading label="Loading addresses" className="text-sm" />
       ) : (
         <>
           {addresses.length === 0 ? (
@@ -353,33 +357,27 @@ export default function CheckoutPage() {
               <div className="mt-4 space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
-                  <span>${quote ? quote.subtotal : total.toFixed(2)}</span>
+                  <span>{quote ? formatMoney(quote.subtotal) : formatMoney(total)}</span>
                 </div>
                 {quote && Number(quote.discount_total) > 0 && (
                   <div className="flex justify-between text-green-700">
                     <span>Discount{appliedCode ? ` (${appliedCode})` : ""}</span>
-                    <span>−${quote.discount_total}</span>
+                    <span>−{formatMoney(quote.discount_total)}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <span>Shipping</span>
-                  <span>
-                    {!quote
-                      ? "—"
-                      : Number(quote.shipping_total) === 0
-                        ? "Free"
-                        : `$${quote.shipping_total}`}
-                  </span>
+                  <span>{quote ? formatMoney(quote.shipping_total, "Free") : "—"}</span>
                 </div>
                 {quote && Number(quote.tax_total) > 0 && (
                   <div className="flex justify-between">
                     <span>Tax</span>
-                    <span>${quote.tax_total}</span>
+                    <span>{formatMoney(quote.tax_total)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-lg font-semibold border-t pt-2 mt-2">
                   <span>Total</span>
-                  <span>{quote ? `$${quote.grand_total}` : "—"}</span>
+                  <span>{quote ? formatMoney(quote.grand_total) : "—"}</span>
                 </div>
               </div>
               {quoteError && !quoting && (
@@ -393,7 +391,7 @@ export default function CheckoutPage() {
               <button
                 onClick={() => placeOrder()}
                 disabled={!selectedId || items.length === 0 || loading || !quote || quoting}
-                className="mt-6 w-full bg-black text-white py-3 rounded font-medium disabled:opacity-50"
+                className={buttonClasses("primary", "md", "mt-6 w-full")}
               >
                 {loading ? "Placing order…" : quoting || !quote ? "Calculating total…" : "Place order"}
               </button>

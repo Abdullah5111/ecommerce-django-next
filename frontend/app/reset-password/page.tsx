@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClasses } from "@/components/ui/Button";
+
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -83,7 +85,7 @@ function ResetPasswordForm() {
         />
         <button
           disabled={loading}
-          className="w-full bg-black text-white py-3 rounded font-medium disabled:opacity-60"
+          className={buttonClasses("primary", "md", "w-full")}
         >
           {loading ? "Resetting…" : "Reset password"}
         </button>

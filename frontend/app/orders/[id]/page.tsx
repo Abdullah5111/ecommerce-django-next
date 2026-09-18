@@ -1,11 +1,19 @@
 "use client";
 
+import Link from "next/link";
+
+import Loading from "@/components/ui/Loading";
+
+import { buttonClasses } from "@/components/ui/Button";
+
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api, type Order, type ReturnRequest, type ReturnReason } from "@/lib/api";
 import { auth } from "@/lib/auth";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatMoney } from "@/lib/format";
+import { useToast } from "@/lib/useToast";
 import { realtime } from "@/lib/realtime";
+import OrderStatusBadge from "@/components/ui/OrderStatusBadge";
 
 const REASONS: { value: ReturnReason; label: string }[] = [
   { value: "defective", label: "Defective" },
@@ -17,6 +25,7 @@ const REASONS: { value: ReturnReason; label: string }[] = [
 
 export default function OrderDetailPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const search = useSearchParams();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
@@ -65,6 +74,7 @@ export default function OrderDetailPage() {
     setError(null);
     try {
       await api.cancelOrder(token, id);
+      toast("Order cancelled", "success");
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cancel failed");
@@ -91,6 +101,7 @@ export default function OrderDetailPage() {
     setError(null);
     try {
       await api.createReturn(token, { order: id, lines });
+      toast("Return requested", "success");
       setShowReturnForm(false);
       setReturnQty({});
       setReturnReason({});
@@ -103,7 +114,7 @@ export default function OrderDetailPage() {
   };
 
   if (error && !order) return <p className="text-red-600 py-12">{error}</p>;
-  if (!order) return <p className="text-zinc-500 py-12">Loading…</p>;
+  if (!order) return <Loading />;
 
   const canCancel = order.status === "pending" || order.status === "paid";
   const canReturn = order.status === "delivered" || order.status === "partially_refunded";
@@ -131,8 +142,11 @@ export default function OrderDetailPage() {
         </div>
       )}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Order #{order.id}</h1>
-        <span className="text-sm uppercase px-2 py-1 rounded bg-zinc-100">{order.status}</span>
+        <h1 className="text-2xl font-bold">
+          <Link href="/orders" className="text-zinc-400 hover:text-zinc-600 mr-2" aria-label="All orders">←</Link>
+          Order #{order.id}
+        </h1>
+        <OrderStatusBadge status={order.status} />
       </div>
 
       {order.tracking_number && (
@@ -153,22 +167,22 @@ export default function OrderDetailPage() {
                 )}
                 {" "}× {it.quantity}
               </span>
-              <span>${it.subtotal}</span>
+              <span>{formatMoney(it.subtotal)}</span>
             </li>
           ))}
         </ul>
         <div className="mt-2 text-sm space-y-1">
-          <div className="flex justify-between"><span>Subtotal</span><span>${order.subtotal}</span></div>
+          <div className="flex justify-between"><span>Subtotal</span><span>{formatMoney(order.subtotal)}</span></div>
           {Number(order.discount_total) > 0 && (
-            <div className="flex justify-between text-green-700"><span>Discount</span><span>−${order.discount_total}</span></div>
+            <div className="flex justify-between text-green-700"><span>Discount</span><span>−{formatMoney(order.discount_total)}</span></div>
           )}
-          <div className="flex justify-between"><span>Shipping</span><span>{Number(order.shipping_total) === 0 ? "Free" : `$${order.shipping_total}`}</span></div>
+          <div className="flex justify-between"><span>Shipping</span><span>{formatMoney(order.shipping_total, "Free")}</span></div>
           {Number(order.tax_total) > 0 && (
-            <div className="flex justify-between"><span>Tax</span><span>${order.tax_total}</span></div>
+            <div className="flex justify-between"><span>Tax</span><span>{formatMoney(order.tax_total)}</span></div>
           )}
-          <div className="flex justify-between font-semibold border-t pt-1"><span>Total</span><span>${order.total}</span></div>
+          <div className="flex justify-between font-semibold border-t pt-1"><span>Total</span><span>{formatMoney(order.total)}</span></div>
           {Number(order.refunded_total) > 0 && (
-            <div className="flex justify-between text-rose-700"><span>Refunded</span><span>−${order.refunded_total}</span></div>
+            <div className="flex justify-between text-rose-700"><span>Refunded</span><span>−{formatMoney(order.refunded_total)}</span></div>
           )}
         </div>
       </section>
@@ -193,7 +207,7 @@ export default function OrderDetailPage() {
               <li key={r.id} className="border rounded p-3">
                 <div className="flex justify-between">
                   <span>Return #{r.id} — <span className="uppercase">{r.status}</span></span>
-                  {Number(r.refund_amount) > 0 && <span className="text-rose-700">${r.refund_amount}</span>}
+                  {Number(r.refund_amount) > 0 && <span className="text-rose-700">{formatMoney(r.refund_amount)}</span>}
                 </div>
                 <ul className="text-zinc-600 mt-1">
                   {r.lines.map((l) => (
@@ -213,7 +227,7 @@ export default function OrderDetailPage() {
       <div className="flex gap-3">
         {canCancel && (
           <button onClick={cancel} disabled={busy} className="border rounded px-4 py-2 text-sm disabled:opacity-50">
-            {busy ? "…" : "Cancel order"}
+            {busy ? "Cancelling…" : "Cancel order"}
           </button>
         )}
         {canReturn && !showReturnForm && (
@@ -251,8 +265,8 @@ export default function OrderDetailPage() {
             </div>
           ))}
           <div className="flex gap-2">
-            <button onClick={submitReturn} disabled={busy} className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50">
-              {busy ? "…" : "Submit return"}
+            <button onClick={submitReturn} disabled={busy} className={buttonClasses("primary", "sm")}>
+              {busy ? "Submitting…" : "Submit return"}
             </button>
             <button onClick={() => setShowReturnForm(false)} className="border rounded px-4 py-2 text-sm">Cancel</button>
           </div>
