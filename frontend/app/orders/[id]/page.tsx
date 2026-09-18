@@ -1,5 +1,7 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import { buttonClasses } from "@/components/ui/Button";
 
 import { useEffect, useState } from "react";
@@ -106,7 +108,7 @@ export default function OrderDetailPage() {
   };
 
   if (error && !order) return <p className="text-red-600 py-12">{error}</p>;
-  if (!order) return <p className="text-zinc-500 py-12">Loading…</p>;
+  if (!order) return <Loading />;
 
   const canCancel = order.status === "pending" || order.status === "paid";
   const canReturn = order.status === "delivered" || order.status === "partially_refunded";

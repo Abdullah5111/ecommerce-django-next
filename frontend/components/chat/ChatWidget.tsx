@@ -1,5 +1,7 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import { buttonClasses } from "@/components/ui/Button";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -181,7 +183,7 @@ export default function ChatWidget() {
           </div>
 
           {messages === null ? (
-            <p className="text-zinc-500 text-sm text-center py-10">Loading…</p>
+            <Loading className="py-10 text-sm" />
           ) : (
             <>
               {olderCursor && (

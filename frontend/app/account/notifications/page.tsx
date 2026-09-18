@@ -1,5 +1,7 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -84,7 +86,7 @@ export default function NotificationsPage() {
   };
 
   if (authLoading || items === null) {
-    return <p className="text-zinc-600">Loading…</p>;
+    return <Loading />;
   }
 
   const unread = items.filter((n) => !n.is_read).length;

@@ -1,5 +1,7 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import { buttonClasses } from "@/components/ui/Button";
 
 import { useEffect, useState } from "react";
@@ -208,7 +210,7 @@ export default function CheckoutPage() {
   };
 
   if (authed === null) {
-    return <p className="text-zinc-600">Loading…</p>;
+    return <Loading />;
   }
 
   if (payment) {
@@ -246,7 +248,7 @@ export default function CheckoutPage() {
           </Link>
         </div>
       ) : addresses === null ? (
-        <p className="text-zinc-500 text-sm">Loading addresses…</p>
+        <Loading label="Loading addresses" className="text-sm" />
       ) : (
         <>
           {addresses.length === 0 ? (

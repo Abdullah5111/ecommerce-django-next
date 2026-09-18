@@ -1,5 +1,7 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import { buttonClasses } from "@/components/ui/Button";
 
 import { useCallback, useEffect, useState } from "react";
@@ -80,7 +82,7 @@ export default function StaffOrdersPage() {
     }
   };
 
-  if (authLoading || !user?.is_staff) return <p className="text-zinc-600 py-12">Loading…</p>;
+  if (authLoading || !user?.is_staff) return <Loading />;
 
   const visible = (orders ?? []).filter((o) => {
     if (filter === "active") return ACTIONABLE.has(o.status);
@@ -112,7 +114,7 @@ export default function StaffOrdersPage() {
       </div>
 
       {orders === null ? (
-        <p className="text-zinc-600 py-12">Loading…</p>
+        <Loading />
       ) : visible.length === 0 ? (
         <p className="text-zinc-500 py-12 text-center">
           {filter === "active" ? "Nothing needs action right now." : "No orders in this view."}

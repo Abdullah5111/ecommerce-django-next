@@ -1,5 +1,7 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import { buttonClasses } from "@/components/ui/Button";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -200,7 +202,7 @@ export default function StaffChatPage() {
   };
 
   if (authLoading || !user?.is_staff) {
-    return <p className="text-zinc-600 py-12">Loading…</p>;
+    return <Loading className="py-10 text-sm" />;
   }
 
   const selectedThread = threads?.find((t) => t.user === selected) ?? null;
@@ -212,7 +214,7 @@ export default function StaffChatPage() {
         {/* Thread list */}
         <aside className={`${selected !== null ? "hidden md:block" : ""} border rounded-xl divide-y max-h-[70vh] overflow-y-auto`}>
           {threads === null ? (
-            <p className="text-zinc-500 text-sm p-4">Loading…</p>
+            <Loading className="py-10 text-sm" />
           ) : threads.length === 0 ? (
             <p className="text-zinc-500 text-sm p-4">No customer conversations yet — they'll appear when someone messages.</p>
           ) : (
@@ -275,7 +277,7 @@ export default function StaffChatPage() {
                 </button>
               </div>
               {messages === null ? (
-                <p className="text-zinc-500 text-sm text-center py-10">Loading…</p>
+                <Loading className="py-10 text-sm" />
               ) : (
                 <>
                   {olderCursor && (

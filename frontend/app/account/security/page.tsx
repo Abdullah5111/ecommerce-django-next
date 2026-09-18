@@ -1,5 +1,7 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -34,7 +36,7 @@ export default function SecurityPage() {
     api.me(token).then(setMe).catch(() => {});
   }, [user]);
 
-  if (loading || !user || !me) return <p className="text-zinc-600">Loading…</p>;
+  if (loading || !user || !me) return <Loading />;
 
   return (
     <div>

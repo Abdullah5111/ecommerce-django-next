@@ -1,5 +1,7 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import { buttonClasses } from "@/components/ui/Button";
 
 import { useEffect, useState } from "react";
@@ -108,7 +110,7 @@ export default function AddressesPage() {
   };
 
   if (authLoading || !user) {
-    return <p className="text-zinc-600">Loading…</p>;
+    return <Loading />;
   }
 
   return (
@@ -143,7 +145,7 @@ export default function AddressesPage() {
       {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
 
       {addresses === null ? (
-        <p className="text-zinc-500 text-sm">Loading addresses…</p>
+        <Loading label="Loading addresses" />
       ) : addresses.length === 0 ? (
         <EmptyState icon={<span className="text-2xl" aria-hidden>📍</span>} title="No saved addresses yet" message="Add one to speed through checkout." />
       ) : (

@@ -1,5 +1,7 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -39,7 +41,7 @@ export default function OrdersPage() {
     return (
       <div className="py-12">
         <h1 className="text-2xl font-bold mb-6">Your orders</h1>
-        <p className="text-zinc-500">Loading…</p>
+        <Loading />
       </div>
     );
   }

@@ -1,5 +1,7 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -43,7 +45,7 @@ export default function StaffDashboardPage() {
       .catch(() => setError("Couldn't load stats."));
   }, [user]);
 
-  if (authLoading || !user?.is_staff) return <p className="text-zinc-600 py-12">Loading…</p>;
+  if (authLoading || !user?.is_staff) return <Loading />;
 
   return (
     <div className="space-y-6">
@@ -61,7 +63,7 @@ export default function StaffDashboardPage() {
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {!stats ? (
-        <p className="text-zinc-600 py-12">Loading…</p>
+        <Loading />
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

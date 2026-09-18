@@ -1,5 +1,7 @@
 "use client";
 
+import Loading from "@/components/ui/Loading";
+
 import { buttonClasses } from "@/components/ui/Button";
 
 import { useEffect, useRef, useState } from "react";
@@ -143,7 +145,7 @@ export default function ProfilePage() {
     }
   };
 
-  if (loading || !user || !me) return <p className="text-zinc-600">Loading…</p>;
+  if (loading || !user || !me) return <Loading />;
 
   const displayName = form.display_name || form.first_name || user.username;
 
