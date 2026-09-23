@@ -37,6 +37,7 @@ export default function CheckoutPage() {
   // Order already created but not yet paid — reused on retry so a failed
   // payment-start doesn't create a second stock-holding order.
   const [pendingOrderId, setPendingOrderId] = useState<number | null>(null);
+  const [chargedTotal, setChargedTotal] = useState<string | null>(null);
 
   const [promoInput, setPromoInput] = useState("");
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
@@ -199,6 +200,7 @@ export default function CheckoutPage() {
         });
         orderId = order.id;
         setPendingOrderId(orderId);
+        setChargedTotal(order.total); // the server-priced amount actually charged
       }
       await startPayment(token, orderId);
     } catch (e) {
@@ -213,7 +215,8 @@ export default function CheckoutPage() {
   }
 
   if (payment) {
-    const amountLabel = quote ? formatMoney(quote.grand_total) : "—";
+    // The charge is the server-priced order total, never the possibly-stale quote.
+    const amountLabel = chargedTotal ? formatMoney(chargedTotal) : quote ? formatMoney(quote.grand_total) : "—";
     return (
       <div className="max-w-lg">
         <h1 className="text-2xl font-bold mb-6">Payment</h1>

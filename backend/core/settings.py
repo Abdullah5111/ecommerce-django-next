@@ -6,9 +6,18 @@ from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Secure defaults: an install that forgets its .env fails closed instead of
+# running with DEBUG on, a wildcard host list, and a known secret key.
 SECRET_KEY = config("SECRET_KEY", default="dev-insecure-change-me")
-DEBUG = config("DEBUG", default=True, cast=bool)
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*", cast=Csv())
+DEBUG = config("DEBUG", default=False, cast=bool)
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1,testserver", cast=Csv())
+if not DEBUG and SECRET_KEY == "dev-insecure-change-me":
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured(
+        "SECRET_KEY is still the development placeholder — set a real one "
+        "before running with DEBUG=False."
+    )
 
 INSTALLED_APPS = [
     # daphne must be first so its runserver (ASGI) wins over staticfiles'.
