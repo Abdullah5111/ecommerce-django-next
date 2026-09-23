@@ -433,3 +433,25 @@ class ChatSocketTests(TransactionTestCase):
         self.assertTrue(event["online"])
         await buyer_comm.disconnect(timeout=5)
         await staff_comm.disconnect(timeout=5)
+    async def test_cross_site_origin_rejected(self):
+        """Browser-origin check: a hostile page's handshake is denied even with
+        a valid token; origin-less (non-browser) clients are unaffected."""
+        token = str(AccessToken.for_user(self.buyer))
+        comm = WebsocketCommunicator(
+            application,
+            f"/ws/chat/?token={token}",
+            headers=[(b"origin", b"https://evil.example")],
+        )
+        connected, _ = await comm.connect()
+        self.assertFalse(connected)
+
+    async def test_allowed_host_origin_accepted(self):
+        token = str(AccessToken.for_user(self.buyer))
+        comm = WebsocketCommunicator(
+            application,
+            f"/ws/chat/?token={token}",
+            headers=[(b"origin", b"http://localhost:3000")],
+        )
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        await comm.disconnect(timeout=5)
