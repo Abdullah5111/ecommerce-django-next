@@ -1,3 +1,4 @@
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -26,7 +27,17 @@ class CouponQuoteView(APIView):
     def post(self, request):
         serializer = CouponQuoteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        pairs = [(it["product"], it["quantity"]) for it in serializer.validated_data["items"]]
+        pairs = []
+        for it in serializer.validated_data["items"]:
+            product = it["product"]
+            variant = it.get("variant")
+            # Mirror the order-create validation: a variant must belong to its
+            # product, or the quote would silently price the wrong SKU.
+            if variant is not None and variant.product_id != product.pk:
+                raise ValidationError(
+                    {"items": "Variant does not belong to this product."}
+                )
+            pairs.append((product, it["quantity"], variant))
         code = (serializer.validated_data.get("code") or "").strip().upper()
 
         coupon = Coupon.objects.filter(code=code).first() if code else None
