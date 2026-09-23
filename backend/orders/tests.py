@@ -269,7 +269,9 @@ class OrderLifecycleTests(APITestCase):
         res = self.client.post(f"/api/orders/{order.id}/deliver/")
         self.assertEqual(res.status_code, 400)
 
-    def test_cancel_restocks_and_releases_coupon(self):
+    def test_cancel_restocks_and_keeps_coupon_consumed(self):
+        """Refunded cancellation: stock and money are returned, but the coupon
+        use stays consumed — a refund must not farm one-use coupons."""
         Coupon.objects.create(code="SAVE10", kind=Coupon.Kind.PERCENT, value=Decimal("10"))
         order = self._order(coupon_code="SAVE10")
         self.client.post(f"/api/orders/{order.id}/pay/")
@@ -283,7 +285,7 @@ class OrderLifecycleTests(APITestCase):
         self.assertEqual(order.status, Order.Status.CANCELLED)
         self.assertEqual(self.p.stock, 10)
         self.assertEqual(order.refunded_total, order.total)
-        self.assertEqual(CouponRedemption.objects.filter(order=order).count(), 0)
+        self.assertEqual(CouponRedemption.objects.filter(order=order).count(), 1)
 
     def test_cannot_cancel_shipped_order(self):
         order = self._order()
