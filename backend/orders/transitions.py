@@ -102,7 +102,12 @@ def cancel(order, actor=None):
         else:
             Product.objects.filter(pk=item.product_id).update(stock=F("stock") + item.quantity)
     from coupons.models import CouponRedemption
-    CouponRedemption.objects.filter(order=order).delete()
+    if not was_paid:
+        # A never-paid order releases its coupon use; a cancelled-after-payment
+        # order was refunded, and refunded orders keep the redemption consumed
+        # (same policy as the returns path) — otherwise pay-with-coupon →
+        # cancel → refund would farm a one-use coupon indefinitely.
+        CouponRedemption.objects.filter(order=order).delete()
     update_fields = ["status", "cancelled_at", "updated_at"]
     refund_id = ""
     if was_paid:

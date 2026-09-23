@@ -9,6 +9,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from coupons.models import Coupon, CouponRedemption
+from orders import transitions
 from orders.models import Order
 from orders.pricing import quote
 from products.models import Category, Product
@@ -543,3 +544,54 @@ class SeedDemoTests(TestCase):
         thread = ChatThread.objects.get(user=buyer)
         self.assertEqual(thread.messages.count(), 2)
         self.assertEqual(Product.objects.filter(name="Denim Jacket", stock=4).count(), 1)
+
+
+class CouponReleaseOnCancelTests(APITestCase):
+    """Cancelled-after-refund orders keep their coupon consumed (mirroring the
+    returns path); never-paid cancellations release it."""
+
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(
+            name="Widget", price=Decimal("40.00"), stock=10, category=self.cat
+        )
+        self.user = User.objects.create_user(
+            username="couponer", email="couponer@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def _payload(self, coupon_code):
+        return {
+            "shipping_address": "123 Test St",
+            "items": [{"product": self.p.id, "quantity": 1}],
+            "coupon_code": coupon_code,
+        }
+
+    def test_cancelling_paid_order_keeps_redemption(self):
+        Coupon.objects.create(
+            code="ONCE10", kind=Coupon.Kind.PERCENT, value=Decimal("10"), per_user_limit=1
+        )
+        res = self.client.post("/api/orders/", self._payload("ONCE10"), format="json")
+        self.assertEqual(res.status_code, 201)
+        order = Order.objects.get(id=res.data["id"])
+        transitions.mark_paid(order)
+        transitions.cancel(order)  # full refund in mock mode
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        # the refund consumed the coupon — it is NOT handed back
+        self.assertEqual(CouponRedemption.objects.count(), 1)
+        res = self.client.post("/api/orders/", self._payload("ONCE10"), format="json")
+        self.assertEqual(res.status_code, 400)
+
+    def test_cancelling_pending_order_releases_redemption(self):
+        Coupon.objects.create(
+            code="TRY10", kind=Coupon.Kind.PERCENT, value=Decimal("10"), per_user_limit=1
+        )
+        res = self.client.post("/api/orders/", self._payload("TRY10"), format="json")
+        self.assertEqual(res.status_code, 201)
+        order = Order.objects.get(id=res.data["id"])
+        transitions.cancel(order)
+        self.assertEqual(CouponRedemption.objects.count(), 0)
+        # no money moved — the coupon is usable again
+        res = self.client.post("/api/orders/", self._payload("TRY10"), format="json")
+        self.assertEqual(res.status_code, 201)
