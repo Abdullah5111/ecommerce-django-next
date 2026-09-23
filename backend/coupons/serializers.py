@@ -1,10 +1,13 @@
 from rest_framework import serializers
 
-from products.models import Product
+from products.models import Product, ProductVariant
 
 
 class QuoteItemSerializer(serializers.Serializer):
     product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all())
+    variant = serializers.PrimaryKeyRelatedField(
+        queryset=ProductVariant.objects.all(), required=False, allow_null=True
+    )
     quantity = serializers.IntegerField(min_value=1)
 
 

@@ -152,3 +152,53 @@ class CouponQuoteApiTests(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["coupon_error"], "Invalid coupon code.")
         self.assertIsNone(res.data["coupon_code"])
+
+
+class QuoteVariantTests(APITestCase):
+    """Regression: the quote endpoint ignored variants and priced lines off the
+    product's base price, so checkout could display a different total than the
+    order actually charges for variant products."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="quoter", email="quoter@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+        self.cat = Category.objects.create(name="Gear")
+        self.product = _product("Variant Widget", "30.00", self.cat)
+        from products.models import ProductVariant
+
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            options={"size": "large"},
+            sku="VW-L",
+            stock=5,
+            price=Decimal("50.00"),  # override above the base price
+        )
+
+    def _quote(self, payload):
+        return self.client.post("/api/coupons/quote/", payload, format="json")
+
+    def test_quote_uses_variant_effective_price(self):
+        res = self._quote(
+            {"items": [{"product": self.product.id, "variant": self.variant.id, "quantity": 1}]}
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["subtotal"], "50.00")
+
+    def test_quote_without_variant_uses_base_price(self):
+        res = self._quote({"items": [{"product": self.product.id, "quantity": 1}]})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["subtotal"], "30.00")
+
+    def test_quote_rejects_variant_from_other_product(self):
+        other = _product("Other Widget", "10.00", self.cat)
+        from products.models import ProductVariant
+
+        stray = ProductVariant.objects.create(
+            product=other, options={"size": "m"}, sku="OW-M", stock=5
+        )
+        res = self._quote(
+            {"items": [{"product": self.product.id, "variant": stray.id, "quantity": 1}]}
+        )
+        self.assertEqual(res.status_code, 400)

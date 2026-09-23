@@ -371,3 +371,28 @@ class MeStaffFlagTests(APITestCase):
         self.assertEqual(res.status_code, 200)
         user.refresh_from_db()
         self.assertFalse(user.is_staff)
+
+
+class PhoneVerifyInputValidationTests(APITestCase):
+    """Regression: non-ASCII or non-string codes used to raise TypeError in
+    hmac.compare_digest and return a 500 instead of a 400."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="otpuser", email="otp@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+        cache.clear()
+        self.client.post("/api/auth/phone/send-code/", {"phone": "+15551234567"}, format="json")
+
+    def test_non_ascii_code_is_rejected_not_500(self):
+        res = self.client.post("/api/auth/phone/verify/", {"code": "１２３４５６"}, format="json")
+        self.assertEqual(res.status_code, 400)
+
+    def test_non_numeric_code_is_rejected(self):
+        res = self.client.post("/api/auth/phone/verify/", {"code": "abc-€"}, format="json")
+        self.assertEqual(res.status_code, 400)
+
+    def test_integer_code_body_does_not_500(self):
+        res = self.client.post("/api/auth/phone/verify/", {"code": 123456}, format="json")
+        self.assertEqual(res.status_code, 400)

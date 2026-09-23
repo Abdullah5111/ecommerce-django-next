@@ -328,7 +328,14 @@ class PhoneVerifyView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        code = (request.data.get("code") or "").strip()
+        # Coerce + sanity-check before compare_digest: it raises TypeError on
+        # non-ASCII str inputs, which would turn a bad request into a 500.
+        code = str(request.data.get("code") or "").strip()
+        if not code or not (code.isascii() and code.isdigit()):
+            return Response(
+                {"detail": "Enter the 6-digit code from the SMS."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         user = request.user
         key = _otp_key(user.id)
         data = cache.get(key)
