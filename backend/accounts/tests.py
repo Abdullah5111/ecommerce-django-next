@@ -396,3 +396,27 @@ class PhoneVerifyInputValidationTests(APITestCase):
     def test_integer_code_body_does_not_500(self):
         res = self.client.post("/api/auth/phone/verify/", {"code": 123456}, format="json")
         self.assertEqual(res.status_code, 400)
+
+
+class TokenEndpointThrottleTests(APITestCase):
+    """Refresh and logout are unauthenticated token endpoints; they share one
+    per-IP 'auth-token' bucket so neither can be hammered unbounded."""
+
+    def setUp(self):
+        cache.clear()  # throttle history lives in the cache — not rolled back
+        rates = patch.dict(ScopedRateThrottle.THROTTLE_RATES, {"auth-token": "2/min"})
+        rates.start()
+        self.addCleanup(rates.stop)
+
+    def test_refresh_is_throttled(self):
+        for _ in range(2):
+            res = self.client.post("/api/auth/token/refresh/", {"refresh": "junk"})
+            self.assertEqual(res.status_code, 401)
+        res = self.client.post("/api/auth/token/refresh/", {"refresh": "junk"})
+        self.assertEqual(res.status_code, 429)
+
+    def test_logout_shares_the_bucket(self):
+        self.client.post("/api/auth/token/refresh/", {"refresh": "junk"})
+        self.client.post("/api/auth/logout/", {"refresh": "junk"})
+        res = self.client.post("/api/auth/logout/", {"refresh": "junk"})
+        self.assertEqual(res.status_code, 429)

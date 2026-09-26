@@ -19,7 +19,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView, TokenRefreshView
 
 from .models import Address
 from .serializers import (
@@ -108,6 +108,18 @@ class EmailOrUsernameTokenObtainPairView(TokenObtainPairView):
     serializer_class = EmailOrUsernameTokenObtainPairSerializer
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth-login"
+
+
+class ThrottledTokenRefreshView(TokenRefreshView):
+    """Unauthenticated token-minting endpoint — rate-capped per client IP."""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-token"
+
+
+class ThrottledLogoutView(TokenBlacklistView):
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-token"
 
 
 class GoogleConfigView(APIView):
