@@ -181,3 +181,45 @@ class CartQuantityGuardTests(APITestCase):
         res = self.client.post("/api/cart/merge/", {"items": "junk"}, format="json")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["items"], [])
+
+
+class CartMalformedIdTests(APITestCase):
+    """Non-numeric ids used to reach integer pk filters and 500."""
+
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(
+            name="Widget", price=Decimal("40.00"), stock=5, category=self.cat
+        )
+        self.user = User.objects.create_user(
+            username="ids", email="ids@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_delete_with_non_numeric_variant_is_400(self):
+        res = self.client.delete(f"/api/cart/items/{self.p.id}/?variant=abc")
+        self.assertEqual(res.status_code, 400)
+
+    def test_add_with_non_numeric_product_is_404(self):
+        res = self.client.post("/api/cart/items/", {"product": "abc", "quantity": 1}, format="json")
+        self.assertEqual(res.status_code, 404)
+
+    def test_add_with_non_numeric_variant_is_400(self):
+        res = self.client.post(
+            "/api/cart/items/",
+            {"product": self.p.id, "variant": "abc", "quantity": 1},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_merge_skips_non_numeric_ids(self):
+        res = self.client.post(
+            "/api/cart/merge/",
+            {"items": [
+                {"product": "abc", "quantity": 1},
+                {"product": self.p.id, "variant": "xyz", "quantity": 1},
+            ]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["items"], [])

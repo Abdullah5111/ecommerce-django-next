@@ -15,6 +15,15 @@ def get_cart(user):
     return cart
 
 
+def _as_id(value):
+    """Client-supplied primary key → int, or None if it isn't one. Raw strings
+    reaching an integer pk filter raise ValueError, i.e. a 500."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _resolve_variant(product, variant_id):
     """Return (variant, error). A variant product requires a valid variant of
     itself; a non-variant product must not be given one.
@@ -25,7 +34,7 @@ def _resolve_variant(product, variant_id):
             return None, "This product requires selecting a variant."
         return None, None
     variant = ProductVariant.objects.filter(
-        pk=variant_id, product=product, is_active=True
+        pk=_as_id(variant_id), product=product, is_active=True
     ).first()
     if variant is None:
         return None, "Invalid variant for this product."
@@ -106,7 +115,7 @@ class CartItemsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        product = get_object_or_404(Product, pk=request.data.get("product"))
+        product = get_object_or_404(Product, pk=_as_id(request.data.get("product")))
         variant, error = _resolve_variant(product, request.data.get("variant"))
         if error:
             return Response({"detail": error}, status=400)
@@ -149,8 +158,11 @@ class CartItemDetailView(APIView):
                 cart=cart, product_id=product_id, variant__isnull=True
             ).delete()
         else:
+            parsed = _as_id(variant_id)
+            if parsed is None:
+                return Response({"detail": "Invalid variant."}, status=400)
             CartItem.objects.filter(
-                cart=cart, product_id=product_id, variant_id=variant_id
+                cart=cart, product_id=product_id, variant_id=parsed
             ).delete()
         return Response(CartSerializer(cart).data)
 
@@ -164,7 +176,7 @@ class CartMergeView(APIView):
         for line in items if isinstance(items, list) else []:
             if not isinstance(line, dict):
                 continue
-            product = Product.objects.filter(pk=line.get("product")).first()
+            product = Product.objects.filter(pk=_as_id(line.get("product"))).first()
             if product is None:
                 continue
             variant, error = _resolve_variant(product, line.get("variant"))
