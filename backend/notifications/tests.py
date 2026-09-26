@@ -225,21 +225,21 @@ class PushApiTests(APITestCase):
 
     def test_subscribe_stores_browser_subscription_shape(self):
         payload = {
-            "endpoint": "https://push.example/xyz",
+            "endpoint": "https://fcm.googleapis.com/fcm/send/xyz",
             "keys": {"p256dh": "key123", "auth": "auth123"},
         }
         res = self.client.post("/api/push/subscribe/", payload, format="json")
         self.assertEqual(res.status_code, 201)
-        sub = PushSubscription.objects.get(endpoint="https://push.example/xyz")
+        sub = PushSubscription.objects.get(endpoint="https://fcm.googleapis.com/fcm/send/xyz")
         self.assertEqual(sub.user, self.user)
         self.assertEqual(sub.p256dh, "key123")
 
     def test_resubscribe_updates_in_place(self):
         PushSubscription.objects.create(
-            user=self.user, endpoint="https://push.example/xyz", p256dh="old", auth="old"
+            user=self.user, endpoint="https://fcm.googleapis.com/fcm/send/xyz", p256dh="old", auth="old"
         )
         payload = {
-            "endpoint": "https://push.example/xyz",
+            "endpoint": "https://fcm.googleapis.com/fcm/send/xyz",
             "keys": {"p256dh": "new", "auth": "new"},
         }
         res = self.client.post("/api/push/subscribe/", payload, format="json")
@@ -250,15 +250,37 @@ class PushApiTests(APITestCase):
 
     def test_unsubscribe_removes_subscription(self):
         PushSubscription.objects.create(
-            user=self.user, endpoint="https://push.example/xyz", p256dh="k", auth="a"
+            user=self.user, endpoint="https://fcm.googleapis.com/fcm/send/xyz", p256dh="k", auth="a"
         )
         res = self.client.delete(
             "/api/push/subscribe/",
-            {"endpoint": "https://push.example/xyz"},
+            {"endpoint": "https://fcm.googleapis.com/fcm/send/xyz"},
             format="json",
         )
         self.assertEqual(res.status_code, 204)
         self.assertEqual(PushSubscription.objects.count(), 0)
+
+    def test_subscribe_rejects_non_push_service_endpoints(self):
+        """The server POSTs to stored endpoints — arbitrary hosts would be SSRF."""
+        for endpoint in (
+            "http://169.254.169.254/latest/meta-data/",  # cloud metadata, plain http
+            "https://internal.example/hook",             # unknown host
+            "http://fcm.googleapis.com/fcm/send/abc",    # right host, not https
+            "https://fcm.googleapis.com.evil.example/x", # suffix trick
+        ):
+            payload = {"endpoint": endpoint, "keys": {"p256dh": "k", "auth": "a"}}
+            res = self.client.post("/api/push/subscribe/", payload, format="json")
+            self.assertEqual(res.status_code, 400, endpoint)
+        self.assertEqual(PushSubscription.objects.count(), 0)
+
+    def test_subscribe_accepts_regional_push_subdomain(self):
+        payload = {
+            "endpoint": "https://wns2-par02p.notify.windows.com/w/?token=abc",
+            "keys": {"p256dh": "k", "auth": "a"},
+        }
+        res = self.client.post("/api/push/subscribe/", payload, format="json")
+        self.assertEqual(res.status_code, 201)
+
 
 
 class WebSocketPushTests(TransactionTestCase):
