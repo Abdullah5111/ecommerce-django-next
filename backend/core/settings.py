@@ -189,6 +189,9 @@ REST_FRAMEWORK = {
         "auth-login": "10/min",
         "auth-register": "10/hour",
         "auth-password": "10/hour",
+        # Token refresh + logout. Generous: access tokens last 2h, so a real
+        # client refreshes rarely; this only stops scripted hammering.
+        "auth-token": "30/min",
         "chat-send": "30/min",
     },
 }

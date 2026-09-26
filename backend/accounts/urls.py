@@ -1,6 +1,5 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenBlacklistView
 
 from .views import (
     AddressViewSet,
@@ -13,6 +12,7 @@ from .views import (
     PhoneVerifyView,
     RegisterView,
     ResetPasswordView,
+    ThrottledLogoutView,
     VerifyEmailView,
 )
 
@@ -23,7 +23,7 @@ urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
     path("me/", MeView.as_view(), name="me"),
     path("me/avatar/", AvatarView.as_view(), name="avatar"),
-    path("logout/", TokenBlacklistView.as_view(), name="logout"),
+    path("logout/", ThrottledLogoutView.as_view(), name="logout"),
     path("verify-email/", VerifyEmailView.as_view(), name="verify_email"),
     path("forgot-password/", ForgotPasswordView.as_view(), name="forgot_password"),
     path("reset-password/", ResetPasswordView.as_view(), name="reset_password"),
