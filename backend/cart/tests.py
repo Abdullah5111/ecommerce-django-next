@@ -128,3 +128,56 @@ class CartVariantTests(APITestCase):
         res = self.client.delete(f"/api/cart/items/{self.tee.id}/?variant={self.small.id}")
         skus = [i["variant"]["sku"] for i in res.data["items"]]
         self.assertEqual(skus, ["TEE-L"])
+
+
+class CartQuantityGuardTests(APITestCase):
+    """No path may persist a zero-quantity cart line, and malformed merge
+    payloads are skipped rather than 500ing."""
+
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(
+            name="Widget", price=Decimal("40.00"), stock=5, category=self.cat
+        )
+        self.sold_out = Product.objects.create(
+            name="Gone", price=Decimal("10.00"), stock=0, category=self.cat
+        )
+        self.user = User.objects.create_user(
+            username="qguard", email="qguard@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_adding_out_of_stock_product_creates_no_line(self):
+        res = self.client.post(
+            "/api/cart/items/", {"product": self.sold_out.id, "quantity": 1}, format="json"
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["items"], [])
+        self.assertFalse(CartItem.objects.exists())
+
+    def test_non_positive_add_is_rejected(self):
+        for qty in (0, -3):
+            res = self.client.post(
+                "/api/cart/items/", {"product": self.p.id, "quantity": qty}, format="json"
+            )
+            self.assertEqual(res.status_code, 400, qty)
+        self.assertFalse(CartItem.objects.exists())
+
+    def test_merge_skips_negative_and_malformed_lines(self):
+        res = self.client.post(
+            "/api/cart/merge/",
+            {"items": [
+                {"product": self.p.id, "quantity": -2},
+                "not-a-line",
+                {"product": self.p.id, "quantity": 1},
+            ]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data["items"]), 1)
+        self.assertEqual(res.data["items"][0]["quantity"], 1)
+
+    def test_merge_with_non_list_items_is_a_noop(self):
+        res = self.client.post("/api/cart/merge/", {"items": "junk"}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["items"], [])

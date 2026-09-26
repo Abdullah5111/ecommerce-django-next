@@ -68,10 +68,12 @@ def _add_quantity(cart, product, variant, qty):
             .first()
         )
         if row is None:
+            initial = _cap(product, variant, qty)
+            if initial <= 0:
+                return  # out of stock or non-positive qty: nothing to add
             try:
                 CartItem.objects.create(
-                    cart=cart, product=product, variant=variant,
-                    quantity=_cap(product, variant, qty),
+                    cart=cart, product=product, variant=variant, quantity=initial,
                 )
                 return
             except IntegrityError:
@@ -112,6 +114,10 @@ class CartItemsView(APIView):
             qty = int(request.data.get("quantity", 1))
         except (TypeError, ValueError):
             qty = 1
+        if qty < 1:
+            # quantity changes go through PATCH; a non-positive "add" would
+            # silently decrement or create an empty line
+            return Response({"detail": "Quantity must be at least 1."}, status=400)
         cart = get_cart(request.user)
         _add_quantity(cart, product, variant, qty)
         return Response(CartSerializer(cart).data, status=201)
@@ -154,7 +160,10 @@ class CartMergeView(APIView):
 
     def post(self, request):
         cart = get_cart(request.user)
-        for line in request.data.get("items", []):
+        items = request.data.get("items", [])
+        for line in items if isinstance(items, list) else []:
+            if not isinstance(line, dict):
+                continue
             product = Product.objects.filter(pk=line.get("product")).first()
             if product is None:
                 continue
@@ -164,6 +173,8 @@ class CartMergeView(APIView):
             try:
                 qty = int(line.get("quantity", 1))
             except (TypeError, ValueError):
+                continue
+            if qty < 1:
                 continue
             _add_quantity(cart, product, variant, qty)
         return Response(CartSerializer(cart).data)
