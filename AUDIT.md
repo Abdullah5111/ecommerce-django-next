@@ -6,14 +6,14 @@ below are confirmed from the code; each fixed item has a regression test.
 
 **Backend tests run only in CI** (GitHub Actions, Python 3.12 + Postgres 16).
 The dev machine this audit ran on has no working Python/Django toolchain, so
-no backend test was run locally. Frontend checks (`tsc`, `next build`) were
-run locally.
+no backend test was run locally. Frontend checks (`tsc`, `next build`,
+`vitest`) were run locally and again in CI.
 
 Severity: **Critical** exploitable security / payment error / major data loss ·
 **High** broken core purchase flow or incorrect money/stock · **Medium**
 meaningful functional or a11y defect · **Low** minor.
 
-## Confirmed defects — payments, orders, returns (this round)
+## Confirmed defects — payments, orders, returns (fixed in PR #14)
 
 | ID | Sev | Area | Reproduction | Expected | Actual | Root cause | File:line | Fix | Test |
 |----|-----|------|--------------|----------|--------|------------|-----------|-----|------|
@@ -21,6 +21,7 @@ meaningful functional or a11y defect · **Low** minor.
 | P-2 | High | Payment / webhook | Pending order; customer starts card payment; order is cancelled (customer, or `release_expired_orders` after 30 min) before Stripe confirms; `payment_intent.succeeded` arrives | Charge is refunded (or never happens) | Webhook sees non-pending order and returns — **customer charged for a cancelled order**, stock already released | `_mark_paid` returns early for any non-pending status; unpaid cancel leaves the PaymentIntent open | `backend/payments/views.py:43`, `backend/orders/transitions.py:105` | Unpaid cancel cancels the open intent (best-effort); webhook refunds any succeeded intent that isn't the one the order was paid with | `payments/tests.py` StrayPaymentTests |
 | P-3 | High | Payment / webhook | Order paid; a stale tab confirms a second intent for the same order | Second charge refunded | Ignored — **double charge** | Same early return as P-2 | `backend/payments/views.py:43` | Covered by P-2's stray-payment refund | `payments/tests.py` StrayPaymentTests |
 | P-4 | Medium | Refunds | Staff refunds a return (or customer cancels a paid order); Stripe refund succeeds; the surrounding DB transaction then rolls back; staff retries | One refund | **Second Stripe refund** issued | `Refund.create` has no idempotency key and runs inside the DB transaction | `backend/payments/gateway.py:125` | Idempotency key per refund purpose (`cancel-<order>`, `return-<return>`) | `payments/tests.py` refund idempotency tests |
+| P-6 | Medium | Login redirect | Visit `/login?next=/%5Cevil.example` and sign in | Land on `/` | Earlier guard only rejected `//`; browsers treat `/\` as `//` → **off-site redirect** | Hand-rolled check missed the backslash form | `frontend/app/login/page.tsx` | `lib/safeNext.ts` rejects both | `lib/__tests__/safeNext.test.ts` |
 | P-5 | Low | Order creation | `POST /api/orders/` with `"quantity": 0` lines | 400 | Order created; a zero-item order still pays the shipping fee | `OrderItemSerializer.quantity` inherits `min_value=0` from `PositiveIntegerField` | `backend/orders/serializers.py:12` | `min_value=1` | `orders/tests.py` |
 
 ## Fixed earlier (PRs #11–#13)
@@ -51,6 +52,23 @@ meaningful functional or a11y defect · **Low** minor.
 - **Per-process cache**: throttles and phone OTPs live in `LocMemCache`; with several workers, limits are per process and an OTP may be checked by a different process. Needs Redis.
 - **Push subscription re-binding**: whoever knows a subscription's endpoint URL can re-register it; the URL carries an unguessable token.
 - **Stripe call inside a DB transaction** (cancel/refund): idempotency (P-4) prevents double refunds, but a refund that succeeds before a rollback is still recorded nowhere until the retry.
+
+## Verification
+
+| Check | Where | Result |
+|-------|-------|--------|
+| `python manage.py makemigrations --check --dry-run` | CI | pass (no migrations in this round) |
+| `python manage.py test` (Postgres 16) | CI run 37183354080 | **318 tests OK** |
+| `npx tsc --noEmit` | local + CI | pass |
+| `npm test` (vitest) | local + CI | 7 tests, 2 files pass |
+| `npx next build` | local + CI | pass |
+
+Not run: real Stripe charges or webhooks (all payment paths are tested with a
+mocked Stripe client), browser/e2e flows, and anything needing a deployed
+instance.
+
+**Deploy note:** a keyless demo running with `DEBUG=False` must set
+`PAYMENTS_MOCK=True`, or checkout returns 503 (intended — see P-1).
 
 ## Known backlog (not defects)
 
