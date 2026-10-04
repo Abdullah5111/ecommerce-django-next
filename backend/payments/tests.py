@@ -284,3 +284,46 @@ class WebhookTests(APITestCase):
         self.assertEqual(res.status_code, 200)
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.PENDING)
+
+
+@override_settings(PAYMENTS_MOCK=False, STRIPE_SECRET_KEY="")
+class MockIsolationTests(APITestCase):
+    """No Stripe key and mock not enabled (a misconfigured production deploy):
+    payment must be refused, never faked."""
+
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(
+            name="Widget", price=Decimal("40.00"), stock=10, category=self.cat
+        )
+        self.user = User.objects.create_user(
+            username="isolated", email="isolated@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def _order(self):
+        body = {"shipping_address": "123 Test St", "items": [{"product": self.p.id, "quantity": 1}]}
+        res = self.client.post("/api/orders/", body, format="json")
+        self.assertEqual(res.status_code, 201)
+        return Order.objects.get(id=res.data["id"])
+
+    def test_pay_is_refused_and_order_stays_pending(self):
+        order = self._order()
+        res = self.client.post(f"/api/orders/{order.id}/pay/")
+        self.assertEqual(res.status_code, 503)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
+
+    def test_payment_intent_is_refused(self):
+        order = self._order()
+        res = self.client.post(f"/api/orders/{order.id}/create-payment-intent/")
+        self.assertEqual(res.status_code, 503)
+
+    def test_zero_total_order_still_settles(self):
+        """Nothing to charge (e.g. a 100%-off coupon) — no payment provider needed."""
+        order = self._order()
+        Order.objects.filter(pk=order.pk).update(total=Decimal("0.00"))
+        res = self.client.post(f"/api/orders/{order.id}/pay/")
+        self.assertEqual(res.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PAID)

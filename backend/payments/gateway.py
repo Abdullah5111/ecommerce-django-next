@@ -23,9 +23,21 @@ REUSABLE_INTENT_STATUSES = frozenset(
 )
 
 
+class PaymentsUnavailable(Exception):
+    """No Stripe key and mock payments not enabled — refuse to take payment."""
+
+
 def is_live() -> bool:
     """True when a real Stripe secret key is configured."""
     return bool(getattr(settings, "STRIPE_SECRET_KEY", ""))
+
+
+def _require_mock_allowed():
+    # Mock mode marks orders paid without charging anything, so it must be an
+    # explicit opt-in (PAYMENTS_MOCK, default = DEBUG) — never merely the
+    # absence of a Stripe key, which a misconfigured deploy would hit.
+    if not getattr(settings, "PAYMENTS_MOCK", False):
+        raise PaymentsUnavailable("Payments are not configured.")
 
 
 def _stripe():
@@ -57,6 +69,8 @@ def create_payment_intent(order):
     # A $0 order (e.g. a 100%-off coupon) has nothing to charge, and Stripe
     # rejects a zero-amount intent — settle it through the mock path regardless
     # of mode so the client's mock branch finalizes it.
+    if not is_live() and to_cents(order.total) > 0:
+        _require_mock_allowed()
     if not is_live() or to_cents(order.total) <= 0:
         pi_id = f"{MOCK_INTENT_PREFIX}{order.pk}"
         return f"{pi_id}_secret_mock", pi_id, True
@@ -93,8 +107,11 @@ def verify_paid(order):
 
     Returns ``(ok, detail)``. In mock mode payment is always considered good.
     """
-    # Mock mode, or a $0 order that never had a real intent, is paid by definition.
-    if not is_live() or to_cents(order.total) <= 0:
+    # A $0 order has nothing to charge; mock mode (when enabled) is paid by definition.
+    if to_cents(order.total) <= 0:
+        return True, ""
+    if not is_live():
+        _require_mock_allowed()
         return True, ""
     if not order.payment_intent_id:
         return False, "No payment intent for this order."

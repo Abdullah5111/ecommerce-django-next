@@ -77,7 +77,10 @@ class OrderViewSet(
         order = self.get_object()
         if order.status != Order.Status.PENDING:
             return Response({"detail": "Order is not awaiting payment."}, status=400)
-        client_secret, intent_id, mock = gateway.create_payment_intent(order)
+        try:
+            client_secret, intent_id, mock = gateway.create_payment_intent(order)
+        except gateway.PaymentsUnavailable as exc:
+            return Response({"detail": str(exc)}, status=503)
         if order.payment_intent_id != intent_id:
             order.payment_intent_id = intent_id
             order.save(update_fields=["payment_intent_id", "updated_at"])
@@ -89,13 +92,16 @@ class OrderViewSet(
 
     @action(detail=True, methods=["post"])
     def pay(self, request, pk=None):
-        # Mock mode confirms immediately; live mode only honors a genuinely
-        # succeeded PaymentIntent (defence in depth alongside the webhook).
+        # Mock mode (explicitly enabled) confirms immediately; live mode only
+        # honors a genuinely succeeded PaymentIntent (defence in depth alongside
+        # the webhook); neither configured → refuse rather than mark paid.
         order = self.get_object()
-        if gateway.is_live():
+        try:
             ok, detail = gateway.verify_paid(order)
-            if not ok:
-                return Response({"detail": detail}, status=400)
+        except gateway.PaymentsUnavailable as exc:
+            return Response({"detail": str(exc)}, status=503)
+        if not ok:
+            return Response({"detail": detail}, status=400)
         return self._transition(request, transitions.mark_paid)
 
     @action(detail=True, methods=["post"])

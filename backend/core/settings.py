@@ -267,6 +267,10 @@ STRIPE_SECRET_KEY = config("STRIPE_SECRET_KEY", default="")
 STRIPE_PUBLISHABLE_KEY = config("STRIPE_PUBLISHABLE_KEY", default="")
 STRIPE_WEBHOOK_SECRET = config("STRIPE_WEBHOOK_SECRET", default="")
 STRIPE_CURRENCY = config("STRIPE_CURRENCY", default="usd")
+# Keyless mock payments mark orders paid without charging — explicit opt-in
+# only (defaults to DEBUG). A production deploy that forgets its Stripe keys
+# must refuse payment, not give goods away.
+PAYMENTS_MOCK = config("PAYMENTS_MOCK", default=DEBUG, cast=bool)
 
 # Web Push (VAPID). Leave the keys blank to disable browser push — the in-app
 # notification center and emails still work; the subscribe UI is just hidden.
