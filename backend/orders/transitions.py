@@ -108,6 +108,12 @@ def cancel(order, actor=None):
         # (same policy as the returns path) — otherwise pay-with-coupon →
         # cancel → refund would farm a one-use coupon indefinitely.
         CouponRedemption.objects.filter(order=order).delete()
+        # The customer may still be on the card step: kill the open intent so a
+        # late confirmation can't charge them for a cancelled order.
+        intent_id = order.payment_intent_id
+        if intent_id:
+            from payments import gateway
+            transaction.on_commit(lambda: gateway.cancel_intent(intent_id))
     update_fields = ["status", "cancelled_at", "updated_at"]
     refund_id = ""
     if was_paid:

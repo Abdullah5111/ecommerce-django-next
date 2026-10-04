@@ -327,3 +327,79 @@ class MockIsolationTests(APITestCase):
         self.assertEqual(res.status_code, 200)
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.PAID)
+
+
+@override_settings(**LIVE)
+class StrayPaymentTests(APITestCase):
+    """A succeeded intent that didn't pay the order must be refunded."""
+
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(
+            name="Widget", price=Decimal("40.00"), stock=10, category=self.cat
+        )
+        self.user = User.objects.create_user(
+            username="stray", email="stray@example.com", password="pw-123456"
+        )
+
+    def _order(self, **kwargs):
+        return Order.objects.create(
+            user=self.user, shipping_address="123 Test St", total=Decimal("80.00"), **kwargs
+        )
+
+    def _succeeded(self, order, intent_id):
+        event = {
+            "type": "payment_intent.succeeded",
+            "data": {"object": {
+                "id": intent_id,
+                "amount": gateway.to_cents(order.total),
+                "metadata": {"order_id": str(order.id)},
+            }},
+        }
+        fake = _fake_stripe()
+        with patch.object(gateway, "construct_event", return_value=event), \
+                patch.object(gateway, "_stripe", return_value=fake):
+            res = self.client.post(
+                "/api/payments/webhook/", data=b"{}", content_type="application/json"
+            )
+        self.assertEqual(res.status_code, 200)
+        return fake
+
+    def test_payment_for_cancelled_order_is_refunded(self):
+        order = self._order(status=Order.Status.CANCELLED, payment_intent_id="pi_late")
+        fake = self._succeeded(order, "pi_late")
+        fake.Refund.create.assert_called_once_with(
+            payment_intent="pi_late", amount=8000, idempotency_key="stray-pi_late"
+        )
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+
+    def test_second_intent_on_paid_order_is_refunded(self):
+        from django.utils import timezone
+
+        order = self._order(
+            status=Order.Status.PAID, paid_at=timezone.now(), payment_intent_id="pi_first"
+        )
+        fake = self._succeeded(order, "pi_stale_tab")
+        fake.Refund.create.assert_called_once_with(
+            payment_intent="pi_stale_tab", amount=8000, idempotency_key="stray-pi_stale_tab"
+        )
+
+    def test_redelivered_event_for_the_paying_intent_is_a_noop(self):
+        from django.utils import timezone
+
+        order = self._order(
+            status=Order.Status.PAID, paid_at=timezone.now(), payment_intent_id="pi_paid"
+        )
+        fake = self._succeeded(order, "pi_paid")
+        fake.Refund.create.assert_not_called()
+
+    def test_cancelling_unpaid_order_cancels_its_open_intent(self):
+        from orders import transitions
+
+        order = self._order(payment_intent_id="pi_open")
+        fake = _fake_stripe()
+        with patch.object(gateway, "_stripe", return_value=fake), \
+                self.captureOnCommitCallbacks(execute=True):
+            transitions.cancel(order)
+        fake.PaymentIntent.cancel.assert_called_once_with("pi_open")

@@ -3,9 +3,12 @@
 Without ``STRIPE_SECRET_KEY`` every call degrades to a deterministic mock mode
 so checkout works end-to-end keyless; ``stripe`` is imported lazily.
 """
+import logging
 from decimal import Decimal
 
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 MOCK_INTENT_PREFIX = "mock_pi_"
 
@@ -140,6 +143,29 @@ def create_refund(order, amount) -> str:
         return f"mock_re_{order.pk}"
     stripe = _stripe()
     refund = stripe.Refund.create(payment_intent=intent_id, amount=cents)
+    return refund.id
+
+
+def cancel_intent(intent_id) -> None:
+    """Best-effort: cancel an open PaymentIntent so it can no longer be paid.
+
+    Called when an unpaid order is cancelled. If the intent already succeeded
+    (or can't be cancelled) the webhook's stray-payment refund is the backstop.
+    """
+    if not is_live() or not intent_id or intent_id.startswith(MOCK_INTENT_PREFIX):
+        return
+    try:
+        _stripe().PaymentIntent.cancel(intent_id)
+    except Exception:
+        logger.exception("Could not cancel PaymentIntent %s", intent_id)
+
+
+def refund_intent(intent_id, cents, idempotency_key) -> str:
+    """Refund a specific PaymentIntent (not necessarily the order's recorded
+    one). The idempotency key makes Stripe webhook redeliveries safe."""
+    refund = _stripe().Refund.create(
+        payment_intent=intent_id, amount=cents, idempotency_key=idempotency_key
+    )
     return refund.id
 
 

@@ -40,7 +40,10 @@ class StripeWebhookView(APIView):
             order = Order.objects.filter(pk=order_id).first()
         if order is None and intent_id:
             order = Order.objects.filter(payment_intent_id=intent_id).first()
-        if order is None or order.status != Order.Status.PENDING:
+        if order is None:
+            return
+        if order.status != Order.Status.PENDING:
+            self._refund_if_stray(order, intent_id, amount)
             return
         # Don't confirm against an intent that charged something other than the
         # order total (same guard the interactive pay path applies).
@@ -56,3 +59,17 @@ class StripeWebhookView(APIView):
             transitions.mark_paid(order)
         except transitions.TransitionError:
             pass
+
+    def _refund_if_stray(self, order, intent_id, amount):
+        """A succeeded intent for an order that isn't pending is money we must
+        give back — unless it's the very intent the order was paid with (a
+        redelivered event). Covers an order cancelled mid-payment (by the
+        customer or the expiry job) and a second intent paid from a stale tab.
+        """
+        paid_with_this = order.paid_at is not None and order.payment_intent_id == intent_id
+        if paid_with_this or not intent_id or not amount:
+            return
+        refund_id = gateway.refund_intent(intent_id, amount, f"stray-{intent_id}")
+        transitions.log_event(
+            order, None, f"Refunded stray payment {intent_id} ({refund_id})"
+        )
