@@ -23,6 +23,9 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "variant_label", "quantity", "unit_price", "subtotal",
         )
         read_only_fields = ("unit_price", "variant_sku", "variant_label")
+        # PositiveIntegerField only implies min_value=0; a zero-unit line would
+        # create an empty order that still charges the shipping fee.
+        extra_kwargs = {"quantity": {"min_value": 1}}
 
 
 class OrderEventSerializer(serializers.ModelSerializer):

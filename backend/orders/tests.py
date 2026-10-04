@@ -597,3 +597,23 @@ class CouponReleaseOnCancelTests(APITestCase):
         # no money moved — the coupon is usable again
         res = self.client.post("/api/orders/", self._payload("TRY10"), format="json")
         self.assertEqual(res.status_code, 201)
+
+
+class OrderLineQuantityTests(APITestCase):
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(
+            name="Widget", price=Decimal("40.00"), stock=10, category=self.cat
+        )
+        self.user = User.objects.create_user(
+            username="zeroqty", email="zeroqty@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_zero_quantity_line_is_rejected(self):
+        body = {"shipping_address": "123 Test St", "items": [{"product": self.p.id, "quantity": 0}]}
+        res = self.client.post("/api/orders/", body, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(Order.objects.count(), 0)
+        self.p.refresh_from_db()
+        self.assertEqual(self.p.stock, 10)
