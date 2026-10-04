@@ -129,11 +129,15 @@ def verify_paid(order):
     return True, ""
 
 
-def create_refund(order, amount) -> str:
+def create_refund(order, amount, *, idempotency_key) -> str:
     """Refund ``amount`` against the order's PaymentIntent. Returns a refund id.
 
     No-ops (returns "") for non-positive amounts. Falls back to a mock refund id
     when not live or when the order was paid via the mock path.
+
+    ``idempotency_key`` names the business event being refunded (one per
+    cancel / per return): callers run inside a DB transaction, so a rollback
+    after Stripe already refunded would otherwise let a retry refund twice.
     """
     cents = to_cents(amount)
     if cents <= 0:
@@ -142,7 +146,9 @@ def create_refund(order, amount) -> str:
     if not is_live() or not intent_id or intent_id.startswith(MOCK_INTENT_PREFIX):
         return f"mock_re_{order.pk}"
     stripe = _stripe()
-    refund = stripe.Refund.create(payment_intent=intent_id, amount=cents)
+    refund = stripe.Refund.create(
+        payment_intent=intent_id, amount=cents, idempotency_key=idempotency_key
+    )
     return refund.id
 
 

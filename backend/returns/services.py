@@ -112,7 +112,7 @@ def refund(ret, actor=None):
     amount = max_refundable if completes else min(refund_for(ret), max_refundable)
 
     from payments import gateway
-    refund_id = gateway.create_refund(order, amount)
+    refund_id = gateway.create_refund(order, amount, idempotency_key=f"return-{ret.pk}")
 
     ret.refund_amount = amount
     ret.status = Return.Status.REFUNDED

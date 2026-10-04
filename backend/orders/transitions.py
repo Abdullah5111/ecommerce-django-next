@@ -118,7 +118,9 @@ def cancel(order, actor=None):
     refund_id = ""
     if was_paid:
         from payments import gateway
-        refund_id = gateway.create_refund(order, order.total)
+        refund_id = gateway.create_refund(
+            order, order.total, idempotency_key=f"cancel-{order.pk}"
+        )
         order.refunded_total = order.total
         update_fields.append("refunded_total")
     order.status = Order.Status.CANCELLED

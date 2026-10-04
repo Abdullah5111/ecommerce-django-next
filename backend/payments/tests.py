@@ -45,7 +45,7 @@ class GatewayUnitTests(TestCase):
 
     def test_create_refund_noop_for_non_positive(self):
         order = types.SimpleNamespace(pk=1, payment_intent_id="")
-        self.assertEqual(gateway.create_refund(order, Decimal("0")), "")
+        self.assertEqual(gateway.create_refund(order, Decimal("0"), idempotency_key="k"), "")
 
 
 class FreeOrderPaymentTests(TestCase):
@@ -66,16 +66,16 @@ class FreeOrderPaymentTests(TestCase):
 
     def test_create_refund_mock_id_without_keys(self):
         order = types.SimpleNamespace(pk=7, payment_intent_id="mock_pi_7")
-        self.assertEqual(gateway.create_refund(order, Decimal("5")), "mock_re_7")
+        self.assertEqual(gateway.create_refund(order, Decimal("5"), idempotency_key="k"), "mock_re_7")
 
     @override_settings(**LIVE)
     def test_create_refund_calls_stripe_when_live(self):
         order = types.SimpleNamespace(pk=9, payment_intent_id="pi_live_1")
         with patch.object(gateway, "_stripe", return_value=_fake_stripe()) as m:
-            rid = gateway.create_refund(order, Decimal("12.50"))
+            rid = gateway.create_refund(order, Decimal("12.50"), idempotency_key="cancel-9")
         self.assertEqual(rid, "re_live_1")
         m.return_value.Refund.create.assert_called_once_with(
-            payment_intent="pi_live_1", amount=1250
+            payment_intent="pi_live_1", amount=1250, idempotency_key="cancel-9"
         )
 
 
@@ -403,3 +403,33 @@ class StrayPaymentTests(APITestCase):
                 self.captureOnCommitCallbacks(execute=True):
             transitions.cancel(order)
         fake.PaymentIntent.cancel.assert_called_once_with("pi_open")
+
+
+@override_settings(**LIVE)
+class RefundIdempotencyTests(APITestCase):
+    """Every Stripe refund carries a key naming the event it refunds, so a
+    retry after a rolled-back transaction can't refund twice."""
+
+    def setUp(self):
+        self.cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(
+            name="Widget", price=Decimal("40.00"), stock=10, category=self.cat
+        )
+        self.user = User.objects.create_user(
+            username="idem", email="idem@example.com", password="pw-123456"
+        )
+
+    def test_cancelling_paid_order_refunds_with_cancel_key(self):
+        from django.utils import timezone
+        from orders import transitions
+
+        order = Order.objects.create(
+            user=self.user, shipping_address="123 Test St", total=Decimal("80.00"),
+            status=Order.Status.PAID, paid_at=timezone.now(), payment_intent_id="pi_live_1",
+        )
+        fake = _fake_stripe()
+        with patch.object(gateway, "_stripe", return_value=fake):
+            transitions.cancel(order)
+        fake.Refund.create.assert_called_once_with(
+            payment_intent="pi_live_1", amount=8000, idempotency_key=f"cancel-{order.pk}"
+        )
