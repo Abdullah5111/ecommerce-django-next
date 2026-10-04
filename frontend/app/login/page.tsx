@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
+import { safeNext } from "@/lib/safeNext";
 import { useAuth } from "@/lib/useAuth";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
 
@@ -19,9 +20,7 @@ function LoginForm() {
   const params = useSearchParams();
   const { refresh } = useAuth();
 
-  // Only same-site relative paths — "?next=//evil.com" must not redirect off-site.
-  const rawNext = params.get("next") || "/";
-  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
+  const next = safeNext(params.get("next"));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
