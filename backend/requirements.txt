@@ -20,3 +20,6 @@ channels==4.2.2
 daphne==4.2.3
 # Only imported when REDIS_URL is set; the default InMemory layer needs none.
 channels-redis==4.3.0
+# Background jobs. RabbitMQ is the broker when CELERY_BROKER_URL is set; without
+# it tasks run inline (dev, tests, CI).
+celery==5.4.0

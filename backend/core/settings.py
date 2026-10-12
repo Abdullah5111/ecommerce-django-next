@@ -168,6 +168,20 @@ CHANNEL_LAYERS = {
     )
 }
 
+# Background jobs: Celery on RabbitMQ. Without a broker URL tasks run inline
+# (eager), so dev, tests and CI need no broker.
+CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="")
+CELERY_TASK_ALWAYS_EAGER = not CELERY_BROKER_URL
+CELERY_TASK_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_RESULT_SERIALIZER = "json"
+# Ack only after a task finishes, one message at a time: a crashed worker's
+# task is redelivered instead of lost.
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULE = {}
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
