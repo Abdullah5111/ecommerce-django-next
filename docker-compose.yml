@@ -1,3 +1,18 @@
+# Shared by every service that runs Django code (web + Celery worker).
+x-backend: &backend
+  build: ./backend
+  env_file: ./backend/.env
+  environment:
+    REDIS_URL: redis://redis:6379/0
+    CELERY_BROKER_URL: amqp://ecommerce:ecommerce@rabbitmq:5672//
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+
 services:
   db:
     image: postgres:16-alpine
@@ -23,22 +38,32 @@ services:
       timeout: 3s
       retries: 10
 
-  backend:
-    build: ./backend
-    env_file: ./backend/.env
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
     environment:
-      REDIS_URL: redis://redis:6379/0
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      # The default guest account only accepts localhost connections.
+      RABBITMQ_DEFAULT_USER: ecommerce
+      RABBITMQ_DEFAULT_PASS: ecommerce
+    ports:
+      - "15672:15672"   # management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  backend:
+    <<: *backend
     ports:
       - "8000:8000"
     command: >
       sh -c "python manage.py migrate &&
              python manage.py shell < seed.py &&
              daphne -b 0.0.0.0 -p 8000 core.asgi:application"
+
+  worker:
+    <<: *backend
+    command: celery -A core worker -l info
 
   frontend:
     build:
