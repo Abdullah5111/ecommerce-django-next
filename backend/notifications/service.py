@@ -4,17 +4,15 @@
 on the side channels, so a failed email/push never breaks the caller. Order
 transitions call ``notify_order()`` from ``on_commit`` (never on a rollback).
 
-The in-app row is written synchronously; email + push are handed to
-``dispatch.run`` so they can leave the request path when ``NOTIFICATIONS_ASYNC``
-is on (inline otherwise).
+The in-app row is written synchronously; email + push are Celery tasks queued
+after commit (RabbitMQ when a broker is configured, inline otherwise).
 """
 import logging
 
 from asgiref.sync import async_to_sync
-from django.conf import settings
-from django.core.mail import send_mail
+from django.db import transaction
 
-from . import dispatch, push
+from . import push, tasks
 from .models import Notification
 
 logger = logging.getLogger(__name__)
@@ -26,8 +24,25 @@ def notify(user, kind, title, body="", order=None, email=True):
         user=user, kind=kind, title=title, body=body, order=order
     )
     _broadcast(notification)
-    dispatch.run(_deliver, user, title, body, order, email)
+    if email and user.email:
+        _enqueue(tasks.send_notification_email, notification.id)
+    if push.is_enabled():
+        _enqueue(tasks.send_notification_push, notification.id)
     return notification
+
+
+def _enqueue(task, notification_id):
+    """Queue ``task`` once the row is committed. If the broker is unreachable,
+    deliver inline rather than drop the notification.
+    """
+    def _send():
+        try:
+            task.delay(notification_id)
+        except Exception:
+            logger.exception("Broker unavailable; running %s inline", task.name)
+            task.apply(args=[notification_id])
+
+    transaction.on_commit(_send)
 
 
 def _broadcast(notification):
@@ -66,35 +81,6 @@ def _broadcast(notification):
         )
     except Exception:  # never let the socket layer break the caller
         logger.exception("Websocket fan-out failed for notification %s", notification.pk)
-
-
-def _deliver(user, title, body, order, email):
-    """The side-channel fan-out — runs inline or in a background thread."""
-    if email and user.email:
-        _send_email(user, title, body, order)
-    _send_push(user, title, body, order)
-
-
-def _send_email(user, title, body, order):
-    text = body or title
-    if order is not None:
-        text += f"\n\nView your order: {settings.FRONTEND_URL}/orders/{order.id}"
-    send_mail(title, text, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=True)
-
-
-def _send_push(user, title, body, order):
-    if not push.is_enabled():
-        return
-    payload = {
-        "title": title,
-        "body": body,
-        "url": f"/orders/{order.id}" if order is not None else "/account/notifications",
-    }
-    for sub in user.push_subscriptions.all():
-        try:
-            push.send(sub, payload)
-        except Exception:  # never let a bad subscription break the caller
-            logger.exception("Unexpected error pushing to subscription %s", sub.pk)
 
 
 # --- Order-event copy -------------------------------------------------------

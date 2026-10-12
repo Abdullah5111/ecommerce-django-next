@@ -12,7 +12,7 @@ from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
 
 from core.asgi import application
-from notifications import dispatch, push
+from notifications import push, tasks
 from notifications.models import Notification, PushSubscription
 from notifications.service import notify
 from orders import transitions
@@ -36,17 +36,42 @@ class NotifyServiceTests(TestCase):
             username="buyer", email="buyer@example.com", password="pw-123456"
         )
 
+    def _notify(self, *args, **kwargs):
+        # Delivery tasks are queued on commit; run those callbacks here.
+        with self.captureOnCommitCallbacks(execute=True):
+            return notify(self.user, *args, **kwargs)
+
     def test_notify_creates_row_and_sends_email(self):
-        notify(self.user, Notification.Kind.ORDER_PAID, "Order #1 confirmed", "Thanks!")
+        self._notify(Notification.Kind.ORDER_PAID, "Order #1 confirmed", "Thanks!")
         self.assertEqual(Notification.objects.filter(user=self.user).count(), 1)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].subject, "Order #1 confirmed")
         self.assertEqual(mail.outbox[0].to, ["buyer@example.com"])
 
-    def test_notify_routes_delivery_through_dispatch(self):
-        with patch("notifications.service.dispatch.run") as run:
-            notify(self.user, Notification.Kind.ORDER_PAID, "t", "b")
-        run.assert_called_once()
+    def test_notify_queues_email_task_after_commit(self):
+        with patch.object(tasks.send_notification_email, "delay") as delay:
+            with self.captureOnCommitCallbacks() as callbacks:
+                n = notify(self.user, Notification.Kind.ORDER_PAID, "t", "b")
+            delay.assert_not_called()  # nothing leaves before the row commits
+            for cb in callbacks:
+                cb()
+        delay.assert_called_once_with(n.id)
+
+    def test_broker_down_falls_back_to_inline_delivery(self):
+        with patch.object(
+            tasks.send_notification_email, "delay", side_effect=ConnectionError("no broker")
+        ):
+            self._notify(Notification.Kind.ORDER_PAID, "Order confirmed", "b")
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_email_task_retries_on_smtp_failure(self):
+        n = Notification.objects.create(
+            user=self.user, kind=Notification.Kind.ORDER_PAID, title="t", body="b"
+        )
+        with patch("notifications.tasks.send_mail", side_effect=[OSError("smtp down"), 1]) as send:
+            result = tasks.send_notification_email.apply(args=[n.id])
+        self.assertTrue(result.successful())
+        self.assertEqual(send.call_count, 2)
 
     def test_refund_copy_distinguishes_partial(self):
         import types
@@ -60,13 +85,13 @@ class NotifyServiceTests(TestCase):
 
     def test_email_includes_order_link(self):
         order = _order(self.user)
-        notify(self.user, Notification.Kind.ORDER_PAID, "Order confirmed", "body", order=order)
+        self._notify(Notification.Kind.ORDER_PAID, "Order confirmed", "body", order=order)
         self.assertIn(f"/orders/{order.id}", mail.outbox[0].body)
 
-    def test_push_skipped_when_disabled(self):
-        with patch.object(push, "send") as send:
-            notify(self.user, Notification.Kind.ORDER_PAID, "t", "b")
-        send.assert_not_called()
+    def test_push_task_not_queued_when_disabled(self):
+        with patch.object(tasks.send_notification_push, "delay") as delay:
+            self._notify(Notification.Kind.ORDER_PAID, "t", "b")
+        delay.assert_not_called()
 
     @override_settings(**VAPID)
     def test_push_sent_to_each_subscription_when_enabled(self):
@@ -77,22 +102,8 @@ class NotifyServiceTests(TestCase):
             user=self.user, endpoint="https://push.example/b", p256dh="k", auth="x"
         )
         with patch.object(push, "send", return_value=True) as send:
-            notify(self.user, Notification.Kind.ORDER_SHIPPED, "shipped", "on its way")
+            self._notify(Notification.Kind.ORDER_SHIPPED, "shipped", "on its way")
         self.assertEqual(send.call_count, 2)
-
-
-class DispatchTests(TestCase):
-    def test_run_is_synchronous_by_default(self):
-        box = []
-        self.assertIsNone(dispatch.run(box.append, 1))
-        self.assertEqual(box, [1])
-
-    @override_settings(NOTIFICATIONS_ASYNC=True)
-    def test_run_executes_task_in_background_when_async(self):
-        box = []
-        future = dispatch.run(box.append, 1)
-        future.result(timeout=5)  # a real Future — the pool ran it off-thread
-        self.assertEqual(box, [1])
 
 
 class OrderEventNotificationTests(APITestCase):
