@@ -44,6 +44,9 @@ Then, in two browser windows:
 4. **Live chat:** buyer opens the floating widget and sends a message → it appears in Window A's
    Inbox with typing indicator and presence. Staff reply → ✓✓ read receipts and a preview toast
    on the buyer side.
+5. **Background jobs:** open the RabbitMQ UI (http://localhost:15672, `ecommerce`/`ecommerce`)
+   → Queues → `celery`, then mark another order shipped: the email/push tasks flow through
+   the queue and `docker compose logs worker` shows them succeed.
 
 ## Engineering highlights
 
@@ -51,7 +54,7 @@ The parts that took real thought — each is backed by tests and, where it's sub
 
 **Money correctness**
 - **No-oversell inventory** — checkout decrements stock with an atomic conditional `UPDATE … WHERE stock >= qty` (products *and* variants); the whole order is one transaction, so a later line failing rolls back every earlier decrement.
-- **Reserve-then-release** — stock is reserved at order creation and returned by a TTL cron (`release_expired_orders`) that skips orders which raced out of `PENDING` instead of aborting the batch.
+- **Reserve-then-release** — stock is reserved at order creation and returned by a **Celery Beat** task (`release_expired_orders`, every 5 min) that skips orders which raced out of `PENDING` instead of aborting the batch.
 - **Proportional refunds** — a return refunds the line's share of the order discount **plus the tax actually charged** on those items (shipping excluded), and the *final* return pays the exact remaining cent so rounding never strands money.
 - **Stripe hardening** — the webhook *and* the interactive pay path both verify the PaymentIntent **amount matches the order total** (not just `status == succeeded`); zero-decimal currencies (JPY/KRW) are billed as whole units, not ×100; the webhook persists the intent id so later refunds actually reach Stripe.
 - **Coupons** — redemption caps (`max_redemptions`, `per_user_limit`) enforced under a `SELECT … FOR UPDATE` row lock at checkout; percent discounts capped at the eligible subtotal; kind-aware validation on save.
@@ -70,7 +73,7 @@ The parts that took real thought — each is backed by tests and, where it's sub
 - Postgres full-text search; composite DB indexes; 5-minute caching on featured/bestsellers/related with signal-driven invalidation.
 
 **Architecture & ops**
-- Notification fan-out (email + Web Push) runs **off the request path** via a bounded thread pool (opt-in, no broker) so order transitions don't block on SMTP/push I/O.
+- **Background jobs on Celery + RabbitMQ**: notification email and Web Push are tasks queued after commit, so order transitions never block on SMTP/push I/O. Email retries with exponential backoff; late acks mean a crashed worker's task is redelivered, not lost. With no broker configured, tasks run inline (dev, tests, CI).
 - **Realtime**: notifications, order-status changes, and **live customer↔store support chat** push over authenticated **Django Channels WebSockets** (`/ws/notifications/`, `/ws/chat/`, JWT via query param) — header badge, toasts, order pages, typing indicators, read receipts (✓✓), and presence update live, no polling. Per-process InMemory channel layer by default; `REDIS_URL` switches to Redis for multi-instance.
 - **OpenAPI 3** schema with Swagger UI / ReDoc; Dockerized; CI runs the suite on **Postgres 16** (so the full-text path is exercised, not just SQLite).
 
@@ -84,6 +87,7 @@ The parts that took real thought — each is backed by tests and, where it's sub
 | Search    | Postgres `SearchVector` + `SearchRank` (icontains fallback), header typeahead |
 | API docs  | OpenAPI 3 via drf-spectacular — Swagger UI + ReDoc            |
 | Cache     | Configurable (LocMem default; Redis via env)                 |
+| Jobs      | Celery 5 on RabbitMQ (worker + Beat scheduler)               |
 | Container | Docker, docker-compose                                       |
 | Deploy    | Google Cloud Run + Cloud SQL + Artifact Registry            |
 
@@ -98,6 +102,7 @@ docker compose up --build
 - Frontend: http://localhost:3000
 - API: http://localhost:8000/api/ · **Interactive docs: http://localhost:8000/api/docs**
 - Admin: http://localhost:8000/admin/
+- RabbitMQ management UI: http://localhost:15672 (`ecommerce` / `ecommerce`)
 
 The backend auto-migrates and seeds sample products on first boot. For the full demo
 (accounts, orders, chat), run `python manage.py seed_demo` as shown above.
