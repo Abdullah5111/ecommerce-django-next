@@ -1,4 +1,4 @@
-# Shared by every service that runs Django code (web + Celery worker).
+# Shared by every service that runs Django code (web, Celery worker and beat).
 x-backend: &backend
   build: ./backend
   env_file: ./backend/.env
@@ -64,6 +64,11 @@ services:
   worker:
     <<: *backend
     command: celery -A core worker -l info
+
+  beat:
+    <<: *backend
+    # Scheduler only: enqueues periodic tasks (see CELERY_BEAT_SCHEDULE) for the worker.
+    command: celery -A core beat -l info -s /tmp/celerybeat-schedule
 
   frontend:
     build:

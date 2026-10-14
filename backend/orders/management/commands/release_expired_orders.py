@@ -1,18 +1,13 @@
-from datetime import timedelta
-
-from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 
-from orders import transitions
-from orders.models import Order
+from orders.tasks import release_expired_orders
 
 
 class Command(BaseCommand):
     help = (
         "Cancel PENDING orders older than PENDING_ORDER_TTL_MINUTES so the stock "
-        "they reserved (and any coupon redemption) is released back. Intended to "
-        "run on a schedule (cron)."
+        "they reserved is released. Celery Beat runs this on a schedule; the "
+        "command is for running it by hand."
     )
 
     def add_arguments(self, parser):
@@ -24,22 +19,5 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        ttl = options["minutes"]
-        if ttl is None:
-            ttl = settings.PENDING_ORDER_TTL_MINUTES
-        cutoff = timezone.now() - timedelta(minutes=ttl)
-
-        stale = Order.objects.filter(status=Order.Status.PENDING, created_at__lt=cutoff)
-        released = 0
-        for order in stale:
-            # cancel() restocks every line and deletes the coupon redemption; an
-            # unpaid order takes the no-refund branch. An order that raced to PAID
-            # (or was already cancelled) since the query fails cancel()'s state
-            # check — skip it instead of aborting the whole batch.
-            try:
-                transitions.cancel(order)
-            except transitions.TransitionError:
-                continue
-            released += 1
-
+        released = release_expired_orders(options["minutes"])
         self.stdout.write(f"Released {released} expired pending order(s).")

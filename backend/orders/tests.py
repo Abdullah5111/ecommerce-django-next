@@ -219,7 +219,7 @@ class ReleaseExpiredOrdersTests(APITestCase):
             return real_cancel(order, actor=actor)
 
         with patch(
-            "orders.management.commands.release_expired_orders.transitions.cancel",
+            "orders.tasks.transitions.cancel",
             side_effect=flaky,
         ):
             call_command("release_expired_orders")
@@ -227,6 +227,27 @@ class ReleaseExpiredOrdersTests(APITestCase):
         o2.refresh_from_db()
         # The raced o1 was skipped; the batch still released o2 instead of aborting.
         self.assertEqual(o2.status, Order.Status.CANCELLED)
+
+    def test_beat_task_releases_expired_and_reports_count(self):
+        from orders.tasks import release_expired_orders
+
+        stale, fresh = self._pending_order(), self._pending_order()
+        Order.objects.filter(pk=stale.pk).update(
+            created_at=timezone.now() - timedelta(hours=2)
+        )
+        result = release_expired_orders.delay()  # eager without a broker
+
+        self.assertEqual(result.get(), 1)
+        stale.refresh_from_db()
+        fresh.refresh_from_db()
+        self.assertEqual(stale.status, Order.Status.CANCELLED)
+        self.assertEqual(fresh.status, Order.Status.PENDING)
+
+    def test_release_is_on_the_beat_schedule(self):
+        from django.conf import settings
+
+        tasks = {e["task"] for e in settings.CELERY_BEAT_SCHEDULE.values()}
+        self.assertIn("orders.tasks.release_expired_orders", tasks)
 
 
 class OrderLifecycleTests(APITestCase):
