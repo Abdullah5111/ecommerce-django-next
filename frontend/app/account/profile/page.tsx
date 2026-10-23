@@ -62,7 +62,7 @@ export default function ProfilePage() {
     const token = auth.get();
     if (!user || !token) return;
     api.me(token).then(hydrate).catch(() => toast("Failed to load profile", "error"));
-  }, [user]);
+  }, [user, toast]);
 
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -87,6 +87,10 @@ jobs:
         working-directory: frontend
         run: npx tsc --noEmit
 
+      - name: Lint (eslint)
+        working-directory: frontend
+        run: npx next lint --max-warnings 0
+
       - name: Unit tests
         working-directory: frontend
         run: npm test

@@ -16,8 +16,9 @@ export default function Avatar({
 }) {
   const dimension = { width: size, height: size };
   if (src) {
-    // eslint-disable-next-line @next/next/no-img-element
     return (
+      // Remote avatar URLs of unknown host/size; next/image would need a domain allowlist.
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         alt={name}

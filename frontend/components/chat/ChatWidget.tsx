@@ -125,7 +125,7 @@ export default function ChatWidget() {
       off();
       clearTimeout(typingTimer.current);
     };
-  }, [user, open, loadThread, loadMessages, markRead]);
+  }, [user, open, loadThread, loadMessages, markRead, toast]);
 
   useEffect(() => {
     if (open) {

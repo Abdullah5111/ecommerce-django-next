@@ -216,7 +216,7 @@ export default function StaffChatPage() {
           {threads === null ? (
             <Loading className="py-10 text-sm" />
           ) : threads.length === 0 ? (
-            <p className="text-zinc-500 text-sm p-4">No customer conversations yet — they'll appear when someone messages.</p>
+            <p className="text-zinc-500 text-sm p-4">No customer conversations yet — they&apos;ll appear when someone messages.</p>
           ) : (
             threads.map((t) => (
               <button
