@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 
 from . import transitions
-from .models import Order, OrderItem, OrderEvent
+from .models import Order, OrderEvent, OrderItem
 
 
 class OrderItemInline(admin.TabularInline):

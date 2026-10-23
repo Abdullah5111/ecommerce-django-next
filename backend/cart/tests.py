@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
-from cart.models import Cart, CartItem
+from cart.models import CartItem
 from products.models import Category, Product
 
 User = get_user_model()

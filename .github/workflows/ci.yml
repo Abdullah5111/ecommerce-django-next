@@ -52,6 +52,10 @@ jobs:
         working-directory: backend
         run: pip install -r requirements.txt
 
+      - name: Lint (ruff)
+        working-directory: backend
+        run: pip install ruff==0.7.4 && ruff check .
+
       - name: Check models and migrations agree
         working-directory: backend
         # Fails if a model change has no migration — the guard for

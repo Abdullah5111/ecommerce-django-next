@@ -4,7 +4,7 @@ from rest_framework.response import Response
 
 from . import services
 from .models import Return
-from .serializers import ReturnSerializer, ReturnCreateSerializer
+from .serializers import ReturnCreateSerializer, ReturnSerializer
 
 
 class ReturnViewSet(

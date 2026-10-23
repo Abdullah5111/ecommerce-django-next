@@ -1,11 +1,15 @@
 import io
 import tempfile
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import override_settings
 from PIL import Image
 from rest_framework.test import APITestCase
+from rest_framework.throttling import ScopedRateThrottle
+
+from accounts import google
 
 User = get_user_model()
 
@@ -162,12 +166,6 @@ class PhoneVerificationTests(APITestCase):
         self.assertFalse(self.user.phone_verified)
 
 
-from unittest.mock import patch
-
-from rest_framework.throttling import ScopedRateThrottle
-
-from accounts import google
-
 GOOGLE_ENABLED = dict(GOOGLE_OAUTH_CLIENT_ID="test-client-id.apps.googleusercontent.com")
 
 VALID_CLAIMS = {
@@ -294,7 +292,9 @@ class AuthThrottleTests(APITestCase):
         self.addCleanup(rates.stop)
 
     def test_register_is_throttled_per_ip(self):
-        body = lambda n: {"username": f"u{n}", "email": f"u{n}@x.co", "password": "pw-abc12345"}
+        def body(n):
+            return {"username": f"u{n}", "email": f"u{n}@x.co", "password": "pw-abc12345"}
+
         self.assertEqual(self.client.post("/api/auth/register/", body(1)).status_code, 201)
         self.assertEqual(self.client.post("/api/auth/register/", body(2)).status_code, 429)
 

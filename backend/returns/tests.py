@@ -1,9 +1,9 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 from django.utils import timezone
-from datetime import timedelta
 from rest_framework.test import APITestCase
 
 from coupons.models import Coupon
@@ -156,6 +156,7 @@ class ReturnFlowTests(APITestCase):
         # re-check must still reject it.
         from rest_framework.exceptions import ValidationError
         from rest_framework.test import APIRequestFactory
+
         from returns.serializers import ReturnCreateSerializer
 
         self._create_return(qty=2)  # exhausts the 2 returnable units

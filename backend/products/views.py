@@ -2,7 +2,7 @@ import django_filters
 from django.core.cache import cache
 from django.db import IntegrityError, connection, transaction
 from django.db.models import Case, Exists, IntegerField, OuterRef, Q, Subquery, Value, When
-from rest_framework import viewsets, permissions
+from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -10,10 +10,10 @@ from rest_framework.response import Response
 
 from .models import Category, Product, ProductImage, Review, ReviewImage, ReviewVote
 from .serializers import (
-    CategorySerializer,
     CategoryDetailSerializer,
-    ProductSerializer,
+    CategorySerializer,
     ProductDetailSerializer,
+    ProductSerializer,
     ReviewImageUploadSerializer,
     ReviewSerializer,
 )

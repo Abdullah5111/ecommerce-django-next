@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Sum
 from rest_framework import mixins, permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response

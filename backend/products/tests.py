@@ -14,7 +14,13 @@ from rest_framework.test import APITestCase
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderItem
 from products.models import (
-    Category, Product, ProductImage, ProductVariant, Review, ReviewImage, ReviewVote,
+    Category,
+    Product,
+    ProductImage,
+    ProductVariant,
+    Review,
+    ReviewImage,
+    ReviewVote,
 )
 from products.throttling import ReviewWriteThrottle
 from wishlist.models import WishlistItem

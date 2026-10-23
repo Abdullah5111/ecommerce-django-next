@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 
@@ -73,7 +73,7 @@ def _bogo_discount(coupon, eligible) -> Decimal:
 def _discount(coupon, lines) -> Decimal:
     # Eligibility is by product/category; pricing uses each line's own unit price.
     eligible = [line for line in lines if coupon.is_product_eligible(line.product)]
-    elig_subtotal = sum((l.unit_price * l.quantity for l in eligible), Decimal("0"))
+    elig_subtotal = sum((line.unit_price * line.quantity for line in eligible), Decimal("0"))
     if coupon.kind == Coupon.Kind.PERCENT:
         raw = elig_subtotal * coupon.value / Decimal("100")
         # Cap at the eligible subtotal and floor at 0 so a misconfigured percent
@@ -118,7 +118,7 @@ def quote(items, coupon=None, user=None) -> PriceQuote:
 
     if coupon is not None:
         # validate_for only needs product identity + quantity for its checks.
-        pairs = [(l.product, l.quantity) for l in lines]
+        pairs = [(line.product, line.quantity) for line in lines]
         error = coupon.validate_for(user, pairs, subtotal)
         if error is None:
             code = coupon.code

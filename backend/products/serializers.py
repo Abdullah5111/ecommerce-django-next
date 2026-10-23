@@ -1,5 +1,6 @@
 from django.core.validators import FileExtensionValidator
 from rest_framework import serializers
+
 from .models import Category, Product, ProductImage, ProductVariant, Review, ReviewImage
 
 MAX_REVIEW_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB per photo

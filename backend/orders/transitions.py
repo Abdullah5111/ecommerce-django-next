@@ -3,6 +3,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from products.models import Product, ProductVariant
+
 from .models import Order, OrderEvent
 
 ALLOWED_TRANSITIONS = {

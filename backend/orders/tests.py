@@ -548,6 +548,7 @@ class StaffStatsTests(APITestCase):
 class SeedDemoTests(TestCase):
     def test_seed_demo_is_idempotent_and_stages_the_full_story(self):
         from django.core.management import call_command
+
         from chat.models import ChatThread
 
         call_command("seed_demo", verbosity=0)

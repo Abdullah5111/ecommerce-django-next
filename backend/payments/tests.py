@@ -1,4 +1,3 @@
-import json
 import types
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
@@ -421,6 +420,7 @@ class RefundIdempotencyTests(APITestCase):
 
     def test_cancelling_paid_order_refunds_with_cancel_key(self):
         from django.utils import timezone
+
         from orders import transitions
 
         order = Order.objects.create(

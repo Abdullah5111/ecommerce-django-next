@@ -1,6 +1,7 @@
+from decimal import Decimal
+
 from django.db import transaction
 from django.db.models import F, Sum
-from decimal import Decimal
 from django.utils import timezone
 
 from orders.models import Order
@@ -106,7 +107,7 @@ def refund(ret, actor=None):
         ).aggregate(total=Sum("quantity"))["total"]
         or 0
     )
-    completes = prior_units + sum(l.quantity for l in ret.lines.all()) >= purchased_units
+    completes = prior_units + sum(line.quantity for line in ret.lines.all()) >= purchased_units
     # ponytail: on the final return pay the exact remaining, so per-return
     # rounding can't leave a cent unrefunded; else cap the proportional amount.
     amount = max_refundable if completes else min(refund_for(ret), max_refundable)

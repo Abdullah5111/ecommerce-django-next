@@ -1,5 +1,5 @@
-import asyncio
 import json
+from unittest.mock import patch
 
 from asgiref.sync import sync_to_async
 from channels.testing import WebsocketCommunicator
@@ -8,7 +8,6 @@ from django.core.cache import cache
 from django.test import TransactionTestCase
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
-from unittest.mock import patch
 
 from chat import consumers
 from chat.models import ChatMessage, ChatThread
@@ -179,7 +178,7 @@ class ChatSocketTests(TransactionTestCase):
         for _ in range(tries):
             try:
                 event = await comm.receive_json_from(timeout=timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             seen.append(event)
             if pred(event):

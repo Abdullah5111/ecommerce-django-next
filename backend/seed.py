@@ -4,7 +4,7 @@ Usage:
     python manage.py shell < seed.py
 """
 import hashlib
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db.models import Avg, Count
 

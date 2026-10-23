@@ -5,7 +5,8 @@ from rest_framework import serializers
 from accounts.models import Address
 from coupons.models import Coupon, CouponRedemption
 from products.models import Product, ProductVariant
-from .models import Order, OrderItem, OrderEvent
+
+from .models import Order, OrderEvent, OrderItem
 from .pricing import Line, quote
 
 

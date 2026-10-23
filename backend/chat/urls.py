@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import MessagesView, ThreadView, ThreadsView
+from .views import MessagesView, ThreadsView, ThreadView
 
 urlpatterns = [
     path("chat/thread/", ThreadView.as_view()),
