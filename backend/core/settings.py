@@ -145,13 +145,23 @@ if GS_BUCKET_NAME:
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+REDIS_URL = config("REDIS_URL", default="")
+
+# Throttle counters and phone OTPs live in the cache, so with more than one
+# worker it must be shared: Redis whenever REDIS_URL is set. LocMem (per
+# process) is only for dev, tests and single-process deploys.
 CACHES = {
     "default": {
         "BACKEND": config(
             "CACHE_BACKEND",
-            default="django.core.cache.backends.locmem.LocMemCache",
+            default=(
+                "django.core.cache.backends.redis.RedisCache"
+                if REDIS_URL
+                else "django.core.cache.backends.locmem.LocMemCache"
+            ),
         ),
-        "LOCATION": config("CACHE_LOCATION", default="ecommerce-cache"),
+        "LOCATION": config("CACHE_LOCATION", default=REDIS_URL or "ecommerce-cache"),
+        "KEY_PREFIX": "cache",
     }
 }
 
@@ -159,7 +169,6 @@ ASGI_APPLICATION = "core.asgi.application"
 
 # Realtime fan-out: Redis when REDIS_URL is set (multi-process safe), else the
 # per-process InMemory layer (dev, tests, and single-process deploys).
-REDIS_URL = config("REDIS_URL", default="")
 CHANNEL_LAYERS = {
     "default": (
         {"BACKEND": "channels_redis.core.RedisChannelLayer", "CONFIG": {"hosts": [REDIS_URL]}}
@@ -199,8 +208,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 12,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    # Applied per-view via throttle_classes. State lives in the cache, so with
-    # the default LocMemCache limits are per-instance (use Redis for cluster-wide).
+    # Applied per-view via throttle_classes. State lives in the cache: shared
+    # across workers on Redis, per-process under the LocMem fallback.
     "DEFAULT_THROTTLE_RATES": {
         "review-write": "10/hour",
         "review-vote": "60/hour",

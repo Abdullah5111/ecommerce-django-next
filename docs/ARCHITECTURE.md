@@ -114,7 +114,7 @@ Product-detail companions:
 - `POST /api/products/{slug}/reviews/` — auth required. One review per user per product; 400 on duplicate. Accepts JSON, or **multipart** with up to 5 `images` files (`ReviewImage` rows written in the same transaction as the review). `verified_purchase` is computed server-side here.
 - `POST|DELETE /api/reviews/{id}/helpful/` — auth required. Toggles the caller's helpful vote and returns `{helpful_count, helpful_by_me}`. Voting on your own review is rejected with 400.
 
-Both review writes are throttled per user (`review-write` 10/hour, `review-vote` 60/hour) via `products/throttling.py`. The classes skip safe methods, because the public review `GET` shares a route with the authenticated `POST` and browsing must not be rate-limited. Throttle state lives in the cache, so under the default per-process `LocMemCache` the limits are per-instance — point `CACHE_BACKEND` at Redis to make them cluster-wide.
+Both review writes are throttled per user (`review-write` 10/hour, `review-vote` 60/hour) via `products/throttling.py`. The classes skip safe methods, because the public review `GET` shares a route with the authenticated `POST` and browsing must not be rate-limited. Throttle state lives in the cache, which is Redis whenever `REDIS_URL` is set, so the limits hold across workers and instances; the per-process `LocMemCache` fallback (dev, tests) keeps them per-process.
 
 Category-tree helpers:
 
@@ -283,7 +283,7 @@ The legacy free-text `shipping_address` path on `POST /api/orders/` still works 
 
 ## Caching
 
-`CACHES` is configured in `core/settings.py` and driven by `CACHE_BACKEND` / `CACHE_LOCATION` env vars (LocMem default; flip to `django.core.cache.backends.redis.RedisCache` + a Memorystore URL in production).
+`CACHES` is configured in `core/settings.py`: `django.core.cache.backends.redis.RedisCache` at `REDIS_URL` when that is set (docker-compose sets it; use a Memorystore URL in production), else per-process LocMem. `CACHE_BACKEND` / `CACHE_LOCATION` still override both. Besides page data, the cache holds throttle counters and phone OTPs, so any deploy with more than one worker needs Redis — otherwise limits apply per process and an OTP can be checked by a process that never stored it.
 
 Caching is used on `featured`, `bestsellers`, and per-product `related` (5-minute TTL). Invalidation is TTL-only; a `post_save` signal that calls `cache.delete(...)` per affected product is the obvious next step when writes need to land instantly.
 

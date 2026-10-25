@@ -86,7 +86,7 @@ The parts that took real thought — each is backed by tests and, where it's sub
 | Database  | PostgreSQL 16 (SQLite for the simplest dev path)             |
 | Search    | Postgres `SearchVector` + `SearchRank` (icontains fallback), header typeahead |
 | API docs  | OpenAPI 3 via drf-spectacular — Swagger UI + ReDoc            |
-| Cache     | Configurable (LocMem default; Redis via env)                 |
+| Cache     | Redis when `REDIS_URL` is set (throttles, OTPs); LocMem in dev |
 | Jobs      | Celery 5 on RabbitMQ (worker + Beat scheduler)               |
 | Container | Docker, docker-compose                                       |
 | Deploy    | Google Cloud Run + Cloud SQL + Artifact Registry            |

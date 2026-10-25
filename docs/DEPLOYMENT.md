@@ -91,6 +91,13 @@ client ID to the backend as `GOOGLE_OAUTH_CLIENT_ID` (not sensitive — a plain 
 var). The frontend reads it from `/api/auth/google/config/`, so no frontend env
 is needed.
 
+**Redis (required for more than one instance).** Set `REDIS_URL` (e.g. a
+Memorystore instance reached over a VPC connector) and the backend uses it for the
+cache — rate limits and phone sign-in codes — and the WebSocket channel layer.
+Without it each instance keeps its own: limits are per instance, a code sent from
+one instance fails verification on another, and live updates don't cross
+instances. A single instance (`--max-instances=1`) works without it.
+
 **Media bucket (required for uploads).** Unlike the options above, this one is not
 safe to skip: user uploads (profile avatars, review photos) go to local disk
 without it, and **Cloud Run's filesystem is ephemeral and per-instance** — so
