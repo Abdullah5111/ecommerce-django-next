@@ -63,7 +63,7 @@ meaningful functional or a11y defect · **Low** minor.
 | Check | Where | Result |
 |-------|-------|--------|
 | `python manage.py makemigrations --check --dry-run` | CI | pass (no migrations in this round) |
-| `python manage.py test` (Postgres 16) | CI run 37183354080 | **318 tests OK** |
+| `python manage.py test` (Postgres 16) | CI run 40161395288 | **331 tests OK** |
 | `npx tsc --noEmit` | local + CI | pass |
 | `npm test` (vitest) | local + CI | 7 tests, 2 files pass |
 | `npx next build` | local + CI | pass |
