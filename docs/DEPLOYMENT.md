@@ -70,7 +70,9 @@ echo -n "whsec_..."     | gcloud secrets create stripe-webhook-secret --data-fil
 ```
 
 Then point a Stripe webhook endpoint at `https://<backend-url>/api/payments/webhook/`
-and use its signing secret for `STRIPE_WEBHOOK_SECRET`.
+and use its signing secret for `STRIPE_WEBHOOK_SECRET`. Subscribe it to
+`payment_intent.succeeded`, `charge.refunded`, `charge.dispute.created` and
+`charge.dispute.closed`.
 
 **Web Push (optional).** Leave unset and in-app notifications + emails still work;
 the browser-push subscribe UI just hides. To enable it, generate a VAPID keypair
