@@ -64,6 +64,14 @@ def to_cents(amount) -> int:
     return int((Decimal(amount) * 100).quantize(Decimal("1")))
 
 
+def from_cents(cents) -> Decimal:
+    """Inverse of ``to_cents``: Stripe's integer minor unit back to a decimal amount."""
+    currency = getattr(settings, "STRIPE_CURRENCY", "usd").lower()
+    if currency in ZERO_DECIMAL_CURRENCIES:
+        return Decimal(int(cents)).quantize(Decimal("0.01"))
+    return (Decimal(int(cents)) / 100).quantize(Decimal("0.01"))
+
+
 def create_payment_intent(order):
     """Create a PaymentIntent for an order's grand total.
 

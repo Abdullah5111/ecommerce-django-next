@@ -38,6 +38,12 @@ meaningful functional or a11y defect · **Low** minor.
 | A-8 | Low | Cart | Out-of-stock / non-positive adds persisted 0-quantity lines | Guard in shared add path (#13) |
 | A-9 | Low | Cart | Non-numeric ids → 500 on add/merge/delete | `_as_id` at every entry point (#13) |
 
+## Fixed after the audit
+
+| ID | Sev | Area | Defect | Fix | Test |
+|----|-----|------|--------|-----|------|
+| R-1 | Medium | Refunds / disputes | Refunds and chargebacks made in the Stripe dashboard never reached the order, so `refunded_total` was wrong and returns could refund the same money again | Webhook handles `charge.refunded` (records only the part above `refunded_total`, sets `refunded` / `partially_refunded`, notifies the customer) and `charge.dispute.created` / `.closed` (logged on the order timeline) | `payments/tests.py` DashboardRefundTests, DisputeTests |
+
 ## Verified correct
 
 - Stock can't oversell: conditional `UPDATE … WHERE stock >= qty` per line, inside the order transaction.
@@ -48,7 +54,6 @@ meaningful functional or a11y defect · **Low** minor.
 
 ## Unverified risks
 
-- **Refunds/disputes made in the Stripe dashboard** aren't mirrored onto orders (no `charge.refunded` / `charge.dispute.*` webhook handling).
 - **Per-process cache**: throttles and phone OTPs live in `LocMemCache`; with several workers, limits are per process and an OTP may be checked by a different process. Needs Redis.
 - **Push subscription re-binding**: whoever knows a subscription's endpoint URL can re-register it; the URL carries an unguessable token.
 - **Stripe call inside a DB transaction** (cancel/refund): idempotency (P-4) prevents double refunds, but a refund that succeeds before a rollback is still recorded nowhere until the retry.

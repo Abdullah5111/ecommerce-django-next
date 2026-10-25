@@ -277,7 +277,7 @@ class WebhookTests(APITestCase):
 
     def test_unhandled_event_type_is_ignored(self):
         order = self._pending_order()
-        event = {"type": "charge.refunded", "data": {"object": {}}}
+        event = {"type": "customer.created", "data": {"object": {}}}
         with patch.object(gateway, "construct_event", return_value=event):
             res = self._post()
         self.assertEqual(res.status_code, 200)
@@ -433,3 +433,151 @@ class RefundIdempotencyTests(APITestCase):
         fake.Refund.create.assert_called_once_with(
             payment_intent="pi_live_1", amount=8000, idempotency_key=f"cancel-{order.pk}"
         )
+
+
+class DashboardRefundTests(APITestCase):
+    """``charge.refunded`` mirrors refunds made outside the store onto the order."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="dash", email="dash@example.com", password="pw-123456"
+        )
+
+    def _order(self, **kwargs):
+        from django.utils import timezone
+
+        fields = dict(
+            user=self.user, shipping_address="123 Test St", total=Decimal("80.00"),
+            subtotal=Decimal("80.00"), status=Order.Status.PAID, paid_at=timezone.now(),
+            payment_intent_id="pi_paid",
+        )
+        fields.update(kwargs)
+        return Order.objects.create(**fields)
+
+    def _refunded(self, amount_refunded, intent_id="pi_paid"):
+        event = {
+            "type": "charge.refunded",
+            "data": {"object": {
+                "id": "ch_1", "payment_intent": intent_id, "amount_refunded": amount_refunded,
+            }},
+        }
+        with patch.object(gateway, "construct_event", return_value=event), \
+                self.captureOnCommitCallbacks(execute=True):
+            res = self.client.post(
+                "/api/payments/webhook/", data=b"{}", content_type="application/json"
+            )
+        self.assertEqual(res.status_code, 200)
+
+    def test_full_dashboard_refund_marks_order_refunded(self):
+        order = self._order()
+        self._refunded(8000)
+        order.refresh_from_db()
+        self.assertEqual(order.refunded_total, Decimal("80.00"))
+        self.assertEqual(order.status, Order.Status.REFUNDED)
+        self.assertTrue(order.events.filter(message="Refunded $80.00 in Stripe").exists())
+
+    def test_partial_refund_on_paid_order_keeps_it_shippable(self):
+        order = self._order()
+        self._refunded(1500)
+        order.refresh_from_db()
+        self.assertEqual(order.refunded_total, Decimal("15.00"))
+        self.assertEqual(order.status, Order.Status.PAID)
+
+    def test_partial_refund_on_delivered_order_is_partially_refunded(self):
+        order = self._order(status=Order.Status.DELIVERED)
+        self._refunded(1500)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PARTIALLY_REFUNDED)
+
+    def test_only_the_new_part_of_a_running_total_is_recorded(self):
+        order = self._order(status=Order.Status.DELIVERED)
+        self._refunded(1500)
+        self._refunded(4000)  # Stripe sends the charge's cumulative total
+        order.refresh_from_db()
+        self.assertEqual(order.refunded_total, Decimal("40.00"))
+        self.assertTrue(order.events.filter(message="Refunded $25.00 in Stripe").exists())
+
+    def test_redelivered_event_is_a_noop(self):
+        order = self._order()
+        self._refunded(1500)
+        self._refunded(1500)
+        order.refresh_from_db()
+        self.assertEqual(order.refunded_total, Decimal("15.00"))
+        self.assertEqual(order.events.filter(message__contains="in Stripe").count(), 1)
+
+    def test_store_issued_refund_is_not_counted_twice(self):
+        # A cancel already recorded the full refund; Stripe's event echoes it.
+        order = self._order(status=Order.Status.CANCELLED, refunded_total=Decimal("80.00"))
+        self._refunded(8000)
+        order.refresh_from_db()
+        self.assertEqual(order.refunded_total, Decimal("80.00"))
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertFalse(order.events.filter(message__contains="in Stripe").exists())
+
+    def test_refund_of_another_intent_is_ignored(self):
+        # A stray-payment refund is for a different intent than the order's.
+        order = self._order()
+        self._refunded(8000, intent_id="pi_stray")
+        order.refresh_from_db()
+        self.assertEqual(order.refunded_total, Decimal("0"))
+        self.assertEqual(order.status, Order.Status.PAID)
+
+    def test_unpaid_order_is_ignored(self):
+        order = self._order(status=Order.Status.PENDING, paid_at=None)
+        self._refunded(8000)
+        order.refresh_from_db()
+        self.assertEqual(order.refunded_total, Decimal("0"))
+
+    def test_customer_is_notified(self):
+        from notifications.models import Notification
+
+        self._order()
+        self._refunded(8000)
+        self.assertTrue(
+            Notification.objects.filter(
+                user=self.user, kind=Notification.Kind.ORDER_REFUNDED
+            ).exists()
+        )
+
+
+class DisputeTests(APITestCase):
+    """Chargebacks land on the order's timeline."""
+
+    def setUp(self):
+        from django.utils import timezone
+
+        user = User.objects.create_user(
+            username="disp", email="disp@example.com", password="pw-123456"
+        )
+        self.order = Order.objects.create(
+            user=user, shipping_address="123 Test St", total=Decimal("80.00"),
+            status=Order.Status.DELIVERED, paid_at=timezone.now(), payment_intent_id="pi_paid",
+        )
+
+    def _dispute(self, event_type, **fields):
+        dispute = {"id": "dp_1", "payment_intent": "pi_paid", "amount": 8000}
+        dispute.update(fields)
+        event = {"type": event_type, "data": {"object": dispute}}
+        with patch.object(gateway, "construct_event", return_value=event):
+            res = self.client.post(
+                "/api/payments/webhook/", data=b"{}", content_type="application/json"
+            )
+        self.assertEqual(res.status_code, 200)
+
+    def test_opened_dispute_is_logged_once(self):
+        self._dispute("charge.dispute.created", reason="product_not_received")
+        self._dispute("charge.dispute.created", reason="product_not_received")
+        events = self.order.events.filter(message__startswith="Payment disputed")
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(
+            events.get().message, "Payment disputed: $80.00 (product not received) [dp_1]"
+        )
+
+    def test_closed_dispute_logs_outcome_and_leaves_refunds_alone(self):
+        self._dispute("charge.dispute.closed", status="lost")
+        self.assertTrue(
+            self.order.events.filter(message="Dispute lost: $80.00 [dp_1]").exists()
+        )
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.refunded_total, Decimal("0"))
+        self.assertEqual(self.order.status, Order.Status.DELIVERED)
