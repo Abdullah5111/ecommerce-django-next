@@ -43,6 +43,7 @@ meaningful functional or a11y defect · **Low** minor.
 | ID | Sev | Area | Defect | Fix | Test |
 |----|-----|------|--------|-----|------|
 | R-1 | Medium | Refunds / disputes | Refunds and chargebacks made in the Stripe dashboard never reached the order, so `refunded_total` was wrong and returns could refund the same money again | Webhook handles `charge.refunded` (records only the part above `refunded_total`, sets `refunded` / `partially_refunded`, notifies the customer) and `charge.dispute.created` / `.closed` (logged on the order timeline) | `payments/tests.py` DashboardRefundTests, DisputeTests |
+| R-2 | Medium | Throttles / OTP | Throttles and phone OTPs lived in per-process `LocMemCache`: with several workers, limits were per process and an OTP could be checked by a process that never stored it | The cache is Redis whenever `REDIS_URL` is set (compose sets it); LocMem only as the dev/test fallback | none: config only, CI runs the LocMem path |
 
 ## Verified correct
 
@@ -54,7 +55,6 @@ meaningful functional or a11y defect · **Low** minor.
 
 ## Unverified risks
 
-- **Per-process cache**: throttles and phone OTPs live in `LocMemCache`; with several workers, limits are per process and an OTP may be checked by a different process. Needs Redis.
 - **Push subscription re-binding**: whoever knows a subscription's endpoint URL can re-register it; the URL carries an unguessable token.
 - **Stripe call inside a DB transaction** (cancel/refund): idempotency (P-4) prevents double refunds, but a refund that succeeds before a rollback is still recorded nowhere until the retry.
 
@@ -63,7 +63,7 @@ meaningful functional or a11y defect · **Low** minor.
 | Check | Where | Result |
 |-------|-------|--------|
 | `python manage.py makemigrations --check --dry-run` | CI | pass (no migrations in this round) |
-| `python manage.py test` (Postgres 16) | CI run 37183354080 | **318 tests OK** |
+| `python manage.py test` (Postgres 16) | CI run 40161395288 | **331 tests OK** |
 | `npx tsc --noEmit` | local + CI | pass |
 | `npm test` (vitest) | local + CI | 7 tests, 2 files pass |
 | `npx next build` | local + CI | pass |
