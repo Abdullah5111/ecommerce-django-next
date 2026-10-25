@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -13,7 +14,8 @@ from . import gateway
 @method_decorator(csrf_exempt, name="dispatch")
 class StripeWebhookView(APIView):
     """Authoritative payment confirmation for live Stripe — moves the matching
-    order to PAID on ``payment_intent.succeeded``. Verified and idempotent.
+    order to PAID on ``payment_intent.succeeded``, and mirrors refunds and
+    disputes made in the Stripe dashboard onto the order. Verified and idempotent.
     """
 
     authentication_classes = []
@@ -31,6 +33,10 @@ class StripeWebhookView(APIView):
             intent = event["data"]["object"]
             order_id = (intent.get("metadata") or {}).get("order_id")
             self._mark_paid(intent.get("id"), order_id, intent.get("amount"))
+        elif event["type"] == "charge.refunded":
+            self._mirror_refund(event["data"]["object"])
+        elif event["type"] in ("charge.dispute.created", "charge.dispute.closed"):
+            self._log_dispute(event["type"], event["data"]["object"])
 
         return HttpResponse(status=200)
 
@@ -73,3 +79,68 @@ class StripeWebhookView(APIView):
         transitions.log_event(
             order, None, f"Refunded stray payment {intent_id} ({refund_id})"
         )
+
+    @transaction.atomic
+    def _mirror_refund(self, charge):
+        """Record refunds issued outside the store (e.g. the Stripe dashboard).
+
+        ``amount_refunded`` is Stripe's running total for the charge, so only
+        the part above ``order.refunded_total`` is new. Refunds the store made
+        itself (cancel, return) are already counted — those paths hold the
+        order's row lock until they commit, so the event waits on the lock and
+        then finds nothing new. Redeliveries are no-ops for the same reason.
+        """
+        intent_id = charge.get("payment_intent")
+        if not intent_id:
+            return
+        # Only the intent the order was paid with — stray-payment refunds are
+        # for some other intent and must not count against the order.
+        order = (
+            Order.objects.select_for_update()
+            .filter(payment_intent_id=intent_id, paid_at__isnull=False)
+            .first()
+        )
+        if order is None:
+            return
+        stripe_total = gateway.from_cents(charge.get("amount_refunded") or 0)
+        new = stripe_total - order.refunded_total
+        if new <= 0:
+            return
+        order.refunded_total = stripe_total
+        update_fields = ["refunded_total", "updated_at"]
+        if order.status != Order.Status.CANCELLED:
+            if stripe_total >= order.total:
+                order.status = Order.Status.REFUNDED
+                update_fields.append("status")
+            elif order.status == Order.Status.DELIVERED:
+                # Same status a partial return leaves; paid/shipped orders keep
+                # theirs so fulfilment can still go ahead.
+                order.status = Order.Status.PARTIALLY_REFUNDED
+                update_fields.append("status")
+        order.save(update_fields=update_fields)
+        to_status = order.status if "status" in update_fields else ""
+        transitions.log_event(order, None, f"Refunded ${new} in Stripe", to_status)
+
+        from notifications.models import Notification
+        from notifications.service import notify_order
+        transaction.on_commit(lambda: notify_order(order, Notification.Kind.ORDER_REFUNDED))
+
+    def _log_dispute(self, event_type, dispute):
+        """Put chargebacks on the order's timeline so staff see them. A lost
+        dispute isn't a refund (Stripe withdraws the funds separately), so
+        ``refunded_total`` is left alone."""
+        intent_id = dispute.get("payment_intent")
+        if not intent_id:
+            return
+        order = Order.objects.filter(payment_intent_id=intent_id).first()
+        if order is None:
+            return
+        amount = gateway.from_cents(dispute.get("amount") or 0)
+        if event_type == "charge.dispute.created":
+            reason = (dispute.get("reason") or "unspecified").replace("_", " ")
+            message = f"Payment disputed: ${amount} ({reason}) [{dispute.get('id')}]"
+        else:
+            message = f"Dispute {dispute.get('status')}: ${amount} [{dispute.get('id')}]"
+        # The dispute id in the message makes a redelivered event a no-op.
+        if not order.events.filter(message=message).exists():
+            transitions.log_event(order, None, message)
