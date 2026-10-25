@@ -305,8 +305,8 @@ Django Channels over daphne (ASGI). One consumer, one group per user — REST st
 
 ## Testing & CI
 
-- **Backend** — ~180 tests using DRF's `APITestCase`, exercising the API end to end rather than models in isolation.
-- **CI** ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs on push and PR. The backend job runs against a **Postgres 16** service container (not SQLite) so the full-text search path and jsonb constraints behave as they do in production; it runs `makemigrations --check --dry-run` first — a guard against a model change shipping without its migration — then the suite. The frontend job runs `tsc --noEmit` and `next build`. No lint step: ESLint isn't configured here, and `next lint` would try to scaffold it interactively.
+- **Backend** — 300+ tests using DRF's `APITestCase`, exercising the API end to end rather than models in isolation.
+- **CI** ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs on push and PR. The backend job runs against a **Postgres 16** service container (not SQLite) so the full-text search path and jsonb constraints behave as they do in production; it runs `ruff check .`, then `makemigrations --check --dry-run` — a guard against a model change shipping without its migration — then the suite. The frontend job runs `tsc --noEmit`, eslint (`next lint --max-warnings 0`, warnings fail the build), the vitest unit tests, and `next build`.
 
 ## Trade-offs
 

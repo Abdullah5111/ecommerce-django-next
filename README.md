@@ -7,7 +7,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-A production-shaped, full-stack storefront — Django REST Framework + Next.js 14 — built to demonstrate **correctness under concurrency, money-handling you can trust, and security done properly**, not just CRUD. Catalog & faceted search, cart, coupons, an order state machine, returns/refunds, Stripe payments, and multi-channel notifications, all covered by ~275 tests running on Postgres in CI.
+A production-shaped, full-stack storefront — Django REST Framework + Next.js 14 — built to demonstrate **correctness under concurrency, money-handling you can trust, and security done properly**, not just CRUD. Catalog & faceted search, cart, coupons, an order state machine, returns/refunds, Stripe payments, and multi-channel notifications, all covered by 300+ backend tests running on Postgres in CI.
 
 > **The whole app runs with zero external credentials.** Stripe, Google sign-in, and Web Push each degrade to a keyless mock so you can clone it and check out end-to-end in one command.
 
@@ -326,8 +326,8 @@ All three are **off by default and the app runs fine without them.** Set the env
 
 ## Testing & CI
 
-- **~275 backend tests** (DRF `APITestCase`) across auth, catalog, variants, cart, orders, coupons, tax, returns, reviews, notifications, payments, and the concurrency paths — plus a smoke test that the OpenAPI schema builds.
-- **GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) on every push/PR: a backend job on **Postgres 16** (exercising the full-text path) and a frontend job running `tsc --noEmit` + `next build`.
+- **300+ backend tests** (DRF `APITestCase`) across auth, catalog, variants, cart, orders, coupons, tax, returns, reviews, notifications, payments, and the concurrency paths — plus a smoke test that the OpenAPI schema builds.
+- **GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) on every push/PR: a backend job on **Postgres 16** (exercising the full-text path) that lints with **ruff** first, and a frontend job running `tsc --noEmit`, **eslint** (`next lint --max-warnings 0`), **vitest** unit tests and `next build`.
 
 ```bash
 cd backend && python manage.py test        # backend suite
