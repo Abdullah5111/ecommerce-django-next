@@ -220,6 +220,10 @@ REST_FRAMEWORK = {
         # Token refresh + logout. Generous: access tokens last 2h, so a real
         # client refreshes rarely; this only stops scripted hammering.
         "auth-token": "30/min",
+        # Phone OTP — keyed per signed-in user. Verify allows two codes' worth
+        # of wrong guesses per hour.
+        "auth-phone-send": "5/hour",
+        "auth-phone-verify": "10/hour",
         "chat-send": "30/min",
     },
 }

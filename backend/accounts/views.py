@@ -309,6 +309,10 @@ class PhoneSendCodeView(APIView):
     """
 
     permission_classes = [permissions.IsAuthenticated]
+    # The cooldown only spaces sends out; this caps them, since each send is a
+    # paid SMS to any number and a fresh code with fresh guesses.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-phone-send"
 
     def post(self, request):
         phone = (request.data.get("phone") or "").strip()
@@ -338,6 +342,10 @@ class PhoneSendCodeView(APIView):
 
 class PhoneVerifyView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    # Burning a code after OTP_MAX_ATTEMPTS limits guesses per code; this
+    # limits them per user across codes.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-phone-verify"
 
     def post(self, request):
         # Coerce + sanity-check before compare_digest: it raises TypeError on
