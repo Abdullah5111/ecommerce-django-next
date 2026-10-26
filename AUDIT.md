@@ -44,6 +44,7 @@ meaningful functional or a11y defect · **Low** minor.
 |----|-----|------|--------|-----|------|
 | R-1 | Medium | Refunds / disputes | Refunds and chargebacks made in the Stripe dashboard never reached the order, so `refunded_total` was wrong and returns could refund the same money again | Webhook handles `charge.refunded` (records only the part above `refunded_total`, sets `refunded` / `partially_refunded`, notifies the customer) and `charge.dispute.created` / `.closed` (logged on the order timeline) | `payments/tests.py` DashboardRefundTests, DisputeTests |
 | R-2 | Medium | Throttles / OTP | Throttles and phone OTPs lived in per-process `LocMemCache`: with several workers, limits were per process and an OTP could be checked by a process that never stored it | The cache is Redis whenever `REDIS_URL` is set (compose sets it); LocMem only as the dev/test fallback | none: config only, CI runs the LocMem path |
+| R-3 | Medium | Auth / phone OTP | Phone send-code and verify were unthrottled. A new code every 30s, with 5 guesses each, allowed ~10 guesses a minute with no ceiling, and each send would be a paid SMS to any number | Per-user throttles: `auth-phone-send` 5/hour, `auth-phone-verify` 10/hour | `accounts/tests.py` PhoneOtpThrottleTests |
 
 ## Verified correct
 
@@ -79,4 +80,4 @@ instance.
 
 Live deployment · real flash-sale backend · product Q&A · referral codes ·
 store credit / BNPL · live carrier tracking · broader frontend tests
-(component/e2e) · remaining auth throttles.
+(component/e2e) · real SMS provider for phone codes.

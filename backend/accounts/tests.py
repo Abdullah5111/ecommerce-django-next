@@ -420,3 +420,57 @@ class TokenEndpointThrottleTests(APITestCase):
         self.client.post("/api/auth/logout/", {"refresh": "junk"})
         res = self.client.post("/api/auth/logout/", {"refresh": "junk"})
         self.assertEqual(res.status_code, 429)
+
+
+class PhoneOtpThrottleTests(APITestCase):
+    """The 30s cooldown and the per-code attempt limit don't cap anything over
+    time on their own — a new code every 30s meant ~10 guesses a minute,
+    indefinitely. Per-user throttles do."""
+
+    def setUp(self):
+        cache.clear()  # throttle history lives in the cache — not rolled back
+        rates = patch.dict(
+            ScopedRateThrottle.THROTTLE_RATES,
+            {"auth-phone-send": "2/hour", "auth-phone-verify": "2/hour"},
+        )
+        rates.start()
+        self.addCleanup(rates.stop)
+        self.user = User.objects.create_user(
+            username="otp", email="otp@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def _send(self):
+        # Skip the 30s cooldown so only the throttle can refuse.
+        cache.delete(f"phone_otp_cooldown:{self.user.id}")
+        return self.client.post(
+            "/api/auth/phone/send-code/", {"phone": "+15551234567"}, format="json"
+        )
+
+    def _guess(self):
+        return self.client.post("/api/auth/phone/verify/", {"code": "000000"}, format="json")
+
+    def test_sends_are_capped_past_the_cooldown(self):
+        self.assertEqual(self._send().status_code, 200)
+        self.assertEqual(self._send().status_code, 200)
+        res = self._send()
+        self.assertEqual(res.status_code, 429)
+        self.assertIn("throttled", str(res.data["detail"]))
+
+    def test_guesses_are_capped_across_codes(self):
+        self._send()
+        self.assertEqual(self._guess().status_code, 400)
+        self.assertEqual(self._guess().status_code, 400)
+        self.assertEqual(self._guess().status_code, 429)
+
+    def test_limits_are_per_user(self):
+        self._send()
+        self._send()
+        other = User.objects.create_user(
+            username="otp2", email="otp2@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(other)
+        res = self.client.post(
+            "/api/auth/phone/send-code/", {"phone": "+15557654321"}, format="json"
+        )
+        self.assertEqual(res.status_code, 200)
