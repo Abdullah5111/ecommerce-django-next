@@ -9,6 +9,7 @@ from orders import transitions
 from orders.models import Order
 
 from . import gateway
+from .models import StripeEvent
 
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -29,6 +30,23 @@ class StripeWebhookView(APIView):
         except ValueError:
             return HttpResponseBadRequest("Invalid payload or signature")
 
+        # Record the event and handle it in one transaction: a redelivery finds
+        # the row and stops, and a handler that fails rolls the row back so
+        # Stripe's retry runs it again. Concurrent duplicates serialise on the
+        # unique index.
+        with transaction.atomic():
+            event_id = event.get("id")
+            if event_id:
+                _, created = StripeEvent.objects.get_or_create(
+                    event_id=event_id, defaults={"type": event["type"]}
+                )
+                if not created:
+                    return HttpResponse(status=200)
+            self._dispatch(event)
+
+        return HttpResponse(status=200)
+
+    def _dispatch(self, event):
         if event["type"] == "payment_intent.succeeded":
             intent = event["data"]["object"]
             order_id = (intent.get("metadata") or {}).get("order_id")
@@ -37,8 +55,6 @@ class StripeWebhookView(APIView):
             self._mirror_refund(event["data"]["object"])
         elif event["type"] in ("charge.dispute.created", "charge.dispute.closed"):
             self._log_dispute(event["type"], event["data"]["object"])
-
-        return HttpResponse(status=200)
 
     def _mark_paid(self, intent_id, order_id, amount=None):
         order = None

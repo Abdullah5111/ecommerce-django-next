@@ -581,3 +581,74 @@ class DisputeTests(APITestCase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.refunded_total, Decimal("0"))
         self.assertEqual(self.order.status, Order.Status.DELIVERED)
+
+
+@override_settings(**LIVE)
+class EventDedupeTests(APITestCase):
+    """Each Stripe event id is handled once, however often it's delivered."""
+
+    def setUp(self):
+        user = User.objects.create_user(
+            username="dedupe", email="dedupe@example.com", password="pw-123456"
+        )
+        # A late payment for a cancelled order triggers a Stripe refund call —
+        # an observable side effect a redelivery must not repeat.
+        self.order = Order.objects.create(
+            user=user, shipping_address="123 Test St", total=Decimal("80.00"),
+            status=Order.Status.CANCELLED, payment_intent_id="pi_late",
+        )
+        self.event = {
+            "id": "evt_1",
+            "type": "payment_intent.succeeded",
+            "data": {"object": {
+                "id": "pi_late", "amount": 8000,
+                "metadata": {"order_id": str(self.order.id)},
+            }},
+        }
+
+    def _deliver(self, fake):
+        with patch.object(gateway, "construct_event", return_value=self.event), \
+                patch.object(gateway, "_stripe", return_value=fake):
+            return self.client.post(
+                "/api/payments/webhook/", data=b"{}", content_type="application/json"
+            )
+
+    def test_redelivered_event_is_handled_once(self):
+        from payments.models import StripeEvent
+
+        fake = _fake_stripe()
+        self.assertEqual(self._deliver(fake).status_code, 200)
+        self.assertEqual(self._deliver(fake).status_code, 200)
+        fake.Refund.create.assert_called_once()
+        self.assertEqual(StripeEvent.objects.filter(event_id="evt_1").count(), 1)
+
+    def test_failed_handler_is_not_recorded_so_the_retry_runs(self):
+        from payments.models import StripeEvent
+
+        failing = _fake_stripe()
+        failing.Refund.create.side_effect = RuntimeError("Stripe is down")
+        self.client.raise_request_exception = False
+        self.assertEqual(self._deliver(failing).status_code, 500)
+        self.assertFalse(StripeEvent.objects.exists())
+
+        fake = _fake_stripe()
+        self.assertEqual(self._deliver(fake).status_code, 200)
+        fake.Refund.create.assert_called_once()
+
+    def test_prune_drops_only_old_events(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from payments.models import StripeEvent
+        from payments.tasks import prune_stripe_events
+
+        old = StripeEvent.objects.create(event_id="evt_old", type="x")
+        StripeEvent.objects.filter(pk=old.pk).update(
+            created_at=timezone.now() - timedelta(days=31)
+        )
+        StripeEvent.objects.create(event_id="evt_new", type="x")
+        self.assertEqual(prune_stripe_events(), 1)
+        self.assertEqual(
+            list(StripeEvent.objects.values_list("event_id", flat=True)), ["evt_new"]
+        )
