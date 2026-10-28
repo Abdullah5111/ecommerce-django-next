@@ -19,10 +19,11 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView, TokenRefreshView
 
-from . import sms
+from . import cookies, sms
 from .models import Address
 from .serializers import (
     AddressSerializer,
@@ -107,21 +108,70 @@ class AvatarView(APIView):
 
 
 class EmailOrUsernameTokenObtainPairView(TokenObtainPairView):
+    """Sign in. The access token comes back in the body; the refresh token is
+    set as an httpOnly cookie (``accounts.cookies``)."""
+
     serializer_class = EmailOrUsernameTokenObtainPairSerializer
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth-login"
 
+    def post(self, request, *args, **kwargs):
+        return cookies.move_refresh_to_cookie(super().post(request, *args, **kwargs))
+
+
+def _run_token_serializer(view, token):
+    serializer = view.get_serializer(data={"refresh": token or ""})
+    try:
+        serializer.is_valid(raise_exception=True)
+    except TokenError as exc:
+        raise InvalidToken(exc.args[0]) from exc
+    return serializer.validated_data
+
 
 class ThrottledTokenRefreshView(TokenRefreshView):
-    """Unauthenticated token-minting endpoint — rate-capped per client IP."""
+    """Unauthenticated token-minting endpoint — rate-capped per client IP.
+
+    Takes the refresh token from the cookie (browser) or the body (API
+    clients); a rotated refresh token goes back the way it came.
+    """
 
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth-token"
+
+    def post(self, request, *args, **kwargs):
+        token, from_cookie = cookies.refresh_from_request(request)
+        if from_cookie and not token:
+            # The page-load session check of a signed-out visitor.
+            return Response({"detail": "No session."}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            data = _run_token_serializer(self, token)
+        except InvalidToken:
+            if from_cookie:
+                # A dead cookie would make every page load retry it; drop it.
+                return cookies.clear_refresh_cookie(
+                    Response({"detail": "Session expired."}, status=status.HTTP_401_UNAUTHORIZED)
+                )
+            raise
+        response = Response(data)
+        return cookies.move_refresh_to_cookie(response) if from_cookie else response
 
 
 class ThrottledLogoutView(TokenBlacklistView):
+    """Blacklist the refresh token (cookie or body) and clear the cookie."""
+
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth-token"
+
+    def post(self, request, *args, **kwargs):
+        token, from_cookie = cookies.refresh_from_request(request)
+        if from_cookie and not token:
+            return cookies.clear_refresh_cookie(Response({}))  # already signed out
+        try:
+            _run_token_serializer(self, token)
+        except InvalidToken:
+            if not from_cookie:
+                raise
+        return cookies.clear_refresh_cookie(Response({}))
 
 
 class GoogleConfigView(APIView):
@@ -195,7 +245,9 @@ class GoogleLoginView(APIView):
 
         user = _get_or_link_google_user(claims)
         refresh = RefreshToken.for_user(user)
-        return Response({"access": str(refresh.access_token), "refresh": str(refresh)})
+        return cookies.move_refresh_to_cookie(
+            Response({"access": str(refresh.access_token), "refresh": str(refresh)})
+        )
 
 
 def _get_user_from_uid(uid):

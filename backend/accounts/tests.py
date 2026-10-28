@@ -239,7 +239,8 @@ class GoogleLoginEndpointTests(APITestCase):
             res = self._post()
         self.assertEqual(res.status_code, 200)
         self.assertIn("access", res.data)
-        self.assertIn("refresh", res.data)
+        self.assertNotIn("refresh", res.data)  # it's in the httpOnly cookie
+        self.assertTrue(res.cookies["refresh_token"]["httponly"])
         user = User.objects.get(email="ada@example.com")
         self.assertTrue(user.email_verified)
         self.assertFalse(user.has_usable_password())
@@ -342,7 +343,7 @@ class PasswordResetRevokesSessionsTests(APITestCase):
         login = self.client.post(
             "/api/auth/token/", {"username": "carol", "password": "old-pw-12345"}
         )
-        refresh = login.data["refresh"]
+        refresh = login.cookies["refresh_token"].value
         uid, token = self._reset_credentials()
 
         res = self.client.post(
@@ -602,3 +603,67 @@ class SmsProviderTests(APITestCase):
             self.assertEqual(self._send().status_code, 502)
         self.assertIsNone(self._stored())
         self.assertIsNone(cache.get(f"phone_otp_cooldown:{self.user.id}"))
+
+
+class RefreshCookieTests(APITestCase):
+    """The refresh token travels only in an httpOnly cookie; the browser's JS
+    sees just the access token."""
+
+    FETCH = {"HTTP_X_REQUESTED_WITH": "fetch"}
+
+    def setUp(self):
+        cache.clear()
+        User.objects.create_user(
+            username="cookie", email="cookie@example.com", password="pw-123456"
+        )
+
+    def _login(self):
+        res = self.client.post(
+            "/api/auth/token/", {"username": "cookie", "password": "pw-123456"}
+        )
+        self.assertEqual(res.status_code, 200)
+        return res
+
+    def test_login_sets_an_httponly_cookie_and_keeps_refresh_out_of_the_body(self):
+        res = self._login()
+        self.assertIn("access", res.data)
+        self.assertNotIn("refresh", res.data)
+        cookie = res.cookies["refresh_token"]
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual(cookie["path"], "/api/auth/")
+        self.assertEqual(cookie["samesite"], "Lax")
+
+    def test_refresh_from_cookie_returns_access_and_rotates_the_cookie(self):
+        first = self._login().cookies["refresh_token"].value
+        res = self.client.post("/api/auth/token/refresh/", **self.FETCH)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("access", res.data)
+        self.assertNotIn("refresh", res.data)
+        self.assertNotEqual(res.cookies["refresh_token"].value, first)
+
+    def test_cookie_is_ignored_without_the_fetch_header(self):
+        # A cross-site form post can't set custom headers, so it gets nothing.
+        self._login()
+        res = self.client.post("/api/auth/token/refresh/")
+        self.assertNotEqual(res.status_code, 200)
+
+    def test_logout_blacklists_and_clears_the_cookie(self):
+        token = self._login().cookies["refresh_token"].value
+        res = self.client.post("/api/auth/logout/", **self.FETCH)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.cookies["refresh_token"].value, "")
+        reused = self.client.post("/api/auth/token/refresh/", {"refresh": token})
+        self.assertEqual(reused.status_code, 401)
+
+    def test_dead_cookie_is_cleared(self):
+        self.client.cookies["refresh_token"] = "not-a-token"
+        res = self.client.post("/api/auth/token/refresh/", **self.FETCH)
+        self.assertEqual(res.status_code, 401)
+        self.assertEqual(res.cookies["refresh_token"].value, "")
+
+    def test_body_token_still_works_for_api_clients(self):
+        token = self._login().cookies["refresh_token"].value
+        self.client.cookies.clear()
+        res = self.client.post("/api/auth/token/refresh/", {"refresh": token})
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("refresh", res.data)  # rotated token goes back the way it came

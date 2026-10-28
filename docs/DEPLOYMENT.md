@@ -205,6 +205,17 @@ Once both URLs exist, redeploy the backend (step 6) with the frontend origin in
 `_EXTRA_ENV`: `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS` and `FRONTEND_URL`
 set to `https://<frontend-host>`, and `ALLOWED_HOSTS` to the backend host.
 
+**Sign-in cookie.** The refresh token is an httpOnly cookie the API sets for
+the storefront, so the two must be able to share it:
+
+- **Recommended:** map custom domains on one site (`shop.example.com` and
+  `api.example.com`, via Cloud Run domain mappings or a load balancer). The
+  default `AUTH_COOKIE_SAMESITE=Lax` then just works.
+- **Two `*.run.app` URLs:** each is its own site (`run.app` is a public
+  suffix), so the cookie is third-party. Add `AUTH_COOKIE_SAMESITE=None` to
+  `_EXTRA_ENV`; browsers that block third-party cookies (Safari by default)
+  will still drop it, and those users are signed out on every page load.
+
 ## Costs (rough)
 
 - Cloud Run: free tier covers small demos

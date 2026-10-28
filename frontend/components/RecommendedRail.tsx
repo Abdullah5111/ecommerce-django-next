@@ -3,20 +3,23 @@
 import { useEffect, useState } from "react";
 import { api, type Product } from "@/lib/api";
 import { auth } from "@/lib/auth";
+import { useAuth } from "@/lib/useAuth";
 import RailCard from "./RailCard";
 
 /** Personalized "Recommended for you" rail; logged-in users only (guests see Featured). */
 export default function RecommendedRail() {
   const [items, setItems] = useState<Product[]>([]);
+  // `user` is set only once the session restore has put a token in memory.
+  const { user } = useAuth();
 
   useEffect(() => {
     const token = auth.get();
-    if (!token) return; // guests: skip (no personalization)
+    if (!user || !token) return; // guests: skip (no personalization)
     api
       .getRecommended(token)
       .then(setItems)
       .catch(() => setItems([]));
-  }, []);
+  }, [user]);
 
   if (items.length === 0) return null;
 

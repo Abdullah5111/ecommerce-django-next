@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
+import { useAuth } from "@/lib/useAuth";
 
 /**
  * Resolves the per-viewer bits of a review list. Server-rendered reviews are always
@@ -46,8 +47,11 @@ export default function ReviewViewerState({
   children: React.ReactNode;
 }) {
   const [state, setState] = useState<ViewerState>(PENDING);
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
+    // Stay pending until the session restore settles (no token in memory yet).
+    if (authLoading) return;
     const token = auth.get();
     if (!token) {
       // Guests have nothing to look up — settle immediately.
@@ -78,7 +82,7 @@ export default function ReviewViewerState({
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, authLoading, user]);
 
   return (
     <ReviewViewerContext.Provider value={state}>

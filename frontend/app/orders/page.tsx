@@ -7,18 +7,22 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Order } from "@/lib/api";
 import { auth } from "@/lib/auth";
+import { useAuth } from "@/lib/useAuth";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import EmptyState from "@/components/EmptyState";
 import OrderStatusBadge from "@/components/ui/OrderStatusBadge";
 
 export default function OrdersPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Wait for the session restore (page loads start with no token in memory).
+    if (authLoading) return;
     const token = auth.get();
-    if (!token) {
+    if (!user || !token) {
       router.push("/login?next=/orders");
       return;
     }
@@ -26,7 +30,7 @@ export default function OrdersPage() {
       .listOrders(token)
       .then((data) => setOrders(data.results))
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load orders"));
-  }, [router]);
+  }, [authLoading, user, router]);
 
   if (error) {
     return (
