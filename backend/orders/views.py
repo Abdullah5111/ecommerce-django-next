@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db import IntegrityError
 from django.db.models import Count, Sum
 from rest_framework import mixins, permissions, viewsets
 from rest_framework.decorators import action
@@ -11,6 +12,8 @@ from products.models import Product
 from . import transitions
 from .models import Order
 from .serializers import OrderSerializer, ShipInputSerializer
+
+IDEMPOTENCY_KEY_MAX = Order._meta.get_field("idempotency_key").max_length
 
 
 class StaffStatsView(APIView):
@@ -60,6 +63,42 @@ class OrderViewSet(
         if self.request.user.is_staff:
             return qs
         return qs.filter(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        """Place an order. With an ``Idempotency-Key`` header, a retry of the
+        same request (double-click, lost response) returns the order the first
+        attempt created — 200 instead of 201 — rather than placing another.
+        """
+        key = request.headers.get("Idempotency-Key", "").strip()
+        if not key:
+            return super().create(request, *args, **kwargs)
+        if len(key) > IDEMPOTENCY_KEY_MAX:
+            return Response(
+                {"detail": f"Idempotency-Key must be at most {IDEMPOTENCY_KEY_MAX} characters."},
+                status=400,
+            )
+        existing = self._order_for_key(key)
+        if existing is not None:
+            return Response(self.get_serializer(existing).data, status=200)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            serializer.save(idempotency_key=key)
+        except IntegrityError:
+            # A concurrent request with the same key won the insert; this one's
+            # transaction (stock, coupon) rolled back. Hand back the winner.
+            existing = self._order_for_key(key)
+            if existing is None:
+                raise
+            return Response(self.get_serializer(existing).data, status=200)
+        return Response(serializer.data, status=201)
+
+    def _order_for_key(self, key):
+        return (
+            Order.objects.prefetch_related("items__product", "events")
+            .filter(user=self.request.user, idempotency_key=key)
+            .first()
+        )
 
     def _transition(self, request, fn, **kwargs):
         order = self.get_object()

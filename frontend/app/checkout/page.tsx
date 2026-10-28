@@ -4,12 +4,13 @@ import Loading from "@/components/ui/Loading";
 
 import { buttonClasses } from "@/components/ui/Button";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart";
 import { auth } from "@/lib/auth";
 import { formatMoney } from "@/lib/format";
+import { newIdempotencyKey } from "@/lib/idempotency";
 import { api, type Address, type AddressInput, type QuoteResult } from "@/lib/api";
 import { useToast } from "@/lib/useToast";
 import AddressForm from "@/components/AddressForm";
@@ -37,6 +38,7 @@ export default function CheckoutPage() {
   // Order already created but not yet paid — reused on retry so a failed
   // payment-start doesn't create a second stock-holding order.
   const [pendingOrderId, setPendingOrderId] = useState<number | null>(null);
+  const orderKey = useRef<string | null>(null);
   const [chargedTotal, setChargedTotal] = useState<string | null>(null);
 
   const [promoInput, setPromoInput] = useState("");
@@ -136,9 +138,11 @@ export default function CheckoutPage() {
   }, [authed, items.length]);
 
   // A changed cart, address, or coupon makes any existing pending order stale;
-  // drop the reference so the next attempt creates a fresh one.
+  // drop the reference (and its idempotency key) so the next attempt creates a
+  // fresh one.
   useEffect(() => {
     setPendingOrderId(null);
+    orderKey.current = null;
   }, [items, selectedId, appliedCode]);
 
   // Confirm a paid order on the backend (after card confirm in live mode, immediately in mock).
@@ -193,11 +197,18 @@ export default function CheckoutPage() {
       // of creating a duplicate; the reset effect clears it if the cart changed.
       let orderId = pendingOrderId;
       if (orderId == null) {
-        const order = await api.createOrder(token, {
-          shipping_address_id: addressId,
-          items: items.map((i) => ({ product: i.product.id, variant: i.variant?.id ?? null, quantity: i.quantity })),
-          coupon_code: appliedCode ?? undefined,
-        });
+        // pendingOrderId covers retries whose response arrived; the key covers
+        // ones whose response was lost (the server already placed the order).
+        orderKey.current ??= newIdempotencyKey();
+        const order = await api.createOrder(
+          token,
+          {
+            shipping_address_id: addressId,
+            items: items.map((i) => ({ product: i.product.id, variant: i.variant?.id ?? null, quantity: i.quantity })),
+            coupon_code: appliedCode ?? undefined,
+          },
+          orderKey.current
+        );
         orderId = order.id;
         setPendingOrderId(orderId);
         setChargedTotal(order.total); // the server-priced amount actually charged
