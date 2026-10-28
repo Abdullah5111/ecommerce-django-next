@@ -44,11 +44,21 @@ class Order(models.Model):
     tracking_carrier = models.CharField(max_length=60, blank=True)
     payment_intent_id = models.CharField(max_length=255, blank=True)
     refunded_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Client-chosen key from the Idempotency-Key header; a retried create with
+    # the same key returns this order instead of placing another.
+    idempotency_key = models.CharField(max_length=64, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "idempotency_key"],
+                condition=~models.Q(idempotency_key=""),
+                name="order_unique_idempotency_key_per_user",
+            ),
+        ]
 
     def __str__(self):
         return f"Order #{self.pk} ({self.user})"

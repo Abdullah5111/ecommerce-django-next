@@ -497,11 +497,16 @@ export const api = {
           shipping_address: string;
           items: { product: number; variant?: number | null; quantity: number }[];
           coupon_code?: string;
-        }
+        },
+    // Same key on a retry → the server returns the order it already placed.
+    idempotencyKey?: string
   ) =>
     request<{ id: number; total: string }>(`/orders/`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+      },
       body: JSON.stringify(payload),
     }),
   quoteOrder: (

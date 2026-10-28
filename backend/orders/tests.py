@@ -639,3 +639,75 @@ class OrderLineQuantityTests(APITestCase):
         self.assertEqual(Order.objects.count(), 0)
         self.p.refresh_from_db()
         self.assertEqual(self.p.stock, 10)
+
+
+class IdempotentOrderCreateTests(APITestCase):
+    """POST /orders/ with an Idempotency-Key places at most one order per key."""
+
+    def setUp(self):
+        cat = Category.objects.create(name="Gear")
+        self.p = Product.objects.create(
+            name="Widget", price=Decimal("40.00"), stock=10, category=cat
+        )
+        self.user = User.objects.create_user(
+            username="idem", email="idem@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+        self.body = {
+            "shipping_address": "123 Test St",
+            "items": [{"product": self.p.id, "quantity": 2}],
+        }
+
+    def _create(self, key=None):
+        headers = {"HTTP_IDEMPOTENCY_KEY": key} if key else {}
+        return self.client.post("/api/orders/", self.body, format="json", **headers)
+
+    def test_retry_with_same_key_returns_the_first_order(self):
+        first = self._create("checkout-1")
+        self.assertEqual(first.status_code, 201)
+        retry = self._create("checkout-1")
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual(retry.data["id"], first.data["id"])
+        self.assertEqual(Order.objects.count(), 1)
+        self.p.refresh_from_db()
+        self.assertEqual(self.p.stock, 8)  # stock taken once
+
+    def test_different_keys_place_different_orders(self):
+        self.assertEqual(self._create("checkout-1").status_code, 201)
+        self.assertEqual(self._create("checkout-2").status_code, 201)
+        self.assertEqual(Order.objects.count(), 2)
+
+    def test_without_a_key_every_request_places_an_order(self):
+        self._create()
+        self._create()
+        self.assertEqual(Order.objects.count(), 2)
+
+    def test_keys_are_scoped_per_user(self):
+        self._create("shared-key")
+        other = User.objects.create_user(
+            username="idem2", email="idem2@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(other)
+        res = self._create("shared-key")
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(Order.objects.count(), 2)
+
+    def test_overlong_key_is_rejected(self):
+        res = self._create("k" * 65)
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_losing_a_concurrent_race_returns_the_winner(self):
+        from orders.views import OrderViewSet
+
+        # The winner committed between this request's lookup and its insert.
+        winner = Order.objects.create(
+            user=self.user, shipping_address="123 Test St", idempotency_key="race"
+        )
+        with patch.object(OrderViewSet, "_order_for_key", side_effect=[None, winner]):
+            res = self._create("race")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["id"], winner.id)
+        self.assertEqual(Order.objects.count(), 1)
+        self.p.refresh_from_db()
+        self.assertEqual(self.p.stock, 10)  # the loser's stock decrement rolled back
