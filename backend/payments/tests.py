@@ -768,3 +768,35 @@ class EventDedupeTests(APITestCase):
         self.assertEqual(
             list(StripeEvent.objects.values_list("event_id", flat=True)), ["evt_new"]
         )
+
+
+class PaymentsCommandTests(APITestCase):
+    """Management-command wrappers for the Beat tasks, run by scheduled jobs
+    where there is no Celery Beat (Cloud Run)."""
+
+    def test_prune_command_reports_deleted_rows(self):
+        from datetime import timedelta
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django.utils import timezone
+
+        from payments.models import StripeEvent
+
+        old = StripeEvent.objects.create(event_id="evt_old", type="x")
+        StripeEvent.objects.filter(pk=old.pk).update(
+            created_at=timezone.now() - timedelta(days=40)
+        )
+        out = StringIO()
+        call_command("prune_stripe_events", stdout=out)
+        self.assertIn("Deleted 1", out.getvalue())
+        self.assertFalse(StripeEvent.objects.exists())
+
+    def test_retry_command_reports_requeued_refunds(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("retry_pending_refunds", stdout=out)
+        self.assertIn("Re-queued 0", out.getvalue())

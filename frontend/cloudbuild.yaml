@@ -1,0 +1,41 @@
+# Build and deploy the storefront. Run from the repo root:
+#   gcloud builds submit --config frontend/cloudbuild.yaml \
+#     --substitutions=_API_URL=https://<backend-host>/api
+#
+# NEXT_PUBLIC_API_URL is compiled into the browser bundle, so it must be a
+# build argument — setting it on the running service changes nothing.
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=NEXT_PUBLIC_API_URL=${_API_URL}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/ecommerce-frontend:$SHORT_SHA
+      - ./frontend
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/ecommerce-frontend:$SHORT_SHA
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ecommerce-frontend
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/ecommerce-frontend:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      # Server-side rendering calls the API from inside Cloud Run.
+      - --set-env-vars=INTERNAL_API_URL=${_API_URL}
+
+substitutions:
+  _REGION: us-central1
+  _REPO: ecommerce
+  _API_URL: https://ecommerce-backend-XXXX.us-central1.run.app/api
+
+options:
+  logging: CLOUD_LOGGING_ONLY
