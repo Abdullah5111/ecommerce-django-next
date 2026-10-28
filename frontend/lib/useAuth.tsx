@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { api } from "./api";
+import { api, restoreSession } from "./api";
 import { auth } from "./auth";
 
 export type AuthUser = {
@@ -26,7 +26,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const token = auth.get();
+    // A fresh page load has no access token in memory; the refresh cookie (if
+    // any) brings the session back.
+    const token = auth.get() ?? (await restoreSession());
     if (!token) {
       setUser(null);
       setLoading(false);
@@ -54,13 +56,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const logout = useCallback(async () => {
-    const refreshToken = auth.getRefresh();
-    if (refreshToken) {
-      try {
-        await api.logout(refreshToken);
-      } catch {
-        // server-side blacklist failed (token expired, etc.) — clear locally anyway
-      }
+    try {
+      await api.logout();
+    } catch {
+      // server-side blacklist failed (token expired, etc.) — clear locally anyway
     }
     auth.clear();
     setUser(null);

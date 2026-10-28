@@ -279,6 +279,14 @@ CORS_ALLOWED_ORIGINS = config(
 # Checkout sends Idempotency-Key on POST /orders/ so a retried request can't
 # create a second order.
 CORS_ALLOW_HEADERS = (*default_headers, "idempotency-key")
+# The refresh-token cookie (accounts/cookies.py) crosses origins from the
+# storefront to the API, so credentialed CORS must be on for allowed origins.
+CORS_ALLOW_CREDENTIALS = True
+AUTH_COOKIE_SECURE = config("AUTH_COOKIE_SECURE", default=not DEBUG, cast=bool)
+# Lax works when the storefront and API share a site (localhost:3000 and :8000,
+# or shop.example.com and api.example.com). Separate sites — two *.run.app
+# hosts — need None (and Secure), which some browsers block as third-party.
+AUTH_COOKIE_SAMESITE = config("AUTH_COOKIE_SAMESITE", default="Lax")
 CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
     default="http://localhost:3000",

@@ -330,6 +330,38 @@ export type StaffStats = {
   open_chats: number;
 };
 
+// Endpoints that read or write the httpOnly refresh cookie. `credentials:
+// "include"` lets the cookie cross from the storefront's origin to the API's;
+// X-Requested-With is the API's proof the call came from our own script.
+const SESSION_INIT: RequestInit = {
+  method: "POST",
+  credentials: "include",
+  headers: { "X-Requested-With": "fetch" },
+};
+
+let restoring: Promise<string | null> | null = null;
+
+/** Trade the refresh cookie for a fresh access token (page load, or after a
+ * 401). Concurrent callers share one request — the refresh token rotates, so
+ * two parallel refreshes would race each other. Resolves null when signed out. */
+export function restoreSession(): Promise<string | null> {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  restoring ??= (async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/token/refresh/`, { ...SESSION_INIT, cache: "no-store" });
+      if (!res.ok) return null;
+      const { access } = (await res.json()) as { access: string };
+      auth.set(access);
+      return access;
+    } catch {
+      return null;
+    } finally {
+      restoring = null;
+    }
+  })();
+  return restoring;
+}
+
 async function request<T>(path: string, init: RequestInit = {}, _retry = false): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -337,41 +369,22 @@ async function request<T>(path: string, init: RequestInit = {}, _retry = false):
     cache: "no-store",
   });
 
-  if (res.status === 401 && !_retry && typeof window !== "undefined") {
-    const refreshToken = auth.getRefresh();
+  // Only calls that sent a bearer token can be fixed by a refresh; a 401 from
+  // the login form itself is just bad credentials.
+  const originalHeaders = (init.headers || {}) as Record<string, string>;
+  const hadAuth = Object.keys(originalHeaders).some((k) => k.toLowerCase() === "authorization");
+
+  if (res.status === 401 && hadAuth && !_retry && typeof window !== "undefined") {
     const originalError = new Error(`API 401: ${await res.clone().text()}`);
 
-    if (refreshToken) {
-      try {
-        const refreshRes = await fetch(`${API_URL}/auth/token/refresh/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh: refreshToken }),
-          cache: "no-store",
-        });
-        if (refreshRes.ok) {
-          const data = (await refreshRes.json()) as { access: string; refresh?: string };
-          auth.set(data.access, data.refresh);
-
-          // Swap Authorization header on retry if the original call had one
-          const originalHeaders = (init.headers || {}) as Record<string, string>;
-          const hadAuth = Object.keys(originalHeaders).some(
-            (k) => k.toLowerCase() === "authorization"
-          );
-          let retryInit = init;
-          if (hadAuth) {
-            const newHeaders: Record<string, string> = {};
-            for (const [k, v] of Object.entries(originalHeaders)) {
-              if (k.toLowerCase() !== "authorization") newHeaders[k] = v;
-            }
-            newHeaders["Authorization"] = `Bearer ${data.access}`;
-            retryInit = { ...init, headers: newHeaders };
-          }
-          return request<T>(path, retryInit, true);
-        }
-      } catch {
-        // fall through to clear + redirect
+    const access = await restoreSession();
+    if (access) {
+      const newHeaders: Record<string, string> = {};
+      for (const [k, v] of Object.entries(originalHeaders)) {
+        if (k.toLowerCase() !== "authorization") newHeaders[k] = v;
       }
+      newHeaders["Authorization"] = `Bearer ${access}`;
+      return request<T>(path, { ...init, headers: newHeaders }, true);
     }
 
     auth.clear();
@@ -483,15 +496,19 @@ export const api = {
   getCategoryTree: () => request<CategoryTreeNode[]>(`/categories/tree/`),
   getCategoryByPath: (path: string) =>
     request<CategoryDetail>(`/categories/by-path/?path=${encodeURIComponent(path)}`),
+  // Sign-in returns the access token; the refresh token arrives as an httpOnly
+  // cookie, which the browser only stores for a credentialed request.
   login: (username: string, password: string) =>
-    request<{ access: string; refresh: string }>(`/auth/token/`, {
+    request<{ access: string }>(`/auth/token/`, {
       method: "POST",
+      credentials: "include",
       body: JSON.stringify({ username, password }),
     }),
   getGoogleConfig: () => request<GoogleConfig>(`/auth/google/config/`, {}),
   googleLogin: (credential: string) =>
-    request<{ access: string; refresh: string }>(`/auth/google/`, {
+    request<{ access: string }>(`/auth/google/`, {
       method: "POST",
+      credentials: "include",
       body: JSON.stringify({ credential }),
     }),
   register: (data: { username: string; email: string; password: string }) =>
@@ -789,11 +806,8 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify({ code }),
     }),
-  logout: (refresh: string) =>
-    request<unknown>(`/auth/logout/`, {
-      method: "POST",
-      body: JSON.stringify({ refresh }),
-    }),
+  // Blacklists the refresh token and clears its cookie.
+  logout: () => request<unknown>(`/auth/logout/`, SESSION_INIT),
   forgotPassword: (email: string) =>
     request<{ detail: string }>(`/auth/forgot-password/`, {
       method: "POST",

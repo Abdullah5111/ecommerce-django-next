@@ -28,8 +28,8 @@ function LoginForm() {
     setBusy(true);
     setError(null);
     try {
-      const { access, refresh: refreshToken } = await api.login(username, password);
-      auth.set(access, refreshToken);
+      const { access } = await api.login(username, password);
+      auth.set(access);
       await refresh();
       router.push(next);
     } catch (e) {

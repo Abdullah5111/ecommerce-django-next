@@ -189,7 +189,7 @@ frontend/
 │       └── StickyCta.tsx                 # md:hidden bottom CTA bar
 └── lib/
     ├── api.ts                            # typed fetch wrapper with auto-refresh on 401
-    ├── auth.ts                           # access + refresh tokens in localStorage
+    ├── auth.ts                           # access token in memory (refresh is an httpOnly cookie)
     ├── useAuth.tsx                       # AuthProvider, fetches /me on mount
     ├── useToast.tsx                      # ToastProvider
     ├── useWishlist.tsx                   # WishlistProvider (server-backed when authed; localStorage for guests)
@@ -228,7 +228,10 @@ URL-driven UI: filters, sort, pagination, search, and the active category all li
 ```
 register → email sent → /verify-email?uid&token → email_verified=true
                                                           │
-login (username OR email) ─► /api/auth/token/ ─► access + refresh stored
+login (username OR email) ─► /api/auth/token/ ─► access in JS memory,
+                                                   refresh as httpOnly cookie
+                                                          │
+page load (no token in memory) ─► POST /api/auth/token/refresh/ (cookie) ─► access
                                                           │
                               ┌───────────── 401 on any API call ─────────────┐
                               ▼                                                │
@@ -236,13 +239,14 @@ login (username OR email) ─► /api/auth/token/ ─► access + refresh stored
                               │                                                │
                               └── failure ──► auth.clear() + redirect to /login?next=…
                                                           │
-logout ─► POST /api/auth/logout/ (blacklists refresh) ─► clear local state
+logout ─► POST /api/auth/logout/ (blacklists refresh, clears cookie) ─► clear memory
 ```
 
 Highlights:
 - **Login accepts username OR email** — `EmailOrUsernameTokenObtainPairSerializer` detects `@` in the identifier and resolves to a username before delegating to SimpleJWT.
 - **Refresh rotation + blacklist** — `ROTATE_REFRESH_TOKENS=True`, `BLACKLIST_AFTER_ROTATION=True`. Logout blacklists the current refresh via `TokenBlacklistView`.
 - **Auto-refresh on 401** — implemented in the `request<T>` wrapper. Existing callers don't need to know.
+- **No tokens in JS-readable storage** — the refresh token is an httpOnly cookie scoped to `/api/auth/` (`accounts/cookies.py`); the access token lives only in memory (`lib/auth.ts`), so an XSS bug can't carry a session off. A page load restores the access token from the cookie (`restoreSession`, one shared request so the rotating refresh token never races itself), and pages that need the token on mount wait for `useAuth().loading`. The token endpoints read the cookie only when the request carries `X-Requested-With`, which forces a CORS preflight — another site can't fire them with the user's cookie. API clients can still send `{"refresh": …}` in the body.
 - **Verification + password reset** use Django's `default_token_generator` + `urlsafe_base64_*` for stateless, signed tokens that don't need a DB row.
 - **Google sign-in** — the frontend gets a Google ID token via Google Identity Services and POSTs it to `/api/auth/google/`; `accounts/google.py` verifies the token's signature, audience, and issuer with `google-auth`, then we get-or-link a user **by verified email** and mint our own SimpleJWT pair (so the rest of the app is auth-method-agnostic). New Google users get an unusable password. Enabled only when `GOOGLE_OAUTH_CLIENT_ID` is set — the frontend feature-detects via `/api/auth/google/config/` and hides the button otherwise.
 
@@ -310,7 +314,7 @@ Django Channels over daphne (ASGI). One consumer, one group per user — REST st
 
 ## Trade-offs
 
-- **localStorage JWT** — easy demo, but XSS-vulnerable. Production should move to httpOnly cookies + same-site protection.
+- **Access token in memory, refresh token in an httpOnly cookie** — XSS can use a live session while the page is open, but can't read either token out. The cookie must reach the API: with the storefront and API on one site (`shop.example.com` + `api.example.com`) `SameSite=Lax` works; on two unrelated hosts (two `*.run.app` URLs) it needs `SameSite=None; Secure`, which browsers that block third-party cookies refuse — so give both services custom domains on one site.
 - **Payments** — Stripe (test mode): a `payments` app wraps the SDK behind a gateway that **degrades to mock mode when `STRIPE_SECRET_KEY` is unset**, so the demo runs key-free. Live mode uses PaymentIntent + Elements, a signature-verified webhook for the authoritative paid signal, and real `stripe.Refund.create` on cancel/return, issued after commit from a `payments.Refund` outbox row (see [CONCURRENCY.md](CONCURRENCY.md#refunds)). The SDK is imported lazily so mock paths never need it. Each handled webhook event's id is stored (`payments.StripeEvent`, unique) in the same transaction as its handler, so Stripe's at-least-once redeliveries are no-ops and a failed handler is retried. A daily Celery Beat task prunes records older than 30 days, well past Stripe's three-day retry window.
 - **Notifications** — order transitions call `notifications.service.notify_order()` from `transaction.on_commit`, so an alert is only sent after the status change durably commits (never on rollback). One `notify()` fans out to three channels: an in-app `Notification` row, an email, and Web Push. Email and push are best-effort — a failure never breaks the transition. Web Push uses VAPID and **degrades to a no-op when keys are unset** (`pywebpush` imported lazily); the in-app feed + emails still work. Email and push are Celery tasks on RabbitMQ, queued after commit, so a request never waits on SMTP or a push service. Without a broker they run inline.
 - **Stock model is single-integer** — fine for a simple catalog. Real systems need reserved-vs-available, idempotent order creation keyed by client token, and a dedicated inventory service.

@@ -1,18 +1,27 @@
 "use client";
 
-const ACCESS_KEY = "shop_token";
-const REFRESH_KEY = "shop_refresh";
+// The access token lives only in this module's memory; the refresh token is an
+// httpOnly cookie the API sets (backend/accounts/cookies.py), which script —
+// including anything injected by an XSS bug — can't read. A page load starts
+// with no access token and restores it from the cookie (`restoreSession`).
+let accessToken: string | null = null;
+
+// Tokens used to live in localStorage; drop any a previous version left there.
+const LEGACY_KEYS = ["shop_token", "shop_refresh"];
+if (typeof window !== "undefined") {
+  try {
+    LEGACY_KEYS.forEach((k) => window.localStorage.removeItem(k));
+  } catch {
+    // storage blocked — nothing to clean up
+  }
+}
 
 export const auth = {
-  get: () => (typeof window === "undefined" ? null : window.localStorage.getItem(ACCESS_KEY)),
-  getRefresh: () =>
-    typeof window === "undefined" ? null : window.localStorage.getItem(REFRESH_KEY),
-  set: (access: string, refresh?: string) => {
-    window.localStorage.setItem(ACCESS_KEY, access);
-    if (refresh) window.localStorage.setItem(REFRESH_KEY, refresh);
+  get: () => accessToken,
+  set: (access: string) => {
+    accessToken = access;
   },
   clear: () => {
-    window.localStorage.removeItem(ACCESS_KEY);
-    window.localStorage.removeItem(REFRESH_KEY);
+    accessToken = null;
   },
 };

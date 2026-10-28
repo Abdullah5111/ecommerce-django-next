@@ -66,8 +66,8 @@ export default function GoogleSignInButton({ next = "/" }: { next?: string }) {
           client_id: cfg.client_id,
           callback: async (resp) => {
             try {
-              const { access, refresh: refreshToken } = await api.googleLogin(resp.credential);
-              auth.set(access, refreshToken);
+              const { access } = await api.googleLogin(resp.credential);
+              auth.set(access);
               await refresh();
               router.push(next);
             } catch {

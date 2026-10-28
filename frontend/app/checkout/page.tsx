@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart";
 import { auth } from "@/lib/auth";
+import { useAuth } from "@/lib/useAuth";
 import { formatMoney } from "@/lib/format";
 import { newIdempotencyKey } from "@/lib/idempotency";
 import { api, type Address, type AddressInput, type QuoteResult } from "@/lib/api";
@@ -26,6 +27,7 @@ export default function CheckoutPage() {
   const { items, total, clear } = useCart();
   const router = useRouter();
   const { toast } = useToast();
+  const { loading: authLoading } = useAuth();
 
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [addresses, setAddresses] = useState<Address[] | null>(null);
@@ -49,6 +51,8 @@ export default function CheckoutPage() {
   const [quoting, setQuoting] = useState(false);
 
   useEffect(() => {
+    // Wait for the session restore (page loads start with no token in memory).
+    if (authLoading) return;
     const token = auth.get();
     if (!token) {
       setAuthed(false);
@@ -67,7 +71,7 @@ export default function CheckoutPage() {
         setError(e instanceof Error ? e.message : "Failed to load addresses");
         setAddresses([]);
       });
-  }, []);
+  }, [authLoading]);
 
   const handleSaveNewAddress = async (input: AddressInput): Promise<Address | null> => {
     const token = auth.get();

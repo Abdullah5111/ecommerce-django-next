@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api, type Order, type ReturnRequest, type ReturnReason } from "@/lib/api";
 import { auth } from "@/lib/auth";
+import { useAuth } from "@/lib/useAuth";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { useToast } from "@/lib/useToast";
 import { realtime } from "@/lib/realtime";
@@ -26,6 +27,7 @@ const REASONS: { value: ReturnReason; label: string }[] = [
 export default function OrderDetailPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { loading: authLoading } = useAuth();
   const search = useSearchParams();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
@@ -58,6 +60,8 @@ export default function OrderDetailPage() {
   };
 
   useEffect(() => {
+    // Wait for the session restore (page loads start with no token in memory).
+    if (authLoading) return;
     load();
     const off = realtime.subscribe((m) => {
       // Status changes arrive as notifications carrying this order's id.
@@ -65,7 +69,7 @@ export default function OrderDetailPage() {
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, authLoading]);
 
   const cancel = async () => {
     const token = auth.get();

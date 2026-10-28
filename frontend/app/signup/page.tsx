@@ -38,8 +38,8 @@ export default function SignupPage() {
     setError(null);
     try {
       await api.register(form);
-      const { access, refresh: refreshToken } = await api.login(form.username, form.password);
-      auth.set(access, refreshToken);
+      const { access } = await api.login(form.username, form.password);
+      auth.set(access);
       await refresh();
       router.push("/");
     } catch (e) {

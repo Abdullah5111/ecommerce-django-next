@@ -144,9 +144,9 @@ Interactive, generated from the live code:
 | Method   | Path                                       | Auth | Purpose                                           |
 |----------|--------------------------------------------|------|---------------------------------------------------|
 | POST     | /api/auth/register/                        | —    | Create account; emails a verification link        |
-| POST     | /api/auth/token/                           | —    | Login (JWT); `username` accepts username OR email |
-| POST     | /api/auth/token/refresh/                   | —    | Rotate access token (refresh tokens rotate too)   |
-| POST     | /api/auth/logout/                          | —    | Blacklist refresh token                           |
+| POST     | /api/auth/token/                           | —    | Login: access token in the body, refresh token as an httpOnly cookie; `username` accepts username OR email |
+| POST     | /api/auth/token/refresh/                   | cookie | New access token from the cookie (needs `X-Requested-With`) or a body `refresh`; refresh tokens rotate |
+| POST     | /api/auth/logout/                          | cookie | Blacklist the refresh token and clear the cookie |
 | GET      | /api/auth/google/config/                   | —    | `{enabled, client_id}` — whether Google sign-in is on |
 | POST     | /api/auth/google/                          | —    | Exchange a Google ID token `{credential}` for our JWT pair |
 | GET/PUT/PATCH | /api/auth/me/                         | JWT  | Current user; PATCH updates editable profile fields |
