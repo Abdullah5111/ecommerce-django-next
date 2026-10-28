@@ -1,32 +1,74 @@
+# Build the backend image, migrate, then deploy the API service and the
+# scheduled-task jobs. Run from the repo root:
+#   gcloud builds submit --config backend/cloudbuild.yaml --substitutions=...
+# See docs/DEPLOYMENT.md for the one-time setup (secrets, Cloud Scheduler).
 steps:
-  - name: gcr.io/cloud-builders/docker
+  - id: build
+    name: gcr.io/cloud-builders/docker
     args:
       - build
       - -t
       - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/ecommerce-backend:$SHORT_SHA
       - ./backend
-  - name: gcr.io/cloud-builders/docker
+  - id: push
+    name: gcr.io/cloud-builders/docker
     args:
       - push
       - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/ecommerce-backend:$SHORT_SHA
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    entrypoint: gcloud
+
+  # Migrate before the new code serves traffic, so it never runs against an
+  # old schema. A failed migration stops the build here.
+  - id: migrate
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
     args:
-      - run
-      - deploy
-      - ecommerce-backend
-      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/ecommerce-backend:$SHORT_SHA
-      - --region=${_REGION}
-      - --platform=managed
-      - --allow-unauthenticated
-      - --add-cloudsql-instances=${_CLOUDSQL_INSTANCE}
-      - --set-env-vars=DB_ENGINE=postgres,DB_HOST=/cloudsql/${_CLOUDSQL_INSTANCE}
-      - --set-secrets=SECRET_KEY=django-secret:latest,DB_PASSWORD=db-password:latest
+      - -c
+      - |
+        set -euo pipefail
+        source /workspace/backend/deploy/common.sh
+        gcloud run jobs deploy ecommerce-migrate "$${JOB_FLAGS[@]}" \
+          --command=python --args=manage.py,migrate,--noinput
+        gcloud run jobs execute ecommerce-migrate --region="$${REGION}" --wait
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        source /workspace/backend/deploy/common.sh
+        gcloud run deploy ecommerce-backend "$${SERVICE_FLAGS[@]}"
+        # Cloud Run has no Celery Beat: each periodic task is a job that Cloud
+        # Scheduler triggers (docs/DEPLOYMENT.md, "Scheduled tasks").
+        gcloud run jobs deploy ecommerce-release-expired-orders "$${JOB_FLAGS[@]}" \
+          --command=python --args=manage.py,release_expired_orders
+        gcloud run jobs deploy ecommerce-retry-pending-refunds "$${JOB_FLAGS[@]}" \
+          --command=python --args=manage.py,retry_pending_refunds
+        gcloud run jobs deploy ecommerce-prune-stripe-events "$${JOB_FLAGS[@]}" \
+          --command=python --args=manage.py,prune_stripe_events
 
 substitutions:
   _REGION: us-central1
   _REPO: ecommerce
   _CLOUDSQL_INSTANCE: PROJECT:REGION:INSTANCE
+  # Optional. Set both to use Memorystore — required with more than one
+  # instance (shared rate limits, phone codes, WebSocket fan-out).
+  _REDIS_URL: ""
+  _VPC_CONNECTOR: ""
+  # Extra comma-separated KEY=VALUE env vars (CORS_ALLOWED_ORIGINS, ...) and
+  # ENV=secret:version pairs (STRIPE_SECRET_KEY=stripe-secret-key:latest, ...).
+  # Each deploy replaces the service's env and secrets with these.
+  _EXTRA_ENV: ""
+  _EXTRA_SECRETS: ""
 
 options:
   logging: CLOUD_LOGGING_ONLY
+  env:
+    - REGION=${_REGION}
+    - IMAGE=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/ecommerce-backend:$SHORT_SHA
+    - CLOUDSQL_INSTANCE=${_CLOUDSQL_INSTANCE}
+    - REDIS_URL=${_REDIS_URL}
+    - VPC_CONNECTOR=${_VPC_CONNECTOR}
+    - EXTRA_ENV=${_EXTRA_ENV}
+    - EXTRA_SECRETS=${_EXTRA_SECRETS}

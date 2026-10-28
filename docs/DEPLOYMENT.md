@@ -26,7 +26,8 @@ gcloud services enable \
   cloudbuild.googleapis.com \
   artifactregistry.googleapis.com \
   sqladmin.googleapis.com \
-  secretmanager.googleapis.com
+  secretmanager.googleapis.com \
+  cloudscheduler.googleapis.com
 ```
 
 ## 3. Create Artifact Registry
@@ -108,7 +109,8 @@ Memorystore instance reached over a VPC connector) and the backend uses it for t
 cache — rate limits and phone sign-in codes — and the WebSocket channel layer.
 Without it each instance keeps its own: limits are per instance, a code sent from
 one instance fails verification on another, and live updates don't cross
-instances. A single instance (`--max-instances=1`) works without it.
+instances. A single instance works without it, and the deploy pipeline caps the
+service at one (`--max-instances=1`) until `_REDIS_URL` is set (step 6).
 
 **Media bucket (required for uploads).** Unlike the options above, this one is not
 safe to skip: user uploads (profile avatars, review photos) go to local disk
@@ -130,47 +132,78 @@ Objects are written with a public-read ACL and stable, unguessable URLs.
 
 ## 6. Deploy backend
 
-The pipeline in [`backend/cloudbuild.yaml`](../backend/cloudbuild.yaml) builds the image and deploys to Cloud Run.
+[`backend/cloudbuild.yaml`](../backend/cloudbuild.yaml) builds the image, **runs
+migrations** as a Cloud Run Job (`ecommerce-migrate`, before the new code takes
+traffic; a failed migration stops the deploy), deploys the API service, and
+deploys the scheduled-task jobs below. Run it from the repo root:
 
 ```bash
+# ^##^ switches the substitution separator to ##, so the comma-separated lists
+# inside _EXTRA_ENV / _EXTRA_SECRETS survive.
 gcloud builds submit \
   --config backend/cloudbuild.yaml \
-  --substitutions=_REGION=$REGION,_REPO=$REPO,_CLOUDSQL_INSTANCE=$PROJECT_ID:$REGION:$SQL_INSTANCE
+  --substitutions="^##^_REGION=$REGION##_REPO=$REPO##_CLOUDSQL_INSTANCE=$PROJECT_ID:$REGION:$SQL_INSTANCE\
+##_EXTRA_ENV=ALLOWED_HOSTS=<backend-host>,STRIPE_PUBLISHABLE_KEY=pk_test_...\
+##_EXTRA_SECRETS=STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest"
 ```
 
-After the first deploy, run migrations:
+Every deploy **replaces** the service's env vars and secrets with what the build
+passes, so all configuration goes in `_EXTRA_ENV` (comma-separated `KEY=VALUE`)
+and `_EXTRA_SECRETS` (`ENV=secret:version`). Settings added later with
+`gcloud run services update` are dropped by the next deploy. A single value that
+contains commas (e.g. two CORS origins) needs gcloud's
+[alternate delimiter](https://cloud.google.com/sdk/gcloud/reference/topic/escaping)
+inside `--set-env-vars` too.
+
+**Redis.** Without `_REDIS_URL` the service is capped at one instance (rate
+limits, phone codes and WebSocket groups are per instance). To scale out, create
+a Memorystore instance and a Serverless VPC Access connector, then add
+`_REDIS_URL=redis://<memorystore-ip>:6379/0,_VPC_CONNECTOR=<connector-name>`.
+
+### Scheduled tasks
+
+Locally, Celery Beat runs the periodic tasks. Cloud Run has no Beat (and no
+RabbitMQ — without a broker, tasks such as email run inline in the request), so
+the build deploys each periodic task as a Cloud Run Job running its management
+command. Trigger them with Cloud Scheduler once:
 
 ```bash
-gcloud run services proxy ecommerce-backend --region $REGION &
-# in another shell, run a one-off job — or simpler, exec into a Cloud Shell container with cloud-sql-proxy + psql
+SA=$(gcloud iam service-accounts list --filter="displayName:Compute Engine default" --format='value(email)')
+for job in "release-expired-orders */5 * * * *" \
+           "retry-pending-refunds */5 * * * *" \
+           "prune-stripe-events 0 3 * * *"; do
+  set -- $job; name=$1; shift
+  gcloud scheduler jobs create http "ecommerce-$name" \
+    --location=$REGION --schedule="$*" --http-method=POST \
+    --uri="https://run.googleapis.com/v2/projects/$PROJECT_ID/locations/$REGION/jobs/ecommerce-$name:run" \
+    --oauth-service-account-email="$SA"
+done
 ```
 
-Or use a Cloud Run Job for one-off migrations (recommended for production).
+| Job | Schedule | Why |
+|-----|----------|-----|
+| `ecommerce-release-expired-orders` | every 5 min | returns stock held by unpaid orders |
+| `ecommerce-retry-pending-refunds` | every 5 min | finishes refunds whose Stripe call failed |
+| `ecommerce-prune-stripe-events` | daily | trims the webhook de-duplication table |
 
 ## 7. Deploy frontend
 
+`NEXT_PUBLIC_API_URL` is compiled into the browser bundle, so it is a **build
+argument** — setting it on the running service has no effect.
+[`frontend/cloudbuild.yaml`](../frontend/cloudbuild.yaml) passes it to the
+Docker build and also sets `INTERNAL_API_URL` for server-side rendering:
+
 ```bash
-gcloud builds submit frontend \
-  --tag $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/ecommerce-frontend
-
-gcloud run deploy ecommerce-frontend \
-  --image=$REGION-docker.pkg.dev/$PROJECT_ID/$REPO/ecommerce-frontend \
-  --region=$REGION \
-  --allow-unauthenticated \
-  --set-env-vars=NEXT_PUBLIC_API_URL=https://ecommerce-backend-XXXX.$REGION.run.app/api
+gcloud builds submit \
+  --config frontend/cloudbuild.yaml \
+  --substitutions=_REGION=$REGION,_REPO=$REPO,_API_URL=https://<backend-host>/api
 ```
-
-Replace `XXXX` with the hash from the backend service URL.
 
 ## 8. Wire CORS
 
-Update the backend env vars to allow the frontend origin:
-
-```bash
-gcloud run services update ecommerce-backend \
-  --region=$REGION \
-  --update-env-vars="CORS_ALLOWED_ORIGINS=https://ecommerce-frontend-XXXX.$REGION.run.app,ALLOWED_HOSTS=ecommerce-backend-XXXX.$REGION.run.app"
-```
+Once both URLs exist, redeploy the backend (step 6) with the frontend origin in
+`_EXTRA_ENV`: `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS` and `FRONTEND_URL`
+set to `https://<frontend-host>`, and `ALLOWED_HOSTS` to the backend host.
 
 ## Costs (rough)
 
