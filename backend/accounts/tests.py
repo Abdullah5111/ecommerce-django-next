@@ -1,6 +1,6 @@
 import io
 import tempfile
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -75,6 +75,7 @@ class ProfileTests(APITestCase):
         self.assertFalse(self.user.avatar)
 
 
+@override_settings(SMS_BACKEND="console")
 class PhoneVerificationTests(APITestCase):
     def setUp(self):
         cache.clear()
@@ -415,6 +416,7 @@ class MeStaffFlagTests(APITestCase):
         self.assertFalse(user.is_staff)
 
 
+@override_settings(SMS_BACKEND="console")
 class PhoneVerifyInputValidationTests(APITestCase):
     """Regression: non-ASCII or non-string codes used to raise TypeError in
     hmac.compare_digest and return a 500 instead of a 400."""
@@ -464,6 +466,7 @@ class TokenEndpointThrottleTests(APITestCase):
         self.assertEqual(res.status_code, 429)
 
 
+@override_settings(SMS_BACKEND="console")
 class PhoneOtpThrottleTests(APITestCase):
     """The 30s cooldown and the per-code attempt limit don't cap anything over
     time on their own — a new code every 30s meant ~10 guesses a minute,
@@ -516,3 +519,86 @@ class PhoneOtpThrottleTests(APITestCase):
             "/api/auth/phone/send-code/", {"phone": "+15557654321"}, format="json"
         )
         self.assertEqual(res.status_code, 200)
+
+
+TWILIO = dict(
+    SMS_BACKEND="twilio",
+    TWILIO_ACCOUNT_SID="AC123",
+    TWILIO_AUTH_TOKEN="secret",
+    TWILIO_FROM_NUMBER="+15550000000",
+    TWILIO_MESSAGING_SERVICE_SID="",
+)
+
+
+class SmsProviderTests(APITestCase):
+    """send-code texts through accounts.sms, and stores a code only once the
+    provider accepted the message."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            username="sms", email="sms@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def _send(self, phone="+15551234567"):
+        return self.client.post("/api/auth/phone/send-code/", {"phone": phone}, format="json")
+
+    def _stored(self):
+        return cache.get(f"phone_otp:{self.user.id}")
+
+    @override_settings(SMS_BACKEND="")
+    def test_unconfigured_provider_refuses_instead_of_pretending(self):
+        self.assertEqual(self._send().status_code, 503)
+        self.assertIsNone(self._stored())
+
+    @override_settings(SMS_BACKEND="console")
+    def test_number_must_be_e164_after_stripping_punctuation(self):
+        self.assertEqual(self._send("5551234567").status_code, 400)
+        self.assertEqual(self._send("+1 (555) 123-4567").status_code, 200)
+        self.assertEqual(self._stored()["phone"], "+15551234567")
+
+    @override_settings(**TWILIO)
+    def test_twilio_receives_the_code(self):
+        import json
+        from urllib.parse import parse_qs
+
+        response = MagicMock()
+        response.read.return_value = json.dumps({"sid": "SM1"}).encode()
+        response.__enter__.return_value = response
+        with patch("accounts.sms.urllib.request.urlopen", return_value=response) as urlopen:
+            self.assertEqual(self._send().status_code, 200)
+        request = urlopen.call_args.args[0]
+        self.assertEqual(
+            request.full_url, "https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json"
+        )
+        self.assertTrue(request.get_header("Authorization").startswith("Basic "))
+        fields = parse_qs(request.data.decode())
+        self.assertEqual(fields["To"], ["+15551234567"])
+        self.assertEqual(fields["From"], ["+15550000000"])
+        self.assertIn(self._stored()["code"], fields["Body"][0])
+
+    @override_settings(**{**TWILIO, "TWILIO_MESSAGING_SERVICE_SID": "MG9"})
+    def test_messaging_service_is_preferred_over_from_number(self):
+        from urllib.parse import parse_qs
+
+        response = MagicMock()
+        response.read.return_value = b"{}"
+        response.__enter__.return_value = response
+        with patch("accounts.sms.urllib.request.urlopen", return_value=response) as urlopen:
+            self._send()
+        fields = parse_qs(urlopen.call_args.args[0].data.decode())
+        self.assertEqual(fields["MessagingServiceSid"], ["MG9"])
+        self.assertNotIn("From", fields)
+
+    @override_settings(**TWILIO)
+    def test_provider_error_stores_nothing_so_the_user_can_retry(self):
+        from urllib.error import HTTPError
+
+        error = HTTPError(
+            "https://api.twilio.com", 400, "Bad Request", {}, io.BytesIO(b'{"code": 21211}')
+        )
+        with patch("accounts.sms.urllib.request.urlopen", side_effect=error):
+            self.assertEqual(self._send().status_code, 502)
+        self.assertIsNone(self._stored())
+        self.assertIsNone(cache.get(f"phone_otp_cooldown:{self.user.id}"))
