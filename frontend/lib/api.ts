@@ -220,6 +220,17 @@ export type PaymentIntentResult = {
   mock: boolean;
 };
 
+export type SavedCard = {
+  id: string;
+  brand: string;
+  last4: string;
+  exp_month: number;
+  exp_year: number;
+};
+
+// `enabled` is false when the backend has no Stripe keys (mock payments).
+export type SavedCards = { enabled: boolean; publishable_key: string; cards: SavedCard[] };
+
 export type NotificationKind =
   | "order_paid" | "order_shipped" | "order_delivered" | "order_cancelled" | "order_refunded";
 
@@ -546,6 +557,20 @@ export const api = {
   setDefaultAddress: (token: string, id: number) =>
     request<Address>(`/auth/addresses/${id}/set-default/`, {
       method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  listSavedCards: (token: string) =>
+    request<SavedCards>(`/payments/methods/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  createCardSetupIntent: (token: string) =>
+    request<{ client_secret: string; publishable_key: string }>(
+      `/payments/methods/setup-intent/`,
+      { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+    ),
+  removeSavedCard: (token: string, paymentMethodId: string) =>
+    request<void>(`/payments/methods/${encodeURIComponent(paymentMethodId)}/`, {
+      method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     }),
   createPaymentIntent: (token: string, orderId: number) =>

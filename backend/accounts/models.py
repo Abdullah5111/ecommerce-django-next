@@ -23,6 +23,8 @@ class User(AbstractUser):
     gender = models.CharField(max_length=20, blank=True, choices=Gender.choices)
     # JWTs issued at or before this instant are rejected (set on password reset).
     tokens_valid_after = models.DateTimeField(null=True, blank=True)
+    # Stripe Customer that saved cards attach to; created on first use.
+    stripe_customer_id = models.CharField(max_length=255, blank=True)
 
     REQUIRED_FIELDS = ["email"]
 

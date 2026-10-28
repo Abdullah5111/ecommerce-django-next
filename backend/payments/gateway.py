@@ -215,6 +215,85 @@ def refund_intent(intent_id, cents, idempotency_key) -> str:
     return refund.id
 
 
+class PaymentMethodNotFound(Exception):
+    """No such card, or it belongs to another customer."""
+
+
+def _require_live():
+    # Saved cards live in Stripe; mock mode has nowhere to keep them.
+    if not is_live():
+        raise PaymentsUnavailable("Saved cards need Stripe to be configured.")
+
+
+def get_or_create_customer(user) -> str:
+    """The user's Stripe Customer id, creating the Customer on first use.
+
+    The user row is locked so concurrent first requests can't each create one,
+    and the idempotency key covers a crash between Stripe and the save.
+    """
+    from django.contrib.auth import get_user_model
+    from django.db import transaction
+
+    _require_live()
+    with transaction.atomic():
+        locked = get_user_model().objects.select_for_update().get(pk=user.pk)
+        if locked.stripe_customer_id:
+            return locked.stripe_customer_id
+        customer = _stripe().Customer.create(
+            email=locked.email,
+            name=locked.get_full_name() or locked.username,
+            metadata={"user_id": str(locked.pk)},
+            idempotency_key=f"customer-{locked.pk}",
+        )
+        locked.stripe_customer_id = customer.id
+        locked.save(update_fields=["stripe_customer_id"])
+    user.stripe_customer_id = customer.id
+    return customer.id
+
+
+def create_setup_intent(user) -> str:
+    """Start saving a card for ``user``; returns the SetupIntent client secret."""
+    customer_id = get_or_create_customer(user)
+    intent = _stripe().SetupIntent.create(
+        customer=customer_id,
+        payment_method_types=["card"],
+        usage="off_session",
+    )
+    return intent.client_secret
+
+
+def list_cards(user) -> list[dict]:
+    """The user's saved cards, newest first. Empty if they never saved one."""
+    _require_live()
+    if not user.stripe_customer_id:
+        return []
+    methods = _stripe().PaymentMethod.list(customer=user.stripe_customer_id, type="card")
+    return [
+        {
+            "id": pm.id,
+            "brand": pm.card.brand,
+            "last4": pm.card.last4,
+            "exp_month": pm.card.exp_month,
+            "exp_year": pm.card.exp_year,
+        }
+        for pm in methods.data
+    ]
+
+
+def detach_card(user, payment_method_id) -> None:
+    """Remove a saved card — only one attached to this user's Customer."""
+    _require_live()
+    stripe = _stripe()
+    try:
+        pm = stripe.PaymentMethod.retrieve(payment_method_id)
+    except stripe.error.InvalidRequestError as exc:
+        raise PaymentMethodNotFound() from exc
+    # A card id is not a secret; never detach one from someone else's account.
+    if not user.stripe_customer_id or pm.customer != user.stripe_customer_id:
+        raise PaymentMethodNotFound()
+    stripe.PaymentMethod.detach(payment_method_id)
+
+
 def construct_event(payload: bytes, sig_header: str):
     """Verify a Stripe webhook signature and return the parsed event.
 

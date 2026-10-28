@@ -151,7 +151,7 @@ frontend/
 │   ├── account/profile/                  # profile editor: avatar, name, bio, DOB, gender, phone verify
 │   ├── account/security/                 # email/phone status + change-password entry
 │   ├── account/notifications/            # in-app notification feed + browser-push toggle
-│   ├── account/payment/                  # roadmap stub
+│   ├── account/payment/                  # saved cards (Stripe SetupIntent)
 │   ├── account/addresses/                # address book CRUD
 │   ├── wishlist/                         # saved-products grid
 │   ├── login/, signup/                   # auth forms (username/email + Google sign-in)
