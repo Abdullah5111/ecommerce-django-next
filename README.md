@@ -191,6 +191,9 @@ Product list params: `search`, `category__slug`, `category_path` (category + des
 | POST   | /api/orders/{id}/create-payment-intent/ | JWT  | Start payment → `{client_secret, publishable_key, mock}` (Stripe when keyed, mock otherwise) |
 | POST   | /api/orders/{id}/pay/             | JWT  | Confirm payment → paid (mock confirms immediately; live verifies the intent amount) |
 | POST   | /api/payments/webhook/            | Stripe sig | `payment_intent.succeeded` marks the order paid (authoritative, signature- + amount-verified); `charge.refunded` and `charge.dispute.*` mirror dashboard refunds and chargebacks onto the order |
+| GET    | /api/payments/methods/            | JWT        | Saved cards (`enabled: false` without Stripe keys) |
+| POST   | /api/payments/methods/setup-intent/ | JWT      | SetupIntent client secret to save a card (creates the Stripe Customer on first use) |
+| DELETE | /api/payments/methods/{id}/       | JWT        | Remove a saved card (only one on the caller's own Customer) |
 | POST   | /api/orders/{id}/cancel/          | owner/staff | Cancel a pending/paid order (restock + release coupon)          |
 | POST   | /api/orders/{id}/ship/            | staff | `{tracking_number, tracking_carrier}` → shipped                  |
 | POST   | /api/orders/{id}/deliver/         | staff | shipped → delivered                                               |

@@ -1,8 +1,10 @@
+from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from orders import transitions
@@ -160,3 +162,48 @@ class StripeWebhookView(APIView):
         # The dispute id in the message makes a redelivered event a no-op.
         if not order.events.filter(message=message).exists():
             transitions.log_event(order, None, message)
+
+
+class PaymentMethodsView(APIView):
+    """The signed-in user's saved cards. ``enabled`` is false without Stripe
+    keys (mock mode keeps no cards), so the page can say so instead of erroring."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not gateway.is_live():
+            return Response({"enabled": False, "publishable_key": "", "cards": []})
+        return Response({
+            "enabled": True,
+            "publishable_key": settings.STRIPE_PUBLISHABLE_KEY,
+            "cards": gateway.list_cards(request.user),
+        })
+
+
+class SetupIntentView(APIView):
+    """Start saving a card: a SetupIntent the browser confirms with Stripe.js."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            client_secret = gateway.create_setup_intent(request.user)
+        except gateway.PaymentsUnavailable as exc:
+            return Response({"detail": str(exc)}, status=503)
+        return Response({
+            "client_secret": client_secret,
+            "publishable_key": settings.STRIPE_PUBLISHABLE_KEY,
+        })
+
+
+class PaymentMethodDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, payment_method_id):
+        try:
+            gateway.detach_card(request.user, payment_method_id)
+        except gateway.PaymentsUnavailable as exc:
+            return Response({"detail": str(exc)}, status=503)
+        except gateway.PaymentMethodNotFound:
+            return Response({"detail": "Card not found."}, status=404)
+        return Response(status=204)

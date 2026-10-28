@@ -800,3 +800,122 @@ class PaymentsCommandTests(APITestCase):
         out = StringIO()
         call_command("retry_pending_refunds", stdout=out)
         self.assertIn("Re-queued 0", out.getvalue())
+
+
+def _card(pm_id, customer, last4="4242"):
+    return types.SimpleNamespace(
+        id=pm_id, customer=customer,
+        card=types.SimpleNamespace(brand="visa", last4=last4, exp_month=12, exp_year=2030),
+    )
+
+
+class _StripeInvalidRequest(Exception):
+    pass
+
+
+def _cards_stripe(cards=(), retrieve=None):
+    s = MagicMock()
+    s.error.InvalidRequestError = _StripeInvalidRequest
+    s.Customer.create.return_value = types.SimpleNamespace(id="cus_new")
+    s.SetupIntent.create.return_value = types.SimpleNamespace(client_secret="seti_secret")
+    s.PaymentMethod.list.return_value = types.SimpleNamespace(data=list(cards))
+    if retrieve is not None:
+        s.PaymentMethod.retrieve.side_effect = retrieve
+    return s
+
+
+@override_settings(**LIVE)
+class SavedCardTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="cards", email="cards@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def _has_customer(self):
+        self.user.stripe_customer_id = "cus_1"
+        self.user.save(update_fields=["stripe_customer_id"])
+
+    def test_requires_sign_in(self):
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get("/api/payments/methods/").status_code, 401)
+
+    def test_setup_intent_creates_the_customer_once(self):
+        fake = _cards_stripe()
+        with patch.object(gateway, "_stripe", return_value=fake):
+            first = self.client.post("/api/payments/methods/setup-intent/")
+            self.client.post("/api/payments/methods/setup-intent/")
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.data["client_secret"], "seti_secret")
+        self.assertEqual(first.data["publishable_key"], "pk_test_x")
+        fake.Customer.create.assert_called_once()
+        self.assertEqual(
+            fake.Customer.create.call_args.kwargs["idempotency_key"], f"customer-{self.user.pk}"
+        )
+        fake.SetupIntent.create.assert_called_with(
+            customer="cus_new", payment_method_types=["card"], usage="off_session"
+        )
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.stripe_customer_id, "cus_new")
+
+    def test_lists_cards_without_creating_a_customer(self):
+        fake = _cards_stripe()
+        with patch.object(gateway, "_stripe", return_value=fake):
+            res = self.client.get("/api/payments/methods/")
+        self.assertEqual(res.data, {"enabled": True, "publishable_key": "pk_test_x", "cards": []})
+        fake.Customer.create.assert_not_called()
+
+    def test_lists_saved_cards(self):
+        self._has_customer()
+        fake = _cards_stripe(cards=[_card("pm_1", "cus_1")])
+        with patch.object(gateway, "_stripe", return_value=fake):
+            res = self.client.get("/api/payments/methods/")
+        self.assertEqual(res.data["cards"], [{
+            "id": "pm_1", "brand": "visa", "last4": "4242", "exp_month": 12, "exp_year": 2030,
+        }])
+        fake.PaymentMethod.list.assert_called_once_with(customer="cus_1", type="card")
+
+    def test_removes_own_card(self):
+        self._has_customer()
+        fake = _cards_stripe(retrieve=lambda pm_id: _card(pm_id, "cus_1"))
+        with patch.object(gateway, "_stripe", return_value=fake):
+            res = self.client.delete("/api/payments/methods/pm_1/")
+        self.assertEqual(res.status_code, 204)
+        fake.PaymentMethod.detach.assert_called_once_with("pm_1")
+
+    def test_cannot_remove_another_customers_card(self):
+        self._has_customer()
+        fake = _cards_stripe(retrieve=lambda pm_id: _card(pm_id, "cus_someone_else"))
+        with patch.object(gateway, "_stripe", return_value=fake):
+            res = self.client.delete("/api/payments/methods/pm_theirs/")
+        self.assertEqual(res.status_code, 404)
+        fake.PaymentMethod.detach.assert_not_called()
+
+    def test_unknown_card_is_404(self):
+        self._has_customer()
+
+        def missing(pm_id):
+            raise _StripeInvalidRequest("No such PaymentMethod")
+
+        fake = _cards_stripe(retrieve=missing)
+        with patch.object(gateway, "_stripe", return_value=fake):
+            res = self.client.delete("/api/payments/methods/pm_nope/")
+        self.assertEqual(res.status_code, 404)
+
+
+@override_settings(STRIPE_SECRET_KEY="", PAYMENTS_MOCK=True)
+class SavedCardsWithoutStripeTests(APITestCase):
+    def setUp(self):
+        user = User.objects.create_user(
+            username="nocards", email="nocards@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(user)
+
+    def test_page_reports_disabled(self):
+        res = self.client.get("/api/payments/methods/")
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data["enabled"])
+
+    def test_saving_a_card_is_unavailable(self):
+        self.assertEqual(self.client.post("/api/payments/methods/setup-intent/").status_code, 503)
+        self.assertEqual(self.client.delete("/api/payments/methods/pm_1/").status_code, 503)
