@@ -1,4 +1,7 @@
-from rest_framework import mixins, permissions, viewsets
+import hmac
+
+from django.db import transaction
+from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -55,11 +58,29 @@ class PushSubscribeView(APIView):
         serializer = PushSubscriptionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        # Re-subscribing from the same browser updates ownership/keys in place.
-        PushSubscription.objects.update_or_create(
-            endpoint=data["endpoint"],
-            defaults={"user": request.user, "p256dh": data["p256dh"], "auth": data["auth"]},
-        )
+        with transaction.atomic():
+            existing = (
+                PushSubscription.objects.select_for_update()
+                .filter(endpoint=data["endpoint"])
+                .first()
+            )
+            # Moving an endpoint to another account needs the subscription's
+            # auth secret, which only the browser that created it holds — the
+            # same browser signing into a new account has it; someone who
+            # merely learned the endpoint URL doesn't.
+            if (
+                existing is not None
+                and existing.user_id != request.user.id
+                and not hmac.compare_digest(existing.auth, data["auth"])
+            ):
+                return Response(
+                    {"detail": "This push endpoint is registered to another account."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            PushSubscription.objects.update_or_create(
+                endpoint=data["endpoint"],
+                defaults={"user": request.user, "p256dh": data["p256dh"], "auth": data["auth"]},
+            )
         return Response({"subscribed": True}, status=201)
 
     def delete(self, request):
