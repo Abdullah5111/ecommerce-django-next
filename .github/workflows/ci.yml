@@ -8,7 +8,7 @@ on:
 jobs:
   backend:
     name: Backend (Django on Postgres)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     # Postgres rather than SQLite: the product search branches on
     # connection.vendor, so only this path exercises the full-text code that
@@ -39,9 +39,9 @@ jobs:
       DB_PORT: "5432"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           # Django 5.0 does not support 3.13+.
           python-version: "3.12"
@@ -68,14 +68,14 @@ jobs:
 
   frontend:
     name: Frontend (Next.js)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
