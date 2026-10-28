@@ -84,6 +84,18 @@ echo -n "<vapid-private-key>" | gcloud secrets create vapid-private-key --data-f
 # public key + admin email are not sensitive; pass them as plain env vars
 ```
 
+**SMS for phone verification (optional).** Without a provider, the profile
+page's "verify phone" step returns 503; nothing else depends on it. To send real
+codes with Twilio, set `SMS_BACKEND=twilio` and expose `TWILIO_ACCOUNT_SID`,
+`TWILIO_AUTH_TOKEN` (store it as a secret) and either `TWILIO_FROM_NUMBER` or
+`TWILIO_MESSAGING_SERVICE_SID`:
+
+```bash
+echo -n "<twilio-auth-token>" | gcloud secrets create twilio-auth-token --data-file=-
+```
+
+Never set `SMS_BACKEND=console` in production — it writes codes to the logs.
+
 **Google sign-in (optional).** Leave unset and the Google button hides. To enable
 it, create an OAuth 2.0 Client ID (Web application) in the Google Cloud console,
 add the deployed frontend origin to *Authorized JavaScript origins*, and pass the

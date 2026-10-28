@@ -22,6 +22,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView, TokenRefreshView
 
+from . import sms
 from .models import Address
 from .serializers import (
     AddressSerializer,
@@ -295,6 +296,7 @@ class ResetPasswordView(APIView):
 OTP_TTL = 600  # code is valid for 10 minutes
 OTP_COOLDOWN = 30  # seconds a user must wait between sends
 OTP_MAX_ATTEMPTS = 5  # wrong guesses before the code is burned
+E164 = re.compile(r"\+[1-9]\d{6,14}")
 
 
 def _otp_key(user_id):
@@ -306,9 +308,8 @@ def _otp_cooldown_key(user_id):
 
 
 class PhoneSendCodeView(APIView):
-    """Generate a one-time code and 'send' it.
-    In dev the code is printed to the console (swap for a real SMS provider).
-    """
+    """Generate a one-time code and text it via ``accounts.sms`` (Twilio in
+    production, the console in dev)."""
 
     permission_classes = [permissions.IsAuthenticated]
     # The cooldown only spaces sends out; this caps them, since each send is a
@@ -317,11 +318,23 @@ class PhoneSendCodeView(APIView):
     throttle_scope = "auth-phone-send"
 
     def post(self, request):
-        phone = (request.data.get("phone") or "").strip()
+        phone = re.sub(r"[\s\-().]", "", str(request.data.get("phone") or ""))
         if not phone:
             return Response(
                 {"detail": "Phone number is required."},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+        # SMS providers take E.164 only; rejecting junk here also keeps paid
+        # sends from being spent on numbers that can't receive them.
+        if not E164.fullmatch(phone):
+            return Response(
+                {"detail": "Enter the number in international format, e.g. +15551234567."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not sms.is_configured():
+            return Response(
+                {"detail": "Phone verification is not available right now."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         user = request.user
         if cache.get(_otp_cooldown_key(user.id)):
@@ -330,15 +343,19 @@ class PhoneSendCodeView(APIView):
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
         code = f"{secrets.randbelow(1_000_000):06d}"
+        try:
+            sms.send_sms(phone, f"Your verification code is {code}. It expires in 10 minutes.")
+        except (sms.SmsUnavailable, sms.SmsSendError):
+            # Nothing stored, so the user can retry straight away.
+            return Response(
+                {"detail": "We couldn't send the code. Check the number and try again."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         cache.set(
             _otp_key(user.id), {"code": code, "phone": phone, "attempts": 0}, OTP_TTL
         )
         cache.set(_otp_cooldown_key(user.id), True, OTP_COOLDOWN)
-        # TODO: replace with a real SMS provider. Never log the code in production.
-        if settings.DEBUG:
-            print(f"[DEV] SMS to {phone}: your verification code is {code}")
-        else:
-            logger.info("Phone verification code issued for user %s", user.id)
+        logger.info("Phone verification code sent for user %s", user.id)
         return Response({"detail": "Verification code sent."})
 
 

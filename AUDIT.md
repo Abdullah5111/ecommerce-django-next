@@ -82,4 +82,4 @@ instance.
 
 Live deployment · real flash-sale backend · product Q&A · referral codes ·
 store credit / BNPL · live carrier tracking · broader frontend tests
-(component/e2e) · real SMS provider for phone codes.
+(component/e2e).

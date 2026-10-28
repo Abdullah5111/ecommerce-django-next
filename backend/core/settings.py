@@ -310,6 +310,14 @@ STRIPE_CURRENCY = config("STRIPE_CURRENCY", default="usd")
 # must refuse payment, not give goods away.
 PAYMENTS_MOCK = config("PAYMENTS_MOCK", default=DEBUG, cast=bool)
 
+# Phone verification SMS (see accounts/sms.py). "console" prints codes — dev
+# only; unset outside DEBUG, so send-code returns 503 until a provider is set.
+SMS_BACKEND = config("SMS_BACKEND", default="console" if DEBUG else "")
+TWILIO_ACCOUNT_SID = config("TWILIO_ACCOUNT_SID", default="")
+TWILIO_AUTH_TOKEN = config("TWILIO_AUTH_TOKEN", default="")
+TWILIO_FROM_NUMBER = config("TWILIO_FROM_NUMBER", default="")
+TWILIO_MESSAGING_SERVICE_SID = config("TWILIO_MESSAGING_SERVICE_SID", default="")
+
 # Web Push (VAPID). Leave the keys blank to disable browser push — the in-app
 # notification center and emails still work; the subscribe UI is just hidden.
 # Generate a keypair with: python -m py_vapid --gen  (or the `vapid` CLI).
