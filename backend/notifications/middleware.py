@@ -15,14 +15,18 @@ from django.contrib.auth.models import AnonymousUser
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
+from accounts.authentication import is_revoked
+
 
 @database_sync_to_async
-def _load_user(user_id):
+def _load_user(token):
     try:
-        user = get_user_model().objects.get(pk=user_id)
-    except (get_user_model().DoesNotExist, ValueError, TypeError):
+        user = get_user_model().objects.get(pk=token["user_id"])
+    except (get_user_model().DoesNotExist, KeyError, ValueError, TypeError):
         return AnonymousUser()
-    return user if user.is_active else AnonymousUser()
+    if not user.is_active or is_revoked(user, token):
+        return AnonymousUser()
+    return user
 
 
 class JWTAuthMiddleware(BaseMiddleware):
@@ -31,10 +35,10 @@ class JWTAuthMiddleware(BaseMiddleware):
         token = params.get("token", [None])[0]
         if token:
             try:
-                user_id = AccessToken(token)["user_id"]
+                access = AccessToken(token)
             except TokenError:
-                user_id = None
-            scope["user"] = await _load_user(user_id) if user_id else AnonymousUser()
+                access = None
+            scope["user"] = await _load_user(access) if access else AnonymousUser()
         else:
             scope["user"] = AnonymousUser()
         return await super().__call__(scope, receive, send)

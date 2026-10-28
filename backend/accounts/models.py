@@ -21,6 +21,8 @@ class User(AbstractUser):
     bio = models.CharField(max_length=280, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=20, blank=True, choices=Gender.choices)
+    # JWTs issued at or before this instant are rejected (set on password reset).
+    tokens_valid_after = models.DateTimeField(null=True, blank=True)
 
     REQUIRED_FIELDS = ["email"]
 

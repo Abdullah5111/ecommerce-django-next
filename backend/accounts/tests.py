@@ -354,6 +354,48 @@ class PasswordResetRevokesSessionsTests(APITestCase):
         refreshed = self.client.post("/api/auth/token/refresh/", {"refresh": refresh})
         self.assertEqual(refreshed.status_code, 401)
 
+    def _reset(self):
+        uid, token = self._reset_credentials()
+        res = self.client.post(
+            "/api/auth/reset-password/",
+            {"uid": uid, "token": token, "new_password": "new-pw-abc-99"},
+        )
+        self.assertEqual(res.status_code, 200)
+
+    def test_reset_revokes_existing_access_tokens(self):
+        login = self.client.post(
+            "/api/auth/token/", {"username": "carol", "password": "old-pw-12345"}
+        )
+        auth = {"HTTP_AUTHORIZATION": f"Bearer {login.data['access']}"}
+        self.assertEqual(self.client.get("/api/auth/me/", **auth).status_code, 200)
+
+        self._reset()
+
+        self.assertEqual(self.client.get("/api/auth/me/", **auth).status_code, 401)
+
+    def test_signing_in_after_the_reset_works(self):
+        from datetime import timedelta
+
+        self._reset()
+        # Step past the reset's second (iat has one-second resolution).
+        self.user.refresh_from_db()
+        User.objects.filter(pk=self.user.pk).update(
+            tokens_valid_after=self.user.tokens_valid_after - timedelta(seconds=5)
+        )
+        login = self.client.post(
+            "/api/auth/token/", {"username": "carol", "password": "new-pw-abc-99"}
+        )
+        self.assertEqual(login.status_code, 200)
+        auth = {"HTTP_AUTHORIZATION": f"Bearer {login.data['access']}"}
+        self.assertEqual(self.client.get("/api/auth/me/", **auth).status_code, 200)
+
+    def test_users_who_never_reset_are_unaffected(self):
+        login = self.client.post(
+            "/api/auth/token/", {"username": "carol", "password": "old-pw-12345"}
+        )
+        auth = {"HTTP_AUTHORIZATION": f"Bearer {login.data['access']}"}
+        self.assertEqual(self.client.get("/api/auth/me/", **auth).status_code, 200)
+
 
 class MeStaffFlagTests(APITestCase):
     """is_staff is exposed for the staff-inbox UI — and must be read-only,
