@@ -56,8 +56,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const syncedFor = useRef<number | "guest" | null>(null);
 
   // Persist to localStorage only while a guest; logged-in carts live on the server.
+  // Wait until the guest cart has been read back: this effect runs before the
+  // loader on mount, and writing the initial [] would wipe the saved cart.
   useEffect(() => {
-    if (!user) window.localStorage.setItem(KEY, JSON.stringify(items));
+    if (!user && syncedFor.current === "guest") {
+      window.localStorage.setItem(KEY, JSON.stringify(items));
+    }
   }, [items, user]);
 
   // Load on auth change; on the guest→login transition, merge the local cart into the
