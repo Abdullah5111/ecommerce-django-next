@@ -46,6 +46,7 @@ meaningful functional or a11y defect · **Low** minor.
 | R-2 | Medium | Throttles / OTP | Throttles and phone OTPs lived in per-process `LocMemCache`: with several workers, limits were per process and an OTP could be checked by a process that never stored it | The cache is Redis whenever `REDIS_URL` is set (compose sets it); LocMem only as the dev/test fallback | none: config only, CI runs the LocMem path |
 | R-3 | Medium | Auth / phone OTP | Phone send-code and verify were unthrottled. A new code every 30s, with 5 guesses each, allowed ~10 guesses a minute with no ceiling, and each send would be a paid SMS to any number | Per-user throttles: `auth-phone-send` 5/hour, `auth-phone-verify` 10/hour | `accounts/tests.py` PhoneOtpThrottleTests |
 | R-4 | Medium | Auth / sessions | A password reset blacklisted refresh tokens, but access tokens already issued kept working for up to 2h, over HTTP and WebSocket | `User.tokens_valid_after` is set on reset; `RevocableJWTAuthentication` (DRF default) and the WebSocket middleware refuse tokens issued at or before it | `accounts/tests.py` PasswordResetRevokesSessionsTests, `chat/tests.py` ChatSocketTests |
+| R-5 | Low | Push | Anyone who learned another user's push endpoint URL could re-register it to their own account, cutting the owner off from their push notifications | Moving an endpoint to another account requires the subscription's `auth` secret (only the subscribing browser has it); otherwise 409 | `notifications/tests.py` endpoint re-binding tests |
 
 ## Verified correct
 
@@ -57,7 +58,6 @@ meaningful functional or a11y defect · **Low** minor.
 
 ## Unverified risks
 
-- **Push subscription re-binding**: whoever knows a subscription's endpoint URL can re-register it; the URL carries an unguessable token.
 - **Stripe call inside a DB transaction** (cancel/refund): idempotency (P-4) prevents double refunds, but a refund that succeeds before a rollback is still recorded nowhere until the retry.
 
 ## Verification

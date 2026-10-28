@@ -260,6 +260,40 @@ class PushApiTests(APITestCase):
         sub = PushSubscription.objects.get()
         self.assertEqual(sub.p256dh, "new")
 
+    def _other_users_subscription(self):
+        other = User.objects.create_user(
+            username="victim", email="victim@example.com", password="pw-123456"
+        )
+        return PushSubscription.objects.create(
+            user=other, endpoint="https://fcm.googleapis.com/fcm/send/xyz",
+            p256dh="theirs", auth="their-secret",
+        )
+
+    def test_endpoint_alone_cannot_rebind_another_users_subscription(self):
+        sub = self._other_users_subscription()
+        payload = {
+            "endpoint": sub.endpoint,
+            "keys": {"p256dh": "attacker", "auth": "guessed"},
+        }
+        res = self.client.post("/api/push/subscribe/", payload, format="json")
+        self.assertEqual(res.status_code, 409)
+        sub.refresh_from_db()
+        self.assertEqual(sub.user.username, "victim")
+        self.assertEqual(sub.p256dh, "theirs")
+
+    def test_same_browser_can_move_subscription_to_new_account(self):
+        # Signing into another account on the same browser re-sends the same
+        # subscription, auth secret included.
+        sub = self._other_users_subscription()
+        payload = {
+            "endpoint": sub.endpoint,
+            "keys": {"p256dh": "theirs", "auth": "their-secret"},
+        }
+        res = self.client.post("/api/push/subscribe/", payload, format="json")
+        self.assertEqual(res.status_code, 201)
+        sub.refresh_from_db()
+        self.assertEqual(sub.user, self.user)
+
     def test_unsubscribe_removes_subscription(self):
         PushSubscription.objects.create(
             user=self.user, endpoint="https://fcm.googleapis.com/fcm/send/xyz", p256dh="k", auth="a"
