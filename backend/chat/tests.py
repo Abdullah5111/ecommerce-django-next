@@ -191,6 +191,17 @@ class ChatSocketTests(TransactionTestCase):
         self.assertFalse(connected)
         self.assertEqual(code, 4001)
 
+    async def test_token_revoked_by_password_reset_is_rejected(self):
+        from django.utils import timezone
+
+        comm = self._comm(self.buyer)  # token minted before the reset
+        await sync_to_async(
+            User.objects.filter(pk=self.buyer.pk).update
+        )(tokens_valid_after=timezone.now())
+        connected, code = await comm.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4001)
+
     async def test_buyer_receives_staff_reply_live(self):
         thread = await self._thread(self.buyer)
         comm = self._comm(self.buyer)

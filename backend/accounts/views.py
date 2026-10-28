@@ -10,6 +10,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
+from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import generics, permissions, status, viewsets
@@ -275,11 +276,12 @@ class ResetPasswordView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         user.set_password(new_password)
-        user.save()
         # A reset is often triggered because the account is compromised, so kill
-        # every existing session: blacklist all outstanding refresh tokens.
-        # ponytail: already-issued access tokens still work until they expire
-        # (2h) — that's the JWT tradeoff; revoking refresh tokens stops renewal.
+        # every existing session: access tokens issued so far stop working
+        # (RevocableJWTAuthentication), and outstanding refresh tokens are
+        # blacklisted so none can mint a new one.
+        user.tokens_valid_after = timezone.now()
+        user.save()
         from rest_framework_simplejwt.token_blacklist.models import (
             BlacklistedToken,
             OutstandingToken,
