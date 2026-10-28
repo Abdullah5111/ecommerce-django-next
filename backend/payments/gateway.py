@@ -160,6 +160,38 @@ def create_refund(order, amount, *, idempotency_key) -> str:
     return refund.id
 
 
+def queue_refund(order, amount, *, idempotency_key):
+    """Record a refund to issue once the caller's transaction commits.
+
+    Use this from inside a transaction instead of ``create_refund``: Stripe is
+    called by ``payments.tasks.issue_refund`` after commit, so a rollback can't
+    leave a refund that went out but was never recorded. Returns the pending
+    ``Refund``, or None for a non-positive amount.
+    """
+    from django.db import transaction
+
+    from .models import Refund
+
+    if to_cents(amount) <= 0:
+        return None
+    refund = Refund.objects.create(
+        order=order, amount=amount, idempotency_key=idempotency_key
+    )
+    transaction.on_commit(lambda: _enqueue_refund(refund.pk))
+    return refund
+
+
+def _enqueue_refund(refund_id):
+    from .tasks import issue_refund
+
+    try:
+        issue_refund.delay(refund_id)
+    except Exception:
+        # Broker down: leave it to retry_pending_refunds rather than calling
+        # Stripe inline from the request that just committed.
+        logger.exception("Could not queue refund %s; the retry sweep will pick it up", refund_id)
+
+
 def cancel_intent(intent_id) -> None:
     """Best-effort: cancel an open PaymentIntent so it can no longer be paid.
 

@@ -195,6 +195,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "orders.tasks.release_expired_orders",
         "schedule": 300.0,  # every 5 minutes
     },
+    "retry-pending-refunds": {
+        "task": "payments.tasks.retry_pending_refunds",
+        "schedule": 300.0,  # every 5 minutes
+    },
     "prune-stripe-events": {
         "task": "payments.tasks.prune_stripe_events",
         "schedule": 86400.0,  # daily

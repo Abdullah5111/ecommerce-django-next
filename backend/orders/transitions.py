@@ -116,20 +116,16 @@ def cancel(order, actor=None):
             from payments import gateway
             transaction.on_commit(lambda: gateway.cancel_intent(intent_id))
     update_fields = ["status", "cancelled_at", "updated_at"]
-    refund_id = ""
     if was_paid:
         from payments import gateway
-        refund_id = gateway.create_refund(
-            order, order.total, idempotency_key=f"cancel-{order.pk}"
-        )
+        # Issued to Stripe after commit (payments.tasks.issue_refund).
+        gateway.queue_refund(order, order.total, idempotency_key=f"cancel-{order.pk}")
         order.refunded_total = order.total
         update_fields.append("refunded_total")
     order.status = Order.Status.CANCELLED
     order.cancelled_at = timezone.now()
     order.save(update_fields=update_fields)
-    message = "Cancelled and refunded" if was_paid else "Cancelled"
-    if refund_id:
-        message += f" ({refund_id})"
+    message = f"Cancelled; refund of ${order.total} queued" if was_paid else "Cancelled"
     log_event(order, actor, message, Order.Status.CANCELLED)
     _notify(order, "cancelled")
     return order
