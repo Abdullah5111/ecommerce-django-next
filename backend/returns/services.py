@@ -113,7 +113,8 @@ def refund(ret, actor=None):
     amount = max_refundable if completes else min(refund_for(ret), max_refundable)
 
     from payments import gateway
-    refund_id = gateway.create_refund(order, amount, idempotency_key=f"return-{ret.pk}")
+    # Issued to Stripe after commit (payments.tasks.issue_refund).
+    gateway.queue_refund(order, amount, idempotency_key=f"return-{ret.pk}")
 
     ret.refund_amount = amount
     ret.status = Return.Status.REFUNDED
@@ -125,8 +126,7 @@ def refund(ret, actor=None):
         Order.Status.REFUNDED if completes else Order.Status.PARTIALLY_REFUNDED
     )
     order.save(update_fields=["refunded_total", "status", "updated_at"])
-    suffix = f" ({refund_id})" if refund_id else ""
-    log_event(order, actor, f"Return #{ret.id} refunded ${amount}{suffix}", order.status)
+    log_event(order, actor, f"Return #{ret.id} refunded ${amount}", order.status)
 
     from notifications.models import Notification
     from notifications.service import notify_order

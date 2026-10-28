@@ -47,6 +47,7 @@ meaningful functional or a11y defect · **Low** minor.
 | R-3 | Medium | Auth / phone OTP | Phone send-code and verify were unthrottled. A new code every 30s, with 5 guesses each, allowed ~10 guesses a minute with no ceiling, and each send would be a paid SMS to any number | Per-user throttles: `auth-phone-send` 5/hour, `auth-phone-verify` 10/hour | `accounts/tests.py` PhoneOtpThrottleTests |
 | R-4 | Medium | Auth / sessions | A password reset blacklisted refresh tokens, but access tokens already issued kept working for up to 2h, over HTTP and WebSocket | `User.tokens_valid_after` is set on reset; `RevocableJWTAuthentication` (DRF default) and the WebSocket middleware refuse tokens issued at or before it | `accounts/tests.py` PasswordResetRevokesSessionsTests, `chat/tests.py` ChatSocketTests |
 | R-5 | Low | Push | Anyone who learned another user's push endpoint URL could re-register it to their own account, cutting the owner off from their push notifications | Moving an endpoint to another account requires the subscription's `auth` secret (only the subscribing browser has it); otherwise 409 | `notifications/tests.py` endpoint re-binding tests |
+| R-6 | Medium | Refunds | Cancel and return refunds called Stripe inside the DB transaction: a rollback after Stripe refunded left money returned with no record of it until a retry | Outbox: a pending `payments.Refund` row is written in the transaction and sent to Stripe by a Celery task after commit (row lock + idempotency key), with a Beat sweep for retries and a `failed` state after 5 attempts | `payments/tests.py` RefundOutboxTests |
 
 ## Verified correct
 
@@ -58,7 +59,7 @@ meaningful functional or a11y defect · **Low** minor.
 
 ## Unverified risks
 
-- **Stripe call inside a DB transaction** (cancel/refund): idempotency (P-4) prevents double refunds, but a refund that succeeds before a rollback is still recorded nowhere until the retry.
+- **Permanently failed refunds**: `refunded_total` and the order/return status are set when a refund is queued. If Stripe rejects it 5 times the `payments.Refund` row is `failed` and the order timeline flags it, but the totals still count it as refunded until staff resolve it by hand.
 
 ## Verification
 

@@ -428,10 +428,126 @@ class RefundIdempotencyTests(APITestCase):
             status=Order.Status.PAID, paid_at=timezone.now(), payment_intent_id="pi_live_1",
         )
         fake = _fake_stripe()
-        with patch.object(gateway, "_stripe", return_value=fake):
+        with patch.object(gateway, "_stripe", return_value=fake), \
+                self.captureOnCommitCallbacks(execute=True):
             transitions.cancel(order)
         fake.Refund.create.assert_called_once_with(
             payment_intent="pi_live_1", amount=8000, idempotency_key=f"cancel-{order.pk}"
+        )
+
+
+@override_settings(**LIVE)
+class RefundOutboxTests(APITestCase):
+    """Refunds are recorded in the cancel/return transaction and sent to Stripe
+    only after it commits — never the other way round."""
+
+    def setUp(self):
+        from django.utils import timezone
+
+        user = User.objects.create_user(
+            username="outbox", email="outbox@example.com", password="pw-123456"
+        )
+        self.order = Order.objects.create(
+            user=user, shipping_address="123 Test St", total=Decimal("80.00"),
+            status=Order.Status.PAID, paid_at=timezone.now(), payment_intent_id="pi_live_1",
+        )
+
+    def test_no_stripe_call_until_commit(self):
+        from orders import transitions
+        from payments.models import Refund
+
+        fake = _fake_stripe()
+        with patch.object(gateway, "_stripe", return_value=fake), \
+                self.captureOnCommitCallbacks(execute=False) as callbacks:
+            transitions.cancel(self.order)
+            fake.Refund.create.assert_not_called()  # still inside the transaction
+        refund = Refund.objects.get()
+        self.assertEqual(refund.status, Refund.Status.PENDING)
+        self.assertEqual(refund.amount, Decimal("80.00"))
+        with patch.object(gateway, "_stripe", return_value=fake):
+            for cb in callbacks:
+                cb()
+        fake.Refund.create.assert_called_once()
+        refund.refresh_from_db()
+        self.assertEqual(refund.status, Refund.Status.SUCCEEDED)
+        self.assertEqual(refund.stripe_refund_id, "re_live_1")
+        self.assertTrue(self.order.events.filter(message__contains="re_live_1").exists())
+
+    def test_rolled_back_cancel_leaves_no_refund(self):
+        from django.db import transaction
+
+        from orders import transitions
+        from payments.models import Refund
+
+        fake = _fake_stripe()
+        with patch.object(gateway, "_stripe", return_value=fake):
+            try:
+                with transaction.atomic():
+                    transitions.cancel(self.order)
+                    raise RuntimeError("something later in the request failed")
+            except RuntimeError:
+                pass
+        fake.Refund.create.assert_not_called()
+        self.assertFalse(Refund.objects.exists())
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.PAID)
+
+    def _pending(self, **kwargs):
+        from payments.models import Refund
+
+        return Refund.objects.create(
+            order=self.order, amount=Decimal("80.00"), idempotency_key="cancel-x", **kwargs
+        )
+
+    def test_failed_call_stays_pending_then_fails_after_max_attempts(self):
+        from payments.models import Refund
+        from payments.tasks import REFUND_MAX_ATTEMPTS, issue_refund
+
+        refund = self._pending()
+        failing = _fake_stripe()
+        failing.Refund.create.side_effect = RuntimeError("Stripe is down")
+        with patch.object(gateway, "_stripe", return_value=failing):
+            issue_refund(refund.pk)
+            refund.refresh_from_db()
+            self.assertEqual(refund.status, Refund.Status.PENDING)
+            self.assertEqual(refund.attempts, 1)
+            self.assertEqual(refund.last_error, "Stripe is down")
+            for _ in range(REFUND_MAX_ATTEMPTS - 1):
+                issue_refund(refund.pk)
+        refund.refresh_from_db()
+        self.assertEqual(refund.status, Refund.Status.FAILED)
+        self.assertTrue(
+            self.order.events.filter(message__contains="needs staff attention").exists()
+        )
+
+    def test_issued_refund_is_not_sent_again(self):
+        from payments.models import Refund
+        from payments.tasks import issue_refund
+
+        refund = self._pending(status=Refund.Status.SUCCEEDED, stripe_refund_id="re_done")
+        fake = _fake_stripe()
+        with patch.object(gateway, "_stripe", return_value=fake):
+            issue_refund(refund.pk)
+        fake.Refund.create.assert_not_called()
+
+    def test_sweep_requeues_only_stale_pending_refunds(self):
+        from django.utils import timezone
+
+        from payments.models import Refund
+        from payments.tasks import REFUND_STALE_AFTER, retry_pending_refunds
+
+        stale = self._pending()
+        Refund.objects.filter(pk=stale.pk).update(
+            updated_at=timezone.now() - REFUND_STALE_AFTER * 2
+        )
+        Refund.objects.create(  # just queued — its own task is still on the way
+            order=self.order, amount=Decimal("5.00"), idempotency_key="return-1"
+        )
+        fake = _fake_stripe()
+        with patch.object(gateway, "_stripe", return_value=fake):
+            self.assertEqual(retry_pending_refunds(), 1)
+        fake.Refund.create.assert_called_once_with(
+            payment_intent="pi_live_1", amount=8000, idempotency_key="cancel-x"
         )
 
 

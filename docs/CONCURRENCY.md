@@ -79,6 +79,17 @@ serialize on the order row; the second recomputes `refunded_total` fresh under
 the lock. The return that completes the order pays the exact remaining amount, so
 per-return rounding can't strand a cent.
 
+Neither a return refund nor a paid cancel calls Stripe inside its transaction.
+Each writes a pending `payments.Refund` row (outbox) and commits; only then does
+`payments.tasks.issue_refund` send it, under a row lock on the refund, with the
+`cancel-<order>` / `return-<return>` idempotency key. So:
+
+- a rollback takes the pending row with it — no refund leaves without a record;
+- a crash after Stripe succeeded but before the row is saved leaves it pending,
+  and the retry gets Stripe's existing refund back for the same key;
+- failures stay pending and `retry_pending_refunds` (Beat, every 5 min) re-queues
+  them; after 5 attempts the row is `failed` and the order timeline says so.
+
 ## Accepted, documented trade-offs
 
 - **Denormalized counters** (`sold_count`, `rating_count`, `helpful_count`) are
