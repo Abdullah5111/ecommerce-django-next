@@ -5,6 +5,8 @@ from pathlib import Path
 from corsheaders.defaults import default_headers
 from decouple import Csv, config
 
+from core.redis_urls import with_db as redis_with_db
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Secure defaults: an install that forgets its .env fails closed instead of
@@ -147,6 +149,11 @@ if GS_BUCKET_NAME:
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REDIS_URL = config("REDIS_URL", default="")
+# Logical databases on that Redis (core/redis_urls.py): the cache's FLUSHDB must
+# never reach the Channels layer's groups. Set both to 0 for a Redis that has
+# only one database (e.g. Redis Cluster).
+REDIS_CACHE_DB = config("REDIS_CACHE_DB", default=1, cast=int)
+REDIS_CHANNELS_DB = config("REDIS_CHANNELS_DB", default=0, cast=int)
 
 # Throttle counters and phone OTPs live in the cache, so with more than one
 # worker it must be shared: Redis whenever REDIS_URL is set. LocMem (per
@@ -161,7 +168,10 @@ CACHES = {
                 else "django.core.cache.backends.locmem.LocMemCache"
             ),
         ),
-        "LOCATION": config("CACHE_LOCATION", default=REDIS_URL or "ecommerce-cache"),
+        "LOCATION": config(
+            "CACHE_LOCATION",
+            default=redis_with_db(REDIS_URL, REDIS_CACHE_DB) if REDIS_URL else "ecommerce-cache",
+        ),
         "KEY_PREFIX": "cache",
     }
 }
@@ -172,7 +182,10 @@ ASGI_APPLICATION = "core.asgi.application"
 # per-process InMemory layer (dev, tests, and single-process deploys).
 CHANNEL_LAYERS = {
     "default": (
-        {"BACKEND": "channels_redis.core.RedisChannelLayer", "CONFIG": {"hosts": [REDIS_URL]}}
+        {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [redis_with_db(REDIS_URL, REDIS_CHANNELS_DB)]},
+        }
         if REDIS_URL
         else {"BACKEND": "channels.layers.InMemoryChannelLayer"}
     )

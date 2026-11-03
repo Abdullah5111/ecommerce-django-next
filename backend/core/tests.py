@@ -16,3 +16,26 @@ class ApiDocsTests(TestCase):
 
     def test_swagger_ui_is_served(self):
         self.assertEqual(self.client.get("/api/docs/").status_code, 200)
+
+
+class RedisUrlTests(SimpleTestCase):
+    """The cache and the Channels layer share one REDIS_URL but must land on
+    different logical databases (a cache FLUSHDB would drop WebSocket groups)."""
+
+    def test_replaces_the_database(self):
+        from core.redis_urls import with_db
+
+        self.assertEqual(with_db("redis://redis:6379/0", 1), "redis://redis:6379/1")
+
+    def test_adds_a_database_when_the_url_has_none(self):
+        from core.redis_urls import with_db
+
+        self.assertEqual(with_db("redis://10.0.0.3:6379", 1), "redis://10.0.0.3:6379/1")
+
+    def test_keeps_credentials_tls_and_options(self):
+        from core.redis_urls import with_db
+
+        self.assertEqual(
+            with_db("rediss://:secret@cache.example.com:6380/0?ssl_cert_reqs=none", 2),
+            "rediss://:secret@cache.example.com:6380/2?ssl_cert_reqs=none",
+        )
