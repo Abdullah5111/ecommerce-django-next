@@ -154,6 +154,10 @@ REDIS_URL = config("REDIS_URL", default="")
 # only one database (e.g. Redis Cluster).
 REDIS_CACHE_DB = config("REDIS_CACHE_DB", default=1, cast=int)
 REDIS_CHANNELS_DB = config("REDIS_CHANNELS_DB", default=0, cast=int)
+# Without timeouts an unreachable Redis hangs each request for the OS TCP
+# timeout (minutes) instead of failing. Seconds.
+REDIS_CONNECT_TIMEOUT = config("REDIS_CONNECT_TIMEOUT", default=0.5, cast=float)
+REDIS_SOCKET_TIMEOUT = config("REDIS_SOCKET_TIMEOUT", default=1.0, cast=float)
 
 # Throttle counters and phone OTPs live in the cache, so with more than one
 # worker it must be shared: Redis whenever REDIS_URL is set. LocMem (per
@@ -175,6 +179,13 @@ CACHES = {
         "KEY_PREFIX": "cache",
     }
 }
+if CACHES["default"]["BACKEND"] == "django.core.cache.backends.redis.RedisCache":
+    # Passed to redis-py's connection pool. Cache calls are single round trips,
+    # so a short read timeout is safe here.
+    CACHES["default"]["OPTIONS"] = {
+        "socket_connect_timeout": REDIS_CONNECT_TIMEOUT,
+        "socket_timeout": REDIS_SOCKET_TIMEOUT,
+    }
 
 ASGI_APPLICATION = "core.asgi.application"
 
@@ -184,7 +195,15 @@ CHANNEL_LAYERS = {
     "default": (
         {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {"hosts": [redis_with_db(REDIS_URL, REDIS_CHANNELS_DB)]},
+            "CONFIG": {
+                "hosts": [{
+                    "address": redis_with_db(REDIS_URL, REDIS_CHANNELS_DB),
+                    # Connect timeout only: receive() blocks in BZPOPMIN for up
+                    # to 5s (channels-redis brpop_timeout), so a short read
+                    # timeout would break every receive.
+                    "socket_connect_timeout": REDIS_CONNECT_TIMEOUT,
+                }],
+            },
         }
         if REDIS_URL
         else {"BACKEND": "channels.layers.InMemoryChannelLayer"}

@@ -39,3 +39,59 @@ class RedisUrlTests(SimpleTestCase):
             with_db("rediss://:secret@cache.example.com:6380/0?ssl_cert_reqs=none", 2),
             "rediss://:secret@cache.example.com:6380/2?ssl_cert_reqs=none",
         )
+
+
+# TEST-NET-1 (RFC 5737): never routed, so a connect either times out or is
+# refused at once — it must not hang for the OS TCP timeout.
+UNREACHABLE_REDIS = "redis://192.0.2.1:6379/1"
+
+
+class RedisTimeoutTests(SimpleTestCase):
+    """An unreachable Redis fails within the configured timeouts instead of
+    hanging the request for minutes."""
+
+    def test_cache_fails_fast(self):
+        import time
+
+        from django.conf import settings
+        from django.core.cache.backends.redis import RedisCache
+        from redis.exceptions import RedisError
+
+        cache = RedisCache(
+            UNREACHABLE_REDIS,
+            {"OPTIONS": {
+                "socket_connect_timeout": settings.REDIS_CONNECT_TIMEOUT,
+                "socket_timeout": settings.REDIS_SOCKET_TIMEOUT,
+            }},
+        )
+        started = time.monotonic()
+        with self.assertRaises(RedisError):
+            cache.get("anything")
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_channel_layer_connect_fails_fast(self):
+        import asyncio
+        import time
+
+        from channels_redis.utils import create_pool
+        from django.conf import settings
+        from redis import asyncio as aioredis
+        from redis.exceptions import RedisError
+
+        # Same host shape settings.CHANNEL_LAYERS uses when REDIS_URL is set.
+        pool = create_pool({
+            "address": UNREACHABLE_REDIS,
+            "socket_connect_timeout": settings.REDIS_CONNECT_TIMEOUT,
+        })
+
+        async def ping():
+            client = aioredis.Redis(connection_pool=pool)
+            try:
+                await client.ping()
+            finally:
+                await client.aclose()
+
+        started = time.monotonic()
+        with self.assertRaises(RedisError):
+            asyncio.run(ping())
+        self.assertLess(time.monotonic() - started, 5)
