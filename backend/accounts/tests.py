@@ -667,3 +667,63 @@ class RefreshCookieTests(APITestCase):
         res = self.client.post("/api/auth/token/refresh/", {"refresh": token})
         self.assertEqual(res.status_code, 200)
         self.assertIn("refresh", res.data)  # rotated token goes back the way it came
+
+
+@override_settings(SMS_BACKEND="console")
+class PhoneOtpOutageTests(APITestCase):
+    """With Redis down, phone verification refuses cleanly (503) — never a
+    500, and never a texted code that was not stored."""
+
+    LOCMEM = "django.core.cache.backends.locmem.LocMemCache"
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            username="outage", email="outage@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def _send(self):
+        return self.client.post(
+            "/api/auth/phone/send-code/", {"phone": "+15551234567"}, format="json"
+        )
+
+    def _down(self, method):
+        from redis.exceptions import ConnectionError as RedisConnectionError
+
+        return patch(f"{self.LOCMEM}.{method}", side_effect=RedisConnectionError("down"))
+
+    def _throttle_ok(self):
+        return patch(
+            "accounts.otp_store.PhoneRateThrottle.allow_request", return_value=True
+        )
+
+    def test_rate_limiter_outage_is_a_503(self):
+        with self._down("get"), patch("accounts.sms.send_sms") as send:
+            res = self._send()
+        self.assertEqual(res.status_code, 503)
+        send.assert_not_called()
+
+    def test_store_outage_sends_nothing(self):
+        with self._throttle_ok(), self._down("set"), patch("accounts.sms.send_sms") as send:
+            res = self._send()
+        self.assertEqual(res.status_code, 503)
+        send.assert_not_called()
+
+    def test_code_is_stored_before_it_is_texted(self):
+        stored_at_send = []
+
+        def record(to, body):
+            stored_at_send.append(cache.get(f"phone_otp:{self.user.id}"))
+
+        with patch("accounts.sms.send_sms", side_effect=record):
+            self.assertEqual(self._send().status_code, 200)
+        self.assertIsNotNone(stored_at_send[0])  # already in the store when texted
+        self.assertEqual(stored_at_send[0], cache.get(f"phone_otp:{self.user.id}"))
+
+    def test_verify_outage_is_a_503(self):
+        with self._throttle_ok(), self._down("get"):
+            res = self.client.post("/api/auth/phone/verify/", {"code": "123456"}, format="json")
+        self.assertEqual(res.status_code, 503)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.phone_verified)

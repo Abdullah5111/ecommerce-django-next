@@ -186,6 +186,9 @@ if CACHES["default"]["BACKEND"] == "django.core.cache.backends.redis.RedisCache"
         "socket_connect_timeout": REDIS_CONNECT_TIMEOUT,
         "socket_timeout": REDIS_SOCKET_TIMEOUT,
     }
+# Phone verification codes (accounts/otp_store.py): same storage and keys as
+# the default cache, under their own alias so they always fail closed.
+CACHES["otp"] = dict(CACHES["default"])
 
 ASGI_APPLICATION = "core.asgi.application"
 

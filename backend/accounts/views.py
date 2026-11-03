@@ -7,12 +7,12 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from redis.exceptions import RedisError
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -25,6 +25,7 @@ from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairVi
 
 from . import cookies, sms
 from .models import Address
+from .otp_store import OtpStoreUnavailable, PhoneRateThrottle, otp_cache
 from .serializers import (
     AddressSerializer,
     EmailOrUsernameTokenObtainPairSerializer,
@@ -366,7 +367,7 @@ class PhoneSendCodeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     # The cooldown only spaces sends out; this caps them, since each send is a
     # paid SMS to any number and a fresh code with fresh guesses.
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [PhoneRateThrottle]
     throttle_scope = "auth-phone-send"
 
     def post(self, request):
@@ -389,24 +390,34 @@ class PhoneSendCodeView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         user = request.user
-        if cache.get(_otp_cooldown_key(user.id)):
-            return Response(
-                {"detail": "Please wait before requesting another code."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS,
-            )
         code = f"{secrets.randbelow(1_000_000):06d}"
+        # Store before sending: a code must never be texted that can't be
+        # verified. Redis down → 503, and nothing is sent.
+        try:
+            if otp_cache.get(_otp_cooldown_key(user.id)):
+                return Response(
+                    {"detail": "Please wait before requesting another code."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+            otp_cache.set(
+                _otp_key(user.id), {"code": code, "phone": phone, "attempts": 0}, OTP_TTL
+            )
+            otp_cache.set(_otp_cooldown_key(user.id), True, OTP_COOLDOWN)
+        except RedisError as exc:
+            logger.warning("Phone code store unavailable: %s", exc)
+            raise OtpStoreUnavailable() from exc
         try:
             sms.send_sms(phone, f"Your verification code is {code}. It expires in 10 minutes.")
         except (sms.SmsUnavailable, sms.SmsSendError):
-            # Nothing stored, so the user can retry straight away.
+            # Undo the store so the user can retry straight away.
+            try:
+                otp_cache.delete_many([_otp_key(user.id), _otp_cooldown_key(user.id)])
+            except RedisError:
+                pass  # the unsent code expires on its own
             return Response(
                 {"detail": "We couldn't send the code. Check the number and try again."},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
-        cache.set(
-            _otp_key(user.id), {"code": code, "phone": phone, "attempts": 0}, OTP_TTL
-        )
-        cache.set(_otp_cooldown_key(user.id), True, OTP_COOLDOWN)
         logger.info("Phone verification code sent for user %s", user.id)
         return Response({"detail": "Verification code sent."})
 
@@ -415,10 +426,18 @@ class PhoneVerifyView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     # Burning a code after OTP_MAX_ATTEMPTS limits guesses per code; this
     # limits them per user across codes.
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [PhoneRateThrottle]
     throttle_scope = "auth-phone-verify"
 
     def post(self, request):
+        try:
+            return self._verify(request)
+        except RedisError as exc:
+            # Fail closed: without the stored code there's nothing to check.
+            logger.warning("Phone code store unavailable: %s", exc)
+            raise OtpStoreUnavailable() from exc
+
+    def _verify(self, request):
         # Coerce + sanity-check before compare_digest: it raises TypeError on
         # non-ASCII str inputs, which would turn a bad request into a 500.
         code = str(request.data.get("code") or "").strip()
@@ -429,7 +448,7 @@ class PhoneVerifyView(APIView):
             )
         user = request.user
         key = _otp_key(user.id)
-        data = cache.get(key)
+        data = otp_cache.get(key)
         invalid = Response(
             {"detail": "Invalid or expired code."},
             status=status.HTTP_400_BAD_REQUEST,
@@ -439,9 +458,9 @@ class PhoneVerifyView(APIView):
         if not hmac.compare_digest(code, data["code"]):
             data["attempts"] += 1
             if data["attempts"] >= OTP_MAX_ATTEMPTS:
-                cache.delete(key)  # burn the code after too many wrong guesses
+                otp_cache.delete(key)  # burn the code after too many wrong guesses
             else:
-                cache.set(key, data, OTP_TTL)
+                otp_cache.set(key, data, OTP_TTL)
             return invalid
         phone = data["phone"]
         if (
@@ -456,8 +475,8 @@ class PhoneVerifyView(APIView):
         user.phone = phone
         user.phone_verified = True
         user.save(update_fields=["phone", "phone_verified"])
-        cache.delete(key)
-        cache.delete(_otp_cooldown_key(user.id))
+        otp_cache.delete(key)
+        otp_cache.delete(_otp_cooldown_key(user.id))
         return Response(UserSerializer(user, context={"request": request}).data)
 
 
