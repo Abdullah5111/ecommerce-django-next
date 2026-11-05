@@ -310,7 +310,7 @@ Django Channels over daphne (ASGI). One consumer, one group per user — REST st
 ## Testing & CI
 
 - **Backend** — 300+ tests using DRF's `APITestCase`, exercising the API end to end rather than models in isolation.
-- **CI** ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs on push and PR. The backend job runs against a **Postgres 16** service container (not SQLite) so the full-text search path and jsonb constraints behave as they do in production; it runs `ruff check .`, then `makemigrations --check --dry-run` — a guard against a model change shipping without its migration — then the suite. The frontend job runs `tsc --noEmit`, eslint (`next lint --max-warnings 0`, warnings fail the build), the vitest unit tests, and `next build`.
+- **CI** ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs on push and PR. The backend job runs against a **Postgres 16** service container (not SQLite) so the full-text search path and jsonb constraints behave as they do in production; it runs `ruff check .`, then `makemigrations --check --dry-run` — a guard against a model change shipping without its migration — then the suite. The backend job is a two-entry matrix: once on the in-memory fallbacks (LocMem cache, InMemory channel layer) and once with a Redis 7 service and `REDIS_URL` set, after a step that asserts the Redis backends are really active (so a config slip can't quietly turn the Redis run into a second in-memory run). The frontend job runs `tsc --noEmit`, eslint (`next lint --max-warnings 0`, warnings fail the build), the vitest unit tests, and `next build`.
 
 ## Trade-offs
 

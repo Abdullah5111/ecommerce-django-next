@@ -330,7 +330,7 @@ All three are **off by default and the app runs fine without them.** Set the env
 ## Testing & CI
 
 - **300+ backend tests** (DRF `APITestCase`) across auth, catalog, variants, cart, orders, coupons, tax, returns, reviews, notifications, payments, and the concurrency paths — plus a smoke test that the OpenAPI schema builds.
-- **GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) on every push/PR: a backend job on **Postgres 16** (exercising the full-text path) that lints with **ruff** first, and a frontend job running `tsc --noEmit`, **eslint** (`next lint --max-warnings 0`), **vitest** unit tests and `next build`.
+- **GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) on every push/PR: a backend job on **Postgres 16** (exercising the full-text path) that lints with **ruff** first and runs the suite twice — on the in-memory cache/channel layer and on **real Redis** — and a frontend job running `tsc --noEmit`, **eslint** (`next lint --max-warnings 0`), **vitest** unit tests and `next build`.
 
 ```bash
 cd backend && python manage.py test        # backend suite

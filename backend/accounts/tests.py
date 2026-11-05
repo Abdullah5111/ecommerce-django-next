@@ -674,8 +674,6 @@ class PhoneOtpOutageTests(APITestCase):
     """With Redis down, phone verification refuses cleanly (503) — never a
     500, and never a texted code that was not stored."""
 
-    LOCMEM = "django.core.cache.backends.locmem.LocMemCache"
-
     def setUp(self):
         cache.clear()
         self.user = User.objects.create_user(
@@ -689,9 +687,13 @@ class PhoneOtpOutageTests(APITestCase):
         )
 
     def _down(self, method):
+        from django.core.cache import caches
         from redis.exceptions import ConnectionError as RedisConnectionError
 
-        return patch(f"{self.LOCMEM}.{method}", side_effect=RedisConnectionError("down"))
+        # Patch whichever backend the otp alias runs on (LocMem, or Redis in
+        # the Redis CI job).
+        backend = type(caches["otp"])
+        return patch.object(backend, method, side_effect=RedisConnectionError("down"))
 
     def _throttle_ok(self):
         return patch(

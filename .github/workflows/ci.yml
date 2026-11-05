@@ -7,8 +7,20 @@ on:
 
 jobs:
   backend:
-    name: Backend (Django on Postgres)
+    name: Backend (Django on Postgres, ${{ matrix.cache }})
     runs-on: ubuntu-24.04
+
+    # The suite runs twice: on the in-memory fallbacks (LocMem cache,
+    # InMemory channel layer) and on real Redis, so the cache, rate limits,
+    # phone codes and WebSocket fan-out are exercised on what production runs.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cache: in-memory
+            redis_url: ""
+          - cache: redis
+            redis_url: redis://localhost:6379/0
 
     # Postgres rather than SQLite: the product search branches on
     # connection.vendor, so only this path exercises the full-text code that
@@ -27,6 +39,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
 
     env:
       SECRET_KEY: ci-only-not-a-real-secret
@@ -37,6 +58,7 @@ jobs:
       DB_PASSWORD: ecommerce
       DB_HOST: localhost
       DB_PORT: "5432"
+      REDIS_URL: ${{ matrix.redis_url }}
 
     steps:
       - uses: actions/checkout@v5
@@ -53,14 +75,28 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Lint (ruff)
+        if: matrix.cache == 'in-memory'  # same code either way; lint once
         working-directory: backend
         run: pip install ruff==0.7.4 && ruff check .
 
       - name: Check models and migrations agree
+        if: matrix.cache == 'in-memory'
         working-directory: backend
         # Fails if a model change has no migration — the guard for
         # hand-written migration files.
         run: python manage.py makemigrations --check --dry-run
+
+      - name: Confirm the Redis backends are active
+        if: matrix.cache == 'redis'
+        working-directory: backend
+        # Guards against config silently falling back to LocMem/InMemory.
+        run: >-
+          python manage.py shell -c "from django.conf import settings as s;
+          from django.core.cache import cache;
+          assert s.CACHES['default']['BACKEND'].endswith('RedisCache'), s.CACHES;
+          assert s.CHANNEL_LAYERS['default']['BACKEND'].endswith('RedisChannelLayer');
+          cache.set('ci-probe', 1); assert cache.get('ci-probe') == 1;
+          print('Redis cache and channel layer active')"
 
       - name: Run tests
         working-directory: backend
