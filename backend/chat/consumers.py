@@ -5,9 +5,10 @@ join by watching — membership is the authorization) and a shared
 ``chat_staff`` inbox feed. Messages are created over REST; the socket
 carries message broadcasts plus ephemeral typing / read receipts / presence.
 
-ponytail: presence is per-process under the InMemory layer (cluster-wide
-once REDIS_URL is set); staff presence only reaches a buyer while that staff
-member is watching their thread.
+Presence (who is online) is tracked by chat/presence.py, which is per-process
+even when REDIS_URL is set: Redis carries the broadcasts, not the state. See
+that module. Staff presence only reaches a buyer while that staff member is
+watching their thread.
 """
 import json
 import time
@@ -18,12 +19,9 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .models import ChatThread
+from .presence import presence
 
 STAFF_GROUP = "chat_staff"
-
-# user_id → live connection count; broadcasts fire on transitions only, so
-# multiple tabs don't flap. Per-process (see module docstring).
-_online: dict[int, int] = {}
 
 
 def thread_group(user_id):
@@ -53,31 +51,29 @@ class ChatConsumer(JsonWebsocketConsumer):
             return
         self.watching = set()  # customer ids this (staff) connection follows
         self._last_frame = 0.0
-        _online[user.id] = _online.get(user.id, 0) + 1
+        # Broadcasts fire on first connect / last disconnect only, so several
+        # tabs don't flap.
+        first_connection = presence.connect(user.id, self.channel_name)
         layer = self.channel_layer
         async_to_sync(layer.group_add)(thread_group(user.id), self.channel_name)
         if user.is_staff:  # staff only — buyers must never see other threads
             async_to_sync(layer.group_add)(STAFF_GROUP, self.channel_name)
         self.accept()
-        if not user.is_staff and _online[user.id] == 1:
+        if not user.is_staff and first_connection:
             self._staff_feed("chat.presence", {"user_id": user.id, "online": True})
 
     def disconnect(self, code):
         user = self.scope["user"]
         if not user.is_authenticated:
             return
-        count = max(0, _online.get(user.id, 0) - 1)
-        if count:
-            _online[user.id] = count
-        else:
-            _online.pop(user.id, None)
+        last_connection = presence.disconnect(user.id, self.channel_name)
         if user.is_staff:
             for uid in list(self.watching):
                 self._thread(uid, "chat.presence", {"user_id": user.id, "online": False})
                 async_to_sync(self.channel_layer.group_discard)(
                     thread_group(uid), self.channel_name
                 )
-        elif not count:  # last tab closed — offline fires once, not per tab
+        elif last_connection:  # last tab closed — offline fires once, not per tab
             self._staff_feed("chat.presence", {"user_id": user.id, "online": False})
         groups = [thread_group(user.id)]
         if user.is_staff:
@@ -121,7 +117,7 @@ class ChatConsumer(JsonWebsocketConsumer):
         self._thread(uid, "chat.presence", {"user_id": user.id, "online": True})
         # a new watcher needs the customer's current state, not just future ones
         self.send_json(
-            {"type": "chat.presence", "user_id": uid, "online": _online.get(uid, 0) > 0}
+            {"type": "chat.presence", "user_id": uid, "online": presence.is_online(uid)}
         )
 
     def _ws_unwatch(self, msg):

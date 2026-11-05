@@ -5,12 +5,12 @@ from asgiref.sync import sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import TransactionTestCase
+from django.test import SimpleTestCase, TransactionTestCase
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
 
-from chat import consumers
 from chat.models import ChatMessage, ChatThread
+from chat.presence import presence
 from chat.service import broadcast_message
 from chat.throttling import ChatSendThrottle
 from core.asgi import application
@@ -150,7 +150,7 @@ class ChatSocketTests(TransactionTestCase):
 
     def setUp(self):
         # module-global, like the cache — not rolled back between tests
-        consumers._online.clear()
+        presence.clear()
         self.buyer = User.objects.create_user(
             username="ws_buyer", email="ws_buyer@example.com", password="pw-123456"
         )
@@ -396,11 +396,11 @@ class ChatSocketTests(TransactionTestCase):
         buyer2 = self._comm(self.buyer)
         connected, _ = await buyer2.connect()
         self.assertTrue(connected)
-        self.assertEqual(consumers._online.get(self.buyer.id), 2)
+        self.assertEqual(presence.connection_count(self.buyer.id), 2)
         await buyer1.disconnect()
-        self.assertEqual(consumers._online.get(self.buyer.id), 1)  # tab 2 still live
+        self.assertEqual(presence.connection_count(self.buyer.id), 1)  # tab 2 still live
         await buyer2.disconnect()
-        self.assertEqual(consumers._online.get(self.buyer.id, 0), 0)
+        self.assertEqual(presence.connection_count(self.buyer.id), 0)
 
     async def test_offline_fires_once_on_last_tab_close(self):
         await self._thread(self.buyer)
@@ -419,7 +419,7 @@ class ChatSocketTests(TransactionTestCase):
         await buyer1.disconnect()
         # tab 2 still live: no offline broadcast, count stays at 1
         self.assertTrue(await staff_comm.receive_nothing(timeout=0.3))
-        self.assertEqual(consumers._online.get(self.buyer.id), 1)
+        self.assertEqual(presence.connection_count(self.buyer.id), 1)
         await buyer2.disconnect()
         await staff_comm.disconnect()
 
@@ -465,3 +465,35 @@ class ChatSocketTests(TransactionTestCase):
         connected, _ = await comm.connect()
         self.assertTrue(connected)
         await comm.disconnect(timeout=5)
+
+
+class InMemoryPresenceTests(SimpleTestCase):
+    """The store the consumer asks "first connection? last one? online?"."""
+
+    def setUp(self):
+        from chat.presence import InMemoryPresence
+
+        self.store = InMemoryPresence()
+
+    def test_first_connect_and_last_disconnect_are_the_transitions(self):
+        self.assertTrue(self.store.connect(1, "tab-a"))
+        self.assertFalse(self.store.connect(1, "tab-b"))
+        self.assertFalse(self.store.disconnect(1, "tab-a"))
+        self.assertTrue(self.store.is_online(1))
+        self.assertTrue(self.store.disconnect(1, "tab-b"))
+        self.assertFalse(self.store.is_online(1))
+
+    def test_connections_are_tracked_by_name_not_count(self):
+        self.store.connect(1, "tab-a")
+        self.store.connect(1, "tab-b")
+        # A repeated disconnect of the same tab must not take the other down.
+        self.store.disconnect(1, "tab-a")
+        self.assertFalse(self.store.disconnect(1, "tab-a"))
+        self.assertEqual(self.store.connection_count(1), 1)
+
+    def test_disconnect_without_connect_is_not_a_transition(self):
+        self.assertFalse(self.store.disconnect(2, "ghost"))
+
+    def test_users_are_independent(self):
+        self.store.connect(1, "a")
+        self.assertFalse(self.store.is_online(2))
