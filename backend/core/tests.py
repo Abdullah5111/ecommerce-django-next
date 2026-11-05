@@ -95,3 +95,59 @@ class RedisTimeoutTests(SimpleTestCase):
         with self.assertRaises(RedisError):
             asyncio.run(ping())
         self.assertLess(time.monotonic() - started, 5)
+
+
+class ReadinessTests(TestCase):
+    """/api/ready/: 200 when the database (and Redis, if configured) answer,
+    503 naming what doesn't."""
+
+    def test_ready_when_dependencies_answer(self):
+        from django.conf import settings
+
+        res = self.client.get("/api/ready/")
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(body["status"], "ok")
+        self.assertEqual(body["checks"]["database"], "ok")
+        # Redis checks appear only when REDIS_URL is set (the Redis CI job).
+        self.assertEqual("cache" in body["checks"], bool(settings.REDIS_URL))
+
+    def test_database_down_is_503(self):
+        from unittest.mock import patch
+
+        from django.db import OperationalError
+
+        with patch("core.views._check_database", side_effect=OperationalError("gone")):
+            res = self.client.get("/api/ready/")
+        self.assertEqual(res.status_code, 503)
+        self.assertEqual(res.json()["checks"]["database"], "unavailable")
+
+    def test_redis_down_is_503_and_names_the_part(self):
+        from unittest.mock import patch
+
+        from django.test import override_settings
+        from redis.exceptions import ConnectionError as RedisConnectionError
+
+        down = RedisConnectionError("Connection refused")
+        with override_settings(REDIS_URL="redis://cache.internal:6379/0"), \
+                patch("core.views._check_cache", side_effect=down), \
+                patch("core.views._check_channel_layer"):
+            res = self.client.get("/api/ready/")
+        self.assertEqual(res.status_code, 503)
+        self.assertEqual(
+            res.json()["checks"],
+            {"database": "ok", "cache": "unavailable", "channel_layer": "ok"},
+        )
+
+    def test_failure_details_are_not_exposed(self):
+        from unittest.mock import patch
+
+        with patch("core.views._check_database", side_effect=RuntimeError("password=hunter2")):
+            res = self.client.get("/api/ready/")
+        self.assertNotIn("hunter2", res.content.decode())
+
+    def test_channel_layer_probe_runs_against_the_configured_layer(self):
+        # Real call: InMemory layer here, Redis in the Redis CI job.
+        from core.views import _check_channel_layer
+
+        _check_channel_layer()

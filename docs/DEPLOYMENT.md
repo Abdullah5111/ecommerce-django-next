@@ -216,6 +216,20 @@ the storefront, so the two must be able to share it:
   `_EXTRA_ENV`; browsers that block third-party cookies (Safari by default)
   will still drop it, and those users are signed out on every page load.
 
+## Health and readiness
+
+- `GET /api/health/` — liveness: the process is up. Touches nothing, so a
+  database or Redis outage never makes Cloud Run kill and restart a healthy
+  container.
+- `GET /api/ready/` — readiness: checks the database and, when `REDIS_URL` is
+  set, the Redis cache and channel layer. 200 when all answer, otherwise 503
+  with e.g. `{"status": "unavailable", "checks": {"database": "ok", "cache":
+  "unavailable", "channel_layer": "ok"}}`. Failure details go to the logs only.
+
+Point a Cloud Monitoring uptime check (or your external monitor) at
+`/api/ready/` to be alerted when a dependency is down, and use `/api/health/`
+for any liveness probe.
+
 ## Costs (rough)
 
 - Cloud Run: free tier covers small demos

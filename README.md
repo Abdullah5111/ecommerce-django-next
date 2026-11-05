@@ -139,6 +139,13 @@ Interactive, generated from the live code:
 <details>
 <summary><strong>REST reference (full endpoint tables)</strong></summary>
 
+### Probes
+
+| Method | Path         | Auth | Purpose |
+|--------|--------------|------|---------|
+| GET    | /api/health/ | —    | Liveness: the process is up (no dependencies touched) |
+| GET    | /api/ready/  | —    | Readiness: 200 when the database and, with `REDIS_URL`, the Redis cache and channel layer answer; 503 with `checks` naming what's down |
+
 ### Auth
 
 | Method   | Path                                       | Auth | Purpose                                           |

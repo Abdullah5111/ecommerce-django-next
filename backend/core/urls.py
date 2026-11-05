@@ -9,11 +9,12 @@ from drf_spectacular.views import (
 )
 
 from accounts.views import EmailOrUsernameTokenObtainPairView, ThrottledTokenRefreshView
-from core.views import health
+from core.views import health, ready
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/health/", health, name="health"),
+    path("api/ready/", ready, name="ready"),
     # Interactive API docs (Swagger UI + ReDoc) generated from the live schema.
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
