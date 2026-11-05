@@ -111,6 +111,10 @@ Without it each instance keeps its own: limits are per instance, a code sent fro
 one instance fails verification on another, and live updates don't cross
 instances. A single instance works without it, and the deploy pipeline caps the
 service at one (`--max-instances=1`) until `_REDIS_URL` is set (step 6).
+Running with `DEBUG` off and no `REDIS_URL` raises system-check warning
+`core.W001` (in `migrate`, `check --deploy`, the migration job's logs) and logs
+the same warning when the server starts. For a deliberate single-instance
+deploy, silence it with `SILENCED_SYSTEM_CHECKS = ["core.W001"]`.
 
 **Media bucket (required for uploads).** Unlike the options above, this one is not
 safe to skip: user uploads (profile avatars, review photos) go to local disk

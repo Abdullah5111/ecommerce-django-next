@@ -13,8 +13,12 @@ from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.security.websocket import WebsocketDenier
 from django.http.request import is_same_domain
 
+from core.checks import warn_at_startup
 from core.routing import websocket_urlpatterns
 from notifications.middleware import JWTAuthMiddleware
+
+# daphne doesn't run system checks; say it where the server's logs will show it.
+warn_at_startup()
 
 
 class SameSiteOriginValidator:

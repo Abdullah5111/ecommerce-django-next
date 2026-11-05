@@ -48,6 +48,8 @@ INSTALLED_APPS = [
     "payments",
     "notifications",
     "chat",
+    # Project-level app for the deployment checks (core/checks.py).
+    "core",
 ]
 
 MIDDLEWARE = [

@@ -151,3 +151,53 @@ class ReadinessTests(TestCase):
         from core.views import _check_channel_layer
 
         _check_channel_layer()
+
+
+class RedisConfiguredCheckTests(SimpleTestCase):
+    """core.W001: a non-DEBUG run without REDIS_URL gets a warning — not an
+    error, so a deliberate single-instance deploy still starts."""
+
+    def _ids(self):
+        from core.checks import check_redis_configured
+
+        return [w.id for w in check_redis_configured(None)]
+
+    def test_warns_without_redis_outside_debug(self):
+        from django.test import override_settings
+
+        with override_settings(DEBUG=False, REDIS_URL=""):
+            self.assertEqual(self._ids(), ["core.W001"])
+
+    def test_silent_with_redis(self):
+        from django.test import override_settings
+
+        with override_settings(DEBUG=False, REDIS_URL="redis://redis:6379/0"):
+            self.assertEqual(self._ids(), [])
+
+    def test_silent_in_debug(self):
+        from django.test import override_settings
+
+        with override_settings(DEBUG=True, REDIS_URL=""):
+            self.assertEqual(self._ids(), [])
+
+    def test_registered_with_the_check_framework(self):
+        from django.core import checks
+        from django.test import override_settings
+
+        with override_settings(DEBUG=False, REDIS_URL=""):
+            ids = [m.id for m in checks.run_checks()]
+        self.assertIn("core.W001", ids)
+
+    def test_startup_log_matches_and_respects_silencing(self):
+        from django.test import override_settings
+
+        from core.checks import warn_at_startup
+
+        with override_settings(DEBUG=False, REDIS_URL=""):
+            with self.assertLogs("core.checks", level="WARNING") as logs:
+                warn_at_startup()
+        self.assertIn("REDIS_URL is not set", logs.output[0])
+
+        with override_settings(DEBUG=False, REDIS_URL="", SILENCED_SYSTEM_CHECKS=["core.W001"]):
+            with self.assertNoLogs("core.checks", level="WARNING"):
+                warn_at_startup()
