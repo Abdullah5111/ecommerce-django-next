@@ -1,3 +1,6 @@
+from unittest import skipUnless
+
+from django.conf import settings
 from django.test import SimpleTestCase, TestCase
 
 
@@ -53,7 +56,6 @@ class RedisTimeoutTests(SimpleTestCase):
     def test_cache_fails_fast(self):
         import time
 
-        from django.conf import settings
         from django.core.cache.backends.redis import RedisCache
         from redis.exceptions import RedisError
 
@@ -74,7 +76,6 @@ class RedisTimeoutTests(SimpleTestCase):
         import time
 
         from channels_redis.utils import create_pool
-        from django.conf import settings
         from redis import asyncio as aioredis
         from redis.exceptions import RedisError
 
@@ -102,7 +103,6 @@ class ReadinessTests(TestCase):
     503 naming what doesn't."""
 
     def test_ready_when_dependencies_answer(self):
-        from django.conf import settings
 
         res = self.client.get("/api/ready/")
         self.assertEqual(res.status_code, 200)
@@ -201,3 +201,55 @@ class RedisConfiguredCheckTests(SimpleTestCase):
         with override_settings(DEBUG=False, REDIS_URL="", SILENCED_SYSTEM_CHECKS=["core.W001"]):
             with self.assertNoLogs("core.checks", level="WARNING"):
                 warn_at_startup()
+
+
+class TolerantRedisCacheTests(SimpleTestCase):
+    """With Redis unreachable, the default cache misses and skips instead of
+    raising — so catalog pages and rate-limited endpoints keep working."""
+
+    def setUp(self):
+        import core.cache
+        from core.cache import TolerantRedisCache
+
+        core.cache._last_warning = 0.0  # module state: start each test fresh
+        self.cache = TolerantRedisCache(
+            UNREACHABLE_REDIS,
+            {"OPTIONS": {"socket_connect_timeout": 0.2, "socket_timeout": 0.2}},
+        )
+
+    def test_reads_miss(self):
+        self.assertEqual(self.cache.get("k", "fallback"), "fallback")
+        self.assertEqual(self.cache.get_many(["a", "b"]), {})
+        self.assertFalse(self.cache.has_key("k"))
+
+    def test_writes_are_skipped(self):
+        self.cache.set("k", 1)
+        self.assertFalse(self.cache.add("k", 1))
+        self.assertEqual(self.cache.set_many({"a": 1, "b": 2}), ["a", "b"])
+        self.assertFalse(self.cache.delete("k"))
+        self.cache.delete_many(["a"])
+        self.assertFalse(self.cache.touch("k"))
+
+    def test_get_or_set_falls_back_to_computing(self):
+        self.assertEqual(self.cache.get_or_set("k", lambda: 42), 42)
+
+    def test_incr_behaves_like_a_missing_key(self):
+        with self.assertRaises(ValueError):
+            self.cache.incr("counter")
+
+    def test_warns_once_per_window_not_per_call(self):
+        with self.assertLogs("core.cache", level="WARNING") as logs:
+            for _ in range(3):
+                self.cache.get("k")
+        self.assertEqual(len(logs.output), 1)
+
+
+@skipUnless(settings.REDIS_URL, "needs Redis (runs in the Redis CI job)")
+class CacheAliasWiringTests(SimpleTestCase):
+    def test_default_tolerates_outages_and_otp_does_not(self):
+        from django.core.cache import caches
+
+        from core.cache import TolerantRedisCache
+
+        self.assertIsInstance(caches["default"], TolerantRedisCache)
+        self.assertNotIsInstance(caches["otp"], TolerantRedisCache)

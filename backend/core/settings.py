@@ -169,7 +169,8 @@ CACHES = {
         "BACKEND": config(
             "CACHE_BACKEND",
             default=(
-                "django.core.cache.backends.redis.RedisCache"
+                # Reads miss and writes skip while Redis is down (core/cache.py).
+                "core.cache.TolerantRedisCache"
                 if REDIS_URL
                 else "django.core.cache.backends.locmem.LocMemCache"
             ),
@@ -181,7 +182,11 @@ CACHES = {
         "KEY_PREFIX": "cache",
     }
 }
-if CACHES["default"]["BACKEND"] == "django.core.cache.backends.redis.RedisCache":
+REDIS_CACHE_BACKENDS = (
+    "django.core.cache.backends.redis.RedisCache",
+    "core.cache.TolerantRedisCache",
+)
+if CACHES["default"]["BACKEND"] in REDIS_CACHE_BACKENDS:
     # Passed to redis-py's connection pool. Cache calls are single round trips,
     # so a short read timeout is safe here.
     CACHES["default"]["OPTIONS"] = {
@@ -189,8 +194,10 @@ if CACHES["default"]["BACKEND"] == "django.core.cache.backends.redis.RedisCache"
         "socket_timeout": REDIS_SOCKET_TIMEOUT,
     }
 # Phone verification codes (accounts/otp_store.py): same storage and keys as
-# the default cache, under their own alias so they always fail closed.
+# the default cache, but always the strict backend, so they fail closed.
 CACHES["otp"] = dict(CACHES["default"])
+if CACHES["otp"]["BACKEND"] == "core.cache.TolerantRedisCache":
+    CACHES["otp"]["BACKEND"] = "django.core.cache.backends.redis.RedisCache"
 
 ASGI_APPLICATION = "core.asgi.application"
 

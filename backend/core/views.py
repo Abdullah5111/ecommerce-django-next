@@ -21,8 +21,10 @@ def _check_database():
 
 
 def _check_cache():
-    # Any round trip proves the server answers; a missing key is fine.
-    caches["default"].get("ready-probe")
+    # Any round trip proves the server answers; a missing key is fine. The
+    # strict alias: the default one swallows Redis errors (core/cache.py) and
+    # would report "ok" with Redis down.
+    caches["otp"].get("ready-probe")
 
 
 def _check_channel_layer():
