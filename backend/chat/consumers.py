@@ -7,9 +7,8 @@ authorization), a shared ``chat_staff`` inbox feed, and ``user_<id>`` for
 notifications. Messages are created over REST; the socket
 carries message broadcasts plus ephemeral typing / read receipts / presence.
 
-Presence (who is online) is tracked by chat/presence.py, which is per-process
-even when REDIS_URL is set: Redis carries the broadcasts, not the state. See
-that module. Staff presence only reaches a buyer while that staff member is
+Presence (who is online) is tracked by chat/presence.py: shared through Redis
+when REDIS_URL is set, per-process otherwise. Staff presence only reaches a buyer while that staff member is
 watching their thread.
 """
 import json

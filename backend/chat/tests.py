@@ -1,8 +1,10 @@
 import json
+from unittest import skipUnless
 from unittest.mock import patch
 
 from asgiref.sync import sync_to_async
 from channels.testing import WebsocketCommunicator
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import SimpleTestCase, TransactionTestCase
@@ -495,13 +497,15 @@ class ChatSocketTests(TransactionTestCase):
         await comm.disconnect(timeout=5)
 
 
-class InMemoryPresenceTests(SimpleTestCase):
-    """The store the consumer asks "first connection? last one? online?"."""
+class PresenceContract:
+    """What the consumer relies on — "first connection? last one? online?" —
+    and so what every presence store must do."""
+
+    def make_store(self):
+        raise NotImplementedError
 
     def setUp(self):
-        from chat.presence import InMemoryPresence
-
-        self.store = InMemoryPresence()
+        self.store = self.make_store()
 
     def test_first_connect_and_last_disconnect_are_the_transitions(self):
         self.assertTrue(self.store.connect(1, "tab-a"))
@@ -525,3 +529,58 @@ class InMemoryPresenceTests(SimpleTestCase):
     def test_users_are_independent(self):
         self.store.connect(1, "a")
         self.assertFalse(self.store.is_online(2))
+
+
+class InMemoryPresenceTests(PresenceContract, SimpleTestCase):
+    def make_store(self):
+        from chat.presence import InMemoryPresence
+
+        return InMemoryPresence()
+
+
+@skipUnless(settings.REDIS_URL, "needs Redis (runs in the Redis CI job)")
+class RedisPresenceTests(PresenceContract, SimpleTestCase):
+    """The shared store: what one worker records, every worker sees."""
+
+    PREFIX = "test-presence:"
+
+    def make_store(self, **kwargs):
+        from chat.presence import RedisPresence
+        from core.redis_urls import with_db
+
+        store = RedisPresence(
+            with_db(settings.REDIS_URL, settings.REDIS_CHANNELS_DB), prefix=self.PREFIX, **kwargs
+        )
+        store.clear()
+        self.addCleanup(store.clear)
+        return store
+
+    def test_other_workers_see_the_connection(self):
+        # Two store instances = two worker processes sharing one Redis.
+        worker_b = self.make_store()
+        self.store.connect(1, "tab-on-a")
+        self.assertTrue(worker_b.is_online(1))
+
+    def test_closing_a_tab_on_one_worker_keeps_the_user_online(self):
+        worker_b = self.make_store()
+        self.assertTrue(self.store.connect(1, "tab-on-a"))
+        self.assertFalse(worker_b.connect(1, "tab-on-b"))  # not first: A has one
+        self.assertFalse(self.store.disconnect(1, "tab-on-a"))  # B's tab is still open
+        self.assertTrue(worker_b.is_online(1))
+        self.assertTrue(worker_b.disconnect(1, "tab-on-b"))
+
+    def test_entries_older_than_the_cutoff_are_ignored(self):
+        now = [1_000_000.0]
+        store = self.make_store(stale_after=90, clock=lambda: now[0])
+        store.connect(1, "crashed-worker-tab")
+        now[0] += 120  # the worker died without disconnecting
+        self.assertFalse(store.is_online(1))
+        self.assertTrue(store.connect(1, "fresh-tab"))  # first again: the stale one is pruned
+
+    def test_redis_down_degrades_quietly(self):
+        from chat.presence import RedisPresence
+
+        down = RedisPresence("redis://192.0.2.1:6379/0", connect_timeout=0.2)
+        self.assertFalse(down.connect(1, "tab"))
+        self.assertFalse(down.disconnect(1, "tab"))
+        self.assertFalse(down.is_online(1))
