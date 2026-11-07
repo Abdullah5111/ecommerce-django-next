@@ -585,6 +585,13 @@ export const api = {
       `/payments/methods/setup-intent/`,
       { method: "POST", headers: { Authorization: `Bearer ${token}` } }
     ),
+  // One-time ticket for opening the WebSocket, so the access token never sits in a
+  // socket URL (and from there in access logs). Single-use, valid 30s.
+  createWsTicket: (token: string) =>
+    request<{ ticket: string; expires_in: number }>(`/auth/ws-ticket/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
   removeSavedCard: (token: string, paymentMethodId: string) =>
     request<void>(`/payments/methods/${encodeURIComponent(paymentMethodId)}/`, {
       method: "DELETE",

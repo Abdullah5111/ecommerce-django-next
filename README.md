@@ -74,7 +74,7 @@ The parts that took real thought — each is backed by tests and, where it's sub
 
 **Architecture & ops**
 - **Background jobs on Celery + RabbitMQ**: notification email and Web Push are tasks queued after commit, so order transitions never block on SMTP/push I/O. Email retries with exponential backoff; late acks mean a crashed worker's task is redelivered, not lost. With no broker configured, tasks run inline (dev, tests, CI).
-- **Realtime**: notifications, order-status changes, and **live customer↔store support chat** push over authenticated **Django Channels WebSockets** (`/ws/notifications/`, `/ws/chat/`, JWT via query param) — header badge, toasts, order pages, typing indicators, read receipts (✓✓), and presence update live, no polling. Per-process InMemory channel layer by default; `REDIS_URL` switches to Redis for multi-instance.
+- **Realtime**: notifications, order-status changes, and **live customer↔store support chat** push over authenticated **Django Channels WebSockets** (one socket per tab on `/ws/chat/`, opened with a one-time ticket so no token lands in access logs) — header badge, toasts, order pages, typing indicators, read receipts (✓✓), and presence update live, no polling. Per-process InMemory channel layer by default; `REDIS_URL` switches to Redis for multi-instance.
 - **OpenAPI 3** schema with Swagger UI / ReDoc; Dockerized; CI runs the suite on **Postgres 16** (so the full-text path is exercised, not just SQLite).
 
 ## Stack

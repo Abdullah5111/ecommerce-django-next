@@ -776,3 +776,14 @@ class WsTicketTests(APITestCase):
         with patch("accounts.ws_tickets.issue", side_effect=RedisConnectionError("down")):
             res = self.client.post("/api/auth/ws-ticket/")
         self.assertEqual(res.status_code, 503)
+
+    def test_revoked_access_token_cannot_get_a_ticket(self):
+        # Revocation (password reset) is enforced here, at issuance: the
+        # socket itself only ever sees tickets.
+        from django.utils import timezone
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        token = AccessToken.for_user(self.user)
+        User.objects.filter(pk=self.user.pk).update(tokens_valid_after=timezone.now())
+        res = self.client.post("/api/auth/ws-ticket/", HTTP_AUTHORIZATION=f"Bearer {token}")
+        self.assertEqual(res.status_code, 401)

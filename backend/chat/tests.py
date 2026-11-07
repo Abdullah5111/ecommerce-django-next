@@ -11,6 +11,7 @@ from django.test import SimpleTestCase, TransactionTestCase
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
 
+from accounts import ws_tickets
 from chat.models import ChatMessage, ChatThread
 from chat.presence import presence
 from chat.service import broadcast_message
@@ -164,8 +165,7 @@ class ChatSocketTests(TransactionTestCase):
         )
 
     def _comm(self, user):
-        token = str(AccessToken.for_user(user))
-        return WebsocketCommunicator(application, f"/ws/chat/?token={token}")
+        return WebsocketCommunicator(application, f"/ws/chat/?ticket={ws_tickets.issue(user)}")
 
     async def _thread(self, user):
         return await sync_to_async(ChatThread.objects.create)(user=user)
@@ -194,8 +194,6 @@ class ChatSocketTests(TransactionTestCase):
         self.assertEqual(code, 4001)
 
     async def _ticket_comm(self, user):
-        from accounts import ws_tickets
-
         ticket = await sync_to_async(ws_tickets.issue)(user)
         return ticket, WebsocketCommunicator(application, f"/ws/chat/?ticket={ticket}")
 
@@ -256,13 +254,10 @@ class ChatSocketTests(TransactionTestCase):
         self.assertTrue(await comm.receive_nothing(timeout=0.3))
         await comm.disconnect()
 
-    async def test_token_revoked_by_password_reset_is_rejected(self):
-        from django.utils import timezone
-
-        comm = self._comm(self.buyer)  # token minted before the reset
-        await sync_to_async(
-            User.objects.filter(pk=self.buyer.pk).update
-        )(tokens_valid_after=timezone.now())
+    async def test_access_token_in_the_url_is_refused(self):
+        # Tickets only: a JWT in a socket URL ends up in access logs.
+        token = AccessToken.for_user(self.buyer)
+        comm = WebsocketCommunicator(application, f"/ws/chat/?token={token}")
         connected, code = await comm.connect()
         self.assertFalse(connected)
         self.assertEqual(code, 4001)
@@ -511,20 +506,18 @@ class ChatSocketTests(TransactionTestCase):
     async def test_cross_site_origin_rejected(self):
         """Browser-origin check: a hostile page's handshake is denied even with
         a valid token; origin-less (non-browser) clients are unaffected."""
-        token = str(AccessToken.for_user(self.buyer))
         comm = WebsocketCommunicator(
             application,
-            f"/ws/chat/?token={token}",
+            f"/ws/chat/?ticket={ws_tickets.issue(self.buyer)}",
             headers=[(b"origin", b"https://evil.example")],
         )
         connected, _ = await comm.connect()
         self.assertFalse(connected)
 
     async def test_allowed_host_origin_accepted(self):
-        token = str(AccessToken.for_user(self.buyer))
         comm = WebsocketCommunicator(
             application,
-            f"/ws/chat/?token={token}",
+            f"/ws/chat/?ticket={ws_tickets.issue(self.buyer)}",
             headers=[(b"origin", b"http://localhost:3000")],
         )
         connected, _ = await comm.connect()
@@ -661,9 +654,8 @@ class ChatPingFrameTests(TransactionTestCase):
         user = await sync_to_async(User.objects.create_user)(
             username="pinger", email="pinger@example.com", password="pw-123456"
         )
-        comm = WebsocketCommunicator(
-            application, f"/ws/chat/?token={AccessToken.for_user(user)}"
-        )
+        ticket = await sync_to_async(ws_tickets.issue)(user)
+        comm = WebsocketCommunicator(application, f"/ws/chat/?ticket={ticket}")
         connected, _ = await comm.connect()
         self.assertTrue(connected)
         with patch.object(presence, "touch") as touch:

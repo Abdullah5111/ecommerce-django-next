@@ -15,7 +15,7 @@ from django.http.request import is_same_domain
 
 from core.checks import warn_at_startup
 from core.routing import websocket_urlpatterns
-from notifications.middleware import JWTAuthMiddleware
+from notifications.middleware import TicketAuthMiddleware
 
 # daphne doesn't run system checks; say it where the server's logs will show it.
 warn_at_startup()
@@ -28,7 +28,7 @@ class SameSiteOriginValidator:
     Origin header unless ALLOWED_HOSTS contains "*", and matches full origins
     (scheme://host:port) — locking out non-browser clients and breaking dev's
     app-on-8000 / frontend-on-3000 pairing. Socket auth here is the explicit
-    JWT query token (no ambient credentials), so a missing Origin header is
+    one-time query ticket (no ambient credentials), so a missing Origin header is
     not a CSRF vector: non-browser clients pass; a browser-supplied Origin
     must still have its host in ALLOWED_HOSTS.
     """
@@ -56,7 +56,7 @@ application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
         "websocket": SameSiteOriginValidator(
-            JWTAuthMiddleware(URLRouter(websocket_urlpatterns))
+            TicketAuthMiddleware(URLRouter(websocket_urlpatterns))
         ),
     }
 )

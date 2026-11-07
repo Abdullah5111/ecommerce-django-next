@@ -31,17 +31,19 @@ function stopHeartbeat() {
   heartbeat = undefined;
 }
 let closed = false;
+// True while a ticket request is in flight, so concurrent connect() calls
+// don't each fetch one and open a socket.
+let connecting = false;
 const listeners = new Set<Listener>();
 
-function url(): string | null {
-  const token = auth.get(); // null during SSR / when logged out
-  if (!token) return null;
+function url(ticket: string): string {
   const base = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api")
     .replace(/\/api\/?$/, "")
     .replace(/^http/, "ws");
   // /ws/chat/ carries both chat and notification pushes (one socket per tab);
   // /ws/notifications/ only pushes, and would drop every chat frame we send.
-  return `${base}/ws/chat/?token=${encodeURIComponent(token)}`;
+  // A one-time ticket, not the access token: URLs end up in access logs.
+  return `${base}/ws/chat/?ticket=${encodeURIComponent(ticket)}`;
 }
 
 function emit(msg: RealtimeMessage) {
@@ -60,32 +62,50 @@ function resync() {
     .catch(() => {});
 }
 
+function scheduleReconnect() {
+  timer = setTimeout(realtime.connect, Math.min(1000 * 2 ** retry++, 30_000));
+}
+
+function open(u: string) {
+  ws = new WebSocket(u);
+  ws.onmessage = (e) => {
+    try {
+      emit(JSON.parse(e.data) as RealtimeMessage);
+    } catch {
+      /* ignore malformed frames */
+    }
+  };
+  ws.onopen = () => {
+    retry = 0;
+    stopHeartbeat();
+    heartbeat = setInterval(() => realtime.send({ type: "chat.ping" }), HEARTBEAT_MS);
+    emit({ type: "realtime.open" });
+    resync();
+  };
+  ws.onclose = () => {
+    stopHeartbeat();
+    if (closed) return;
+    scheduleReconnect(); // with a fresh ticket: each one works once
+  };
+}
+
 export const realtime = {
   connect() {
-    const u = url();
-    if (!u) return;
+    const token = auth.get(); // null during SSR / when logged out
+    if (!token || connecting) return;
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     closed = false;
-    ws = new WebSocket(u);
-    ws.onmessage = (e) => {
-      try {
-        emit(JSON.parse(e.data) as RealtimeMessage);
-      } catch {
-        /* ignore malformed frames */
-      }
-    };
-    ws.onopen = () => {
-      retry = 0;
-      stopHeartbeat();
-      heartbeat = setInterval(() => realtime.send({ type: "chat.ping" }), HEARTBEAT_MS);
-      emit({ type: "realtime.open" });
-      resync();
-    };
-    ws.onclose = () => {
-      stopHeartbeat();
-      if (closed) return;
-      timer = setTimeout(realtime.connect, Math.min(1000 * 2 ** retry++, 30_000));
-    };
+    connecting = true;
+    api
+      .createWsTicket(token)
+      .then(({ ticket }) => {
+        connecting = false;
+        if (!closed) open(url(ticket)); // disconnect() may have run meanwhile
+      })
+      .catch(() => {
+        connecting = false;
+        if (!closed) scheduleReconnect();
+      });
   },
   disconnect() {
     closed = true;

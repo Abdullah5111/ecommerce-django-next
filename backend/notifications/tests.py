@@ -1,4 +1,3 @@
-from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -7,10 +6,10 @@ from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.test import TestCase, TransactionTestCase, override_settings
-from django.utils import timezone
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
 
+from accounts import ws_tickets
 from core.asgi import application
 from notifications import push, tasks
 from notifications.models import Notification, PushSubscription
@@ -346,11 +345,11 @@ class WebSocketPushTests(TransactionTestCase):
         )
 
     def _comm(self, user):
-        token = str(AccessToken.for_user(user))
         # The communicator parses the query out of the path into scope["query_string"].
-        return WebsocketCommunicator(application, f"/ws/notifications/?token={token}")
+        ticket = ws_tickets.issue(user)
+        return WebsocketCommunicator(application, f"/ws/notifications/?ticket={ticket}")
 
-    async def test_connects_with_valid_token_and_receives_broadcast(self):
+    async def test_connects_with_a_ticket_and_receives_broadcast(self):
         comm = self._comm(self.user)
         connected, _ = await comm.connect()
         self.assertTrue(connected)
@@ -364,21 +363,21 @@ class WebSocketPushTests(TransactionTestCase):
         self.assertEqual(msg["unread_count"], 1)
         await comm.disconnect()
 
-    async def test_missing_token_rejected(self):
+    async def test_missing_ticket_rejected(self):
         comm = WebsocketCommunicator(application, "/ws/notifications/")
         connected, code = await comm.connect()
         self.assertFalse(connected)
         self.assertEqual(code, 4001)
 
-    async def test_garbage_token_rejected(self):
-        comm = WebsocketCommunicator(application, "/ws/notifications/?token=not-a-jwt")
+    async def test_unknown_ticket_rejected(self):
+        comm = WebsocketCommunicator(application, "/ws/notifications/?ticket=not-issued")
         connected, code = await comm.connect()
         self.assertFalse(connected)
         self.assertEqual(code, 4001)
 
-    async def test_expired_token_rejected(self):
+    async def test_access_token_in_the_url_is_refused(self):
+        # Even a valid JWT: tokens in socket URLs end up in access logs.
         token = AccessToken.for_user(self.user)
-        token.set_exp(from_time=timezone.now() - timedelta(hours=3), lifetime=timedelta(hours=1))
         comm = WebsocketCommunicator(application, f"/ws/notifications/?token={token}")
         connected, code = await comm.connect()
         self.assertFalse(connected)
