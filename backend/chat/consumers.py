@@ -106,6 +106,7 @@ class ChatConsumer(JsonWebsocketConsumer):
             "chat.unwatch": self._ws_unwatch,
             "chat.typing": self._ws_typing,
             "chat.read": self._ws_read,
+            "chat.ping": self._ws_ping,
         }
         handler = handlers.get(msg.get("type"))
         if handler:
@@ -142,6 +143,11 @@ class ChatConsumer(JsonWebsocketConsumer):
             self._thread(uid, "chat.typing", {"user_id": user.id, "thread_user_id": uid})
         else:
             self._staff_feed("chat.typing", {"user_id": user.id, "thread_user_id": user.id})
+
+    def _ws_ping(self, msg):
+        # Heartbeat (every 30s from lib/realtime.ts): keeps this connection
+        # fresh in the presence store, so only dead ones age out.
+        presence.touch(self.scope["user"].id, self.channel_name)
 
     def _ws_read(self, msg):
         """Flip read receipts — each side reads the other's messages — then

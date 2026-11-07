@@ -584,3 +584,56 @@ class RedisPresenceTests(PresenceContract, SimpleTestCase):
         self.assertFalse(down.connect(1, "tab"))
         self.assertFalse(down.disconnect(1, "tab"))
         self.assertFalse(down.is_online(1))
+
+
+@skipUnless(settings.REDIS_URL, "needs Redis (runs in the Redis CI job)")
+class RedisPresenceHeartbeatTests(SimpleTestCase):
+    """With the 90s cutoff, only the heartbeat keeps an idle tab online."""
+
+    def setUp(self):
+        from chat.presence import RedisPresence
+        from core.redis_urls import with_db
+
+        self.now = [1_000_000.0]
+        self.store = RedisPresence(
+            with_db(settings.REDIS_URL, settings.REDIS_CHANNELS_DB),
+            prefix="test-heartbeat:", stale_after=90, clock=lambda: self.now[0],
+        )
+        self.store.clear()
+        self.addCleanup(self.store.clear)
+
+    def test_pings_keep_an_idle_connection_online(self):
+        self.store.connect(1, "tab")
+        for _ in range(4):  # 4 × 60s: well past the cutoff without pings
+            self.now[0] += 60
+            self.store.touch(1, "tab")
+        self.assertTrue(self.store.is_online(1))
+
+    def test_without_pings_it_ages_out(self):
+        self.store.connect(1, "tab")
+        self.now[0] += 120
+        self.assertFalse(self.store.is_online(1))
+
+    def test_a_ping_cannot_resurrect_a_closed_connection(self):
+        self.store.connect(1, "tab")
+        self.store.disconnect(1, "tab")
+        self.store.touch(1, "tab")  # late ping from a socket already gone
+        self.assertFalse(self.store.is_online(1))
+
+
+class ChatPingFrameTests(TransactionTestCase):
+    async def test_ping_frame_refreshes_presence(self):
+        user = await sync_to_async(User.objects.create_user)(
+            username="pinger", email="pinger@example.com", password="pw-123456"
+        )
+        comm = WebsocketCommunicator(
+            application, f"/ws/chat/?token={AccessToken.for_user(user)}"
+        )
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        with patch.object(presence, "touch") as touch:
+            await comm.send_json_to({"type": "chat.ping"})
+            await comm.receive_nothing(timeout=0.2)  # let the frame be handled
+        touch.assert_called_once()
+        self.assertEqual(touch.call_args.args[0], user.id)
+        await comm.disconnect()

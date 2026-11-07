@@ -21,9 +21,11 @@ from redis.exceptions import RedisError
 logger = logging.getLogger(__name__)
 
 # A connection not seen for this long is treated as gone, so a worker that
-# dies without running disconnect() can't leave its users "online" forever.
-# Matches daphne's default websocket_timeout, the longest a socket can live.
-STALE_AFTER_SECONDS = 24 * 60 * 60
+# dies without running disconnect() can't leave its users "online" for long.
+# Clients ping every HEARTBEAT_SECONDS (lib/realtime.ts); two missed pings
+# are tolerated.
+HEARTBEAT_SECONDS = 30
+STALE_AFTER_SECONDS = 3 * HEARTBEAT_SECONDS
 
 
 class InMemoryPresence:
@@ -49,6 +51,9 @@ class InMemoryPresence:
             return False
         del self._connections[user_id]
         return True
+
+    def touch(self, user_id: int, channel_name: str) -> None:
+        """Heartbeat. A process-local connection can't go stale unseen."""
 
     def is_online(self, user_id: int) -> bool:
         return bool(self._connections.get(user_id))
@@ -114,6 +119,19 @@ class RedisPresence:
             logger.warning("Presence store unavailable (disconnect)", exc_info=True)
             return False
         return bool(removed) and after == 0
+
+    def touch(self, user_id: int, channel_name: str) -> None:
+        """Heartbeat: refresh a live connection's last-seen time. XX only
+        updates members already present, so a ping can't resurrect a
+        connection that was pruned or already disconnected."""
+        key = self._key(user_id)
+        try:
+            pipe = self._redis.pipeline()
+            pipe.zadd(key, {channel_name: self._clock()}, xx=True)
+            pipe.expire(key, int(self._stale_after) + 60)
+            pipe.execute()
+        except RedisError:
+            logger.warning("Presence store unavailable (touch)", exc_info=True)
 
     def is_online(self, user_id: int) -> bool:
         return self.connection_count(user_id) > 0

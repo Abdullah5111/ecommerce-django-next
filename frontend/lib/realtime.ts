@@ -21,6 +21,15 @@ type Listener = (msg: RealtimeMessage) => void;
 let ws: WebSocket | null = null;
 let retry = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
+// Presence heartbeat: the server treats a connection unseen for 90s as gone
+// (backend/chat/presence.py), so an open socket pings every 30s.
+const HEARTBEAT_MS = 30_000;
+let heartbeat: ReturnType<typeof setInterval> | undefined;
+
+function stopHeartbeat() {
+  if (heartbeat) clearInterval(heartbeat);
+  heartbeat = undefined;
+}
 let closed = false;
 const listeners = new Set<Listener>();
 
@@ -67,16 +76,20 @@ export const realtime = {
     };
     ws.onopen = () => {
       retry = 0;
+      stopHeartbeat();
+      heartbeat = setInterval(() => realtime.send({ type: "chat.ping" }), HEARTBEAT_MS);
       emit({ type: "realtime.open" });
       resync();
     };
     ws.onclose = () => {
+      stopHeartbeat();
       if (closed) return;
       timer = setTimeout(realtime.connect, Math.min(1000 * 2 ** retry++, 30_000));
     };
   },
   disconnect() {
     closed = true;
+    stopHeartbeat();
     if (timer) clearTimeout(timer);
     ws?.close();
     ws = null;
