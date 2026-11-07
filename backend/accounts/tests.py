@@ -768,12 +768,11 @@ class WsTicketTests(APITestCase):
         self.assertIsNone(ws_tickets.consume("x" * 500))
 
     def test_store_outage_is_a_503(self):
-        from django.core.cache import caches
         from redis.exceptions import ConnectionError as RedisConnectionError
 
         self.client.force_authenticate(self.user)
-        with patch.object(
-            type(caches["otp"]), "set", side_effect=RedisConnectionError("down")
-        ):
+        # Only the ticket store fails; patching the cache class would also
+        # break the rate limiter's own cache writes.
+        with patch("accounts.ws_tickets.issue", side_effect=RedisConnectionError("down")):
             res = self.client.post("/api/auth/ws-ticket/")
         self.assertEqual(res.status_code, 503)
