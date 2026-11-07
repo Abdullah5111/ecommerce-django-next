@@ -110,7 +110,8 @@ cache — rate limits and phone sign-in codes — and the WebSocket channel laye
 Without it each instance keeps its own: limits are per instance, a code sent from
 one instance fails verification on another, and live updates don't cross
 instances. A single instance works without it, and the deploy pipeline caps the
-service at one (`--max-instances=1`) until `_REDIS_URL` is set (step 6).
+service at one (`--max-instances=1`) until `_REDIS_URL` or `_REDIS_URL_SECRET`
+is set. Setup: step 6, "Redis (Memorystore)".
 Running with `DEBUG` off and no `REDIS_URL` raises system-check warning
 `core.W001` (in `migrate`, `check --deploy`, the migration job's logs) and logs
 the same warning when the server starts. For a deliberate single-instance
@@ -166,10 +167,76 @@ contains commas (e.g. two CORS origins) needs gcloud's
 [alternate delimiter](https://cloud.google.com/sdk/gcloud/reference/topic/escaping)
 inside `--set-env-vars` too.
 
-**Redis.** Without `_REDIS_URL` the service is capped at one instance (rate
-limits, phone codes and WebSocket groups are per instance). To scale out, create
-a Memorystore instance and a Serverless VPC Access connector, then add
-`_REDIS_URL=redis://<memorystore-ip>:6379/0,_VPC_CONNECTOR=<connector-name>`.
+### Redis (Memorystore)
+
+Without Redis the service is capped at one instance (rate limits, phone codes,
+presence and WebSocket groups are per instance). To scale out, give it a
+Memorystore for Redis instance, reached over a Serverless VPC Access connector.
+One Redis serves everything: the cache on database 1 and the WebSocket channel
+layer and chat presence on database 0 (`REDIS_CACHE_DB` / `REDIS_CHANNELS_DB`).
+
+**1. Enable the APIs and create the instance.** A 1 GB Basic-tier instance on
+Redis 7 is plenty for this app; turn on AUTH so the network alone isn't the
+only lock:
+
+```bash
+gcloud services enable redis.googleapis.com vpcaccess.googleapis.com
+
+gcloud redis instances create ecommerce-redis \
+  --region=$REGION --tier=basic --size=1 \
+  --redis-version=redis_7_0 --network=default \
+  --enable-auth
+
+REDIS_HOST=$(gcloud redis instances describe ecommerce-redis --region=$REGION --format='value(host)')
+REDIS_AUTH=$(gcloud redis instances get-auth-string ecommerce-redis --region=$REGION --format='value(authString)')
+```
+
+**2. Create the connector** that lets Cloud Run reach the instance's private IP
+(any unused `/28` in the VPC):
+
+```bash
+gcloud compute networks vpc-access connectors create ecommerce-connector \
+  --region=$REGION --network=default --range=10.8.0.0/28
+```
+
+**3. Store the URL as a secret.** With AUTH the password is part of the URL,
+so pass it through Secret Manager, not a plain env var:
+
+```bash
+echo -n "redis://:${REDIS_AUTH}@${REDIS_HOST}:6379/0" \
+  | gcloud secrets create redis-url --data-file=-
+```
+
+The database number in the URL doesn't matter: the app points the cache and the
+channel layer at their own databases (`core/redis_urls.py`).
+
+**4. Deploy** (step 6) with `_REDIS_URL_SECRET=redis-url` and
+`_VPC_CONNECTOR=ecommerce-connector` added to the substitutions. That lifts the
+one-instance cap. (`_REDIS_URL` takes a plain URL instead, for an instance
+without AUTH; set one of the two, not both — the build stops if you do.)
+
+**Check it:** `GET /api/ready/` should report `"cache": "ok"` and
+`"channel_layer": "ok"`, and the `core.W001` "REDIS_URL is not set" warning
+should be gone from the migration job's logs.
+
+**Eviction.** Keep Memorystore's default `maxmemory-policy` of `volatile-lru`:
+under memory pressure Redis then evicts only keys that carry an expiry. Every
+key this app writes expires (catalog pages 5 min, rate-limit windows, phone
+codes 10 min, WebSocket tickets 30 s, presence sets, channel-layer messages and
+groups) except `catalog:cache_version`, which must not — losing it would
+revive stale catalog pages — and is never evicted under this policy. Evicting
+a rate-limit window or a phone code is harmless (a limit restarts; the user
+requests a new code). Don't pick an `allkeys-*` policy.
+
+**TLS.** Memorystore's in-transit encryption (`--transit-encryption-mode`) needs
+`rediss://` and the instance's own CA certificate on the client; this repo
+doesn't install that CA, so the setup above relies on the private VPC plus AUTH.
+Adding TLS means shipping the CA (`gcloud redis instances describe … --format='value(serverCaCerts[0].cert)'`)
+into the image and pointing redis-py at it.
+
+**Cost (rough, us-central1 — check current pricing):** a 1 GB Basic instance
+is on the order of $35/month; the VPC connector runs at least two small
+instances, roughly $10–15/month.
 
 ### Scheduled tasks
 
@@ -246,3 +313,5 @@ for any liveness probe.
 - Cloud Run: free tier covers small demos
 - Cloud SQL db-f1-micro: ~$8/mo
 - Artifact Registry storage: pennies
+- Memorystore Redis 1 GB Basic + VPC connector (only once you scale past one
+  instance): very roughly $45–50/mo together; see "Redis (Memorystore)"

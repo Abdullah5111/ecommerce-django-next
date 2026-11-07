@@ -29,7 +29,10 @@ SOLD_STATUSES = ("paid", "shipped", "delivered", "partially_refunded", "refunded
 def _catalog_cache_version():
     # Folded into the cached-rail/tree keys; signals bump it on any catalog
     # change so caches refresh at once instead of waiting out the TTL.
-    return cache.get_or_set("catalog:cache_version", 1)
+    # timeout=None: the version must outlive every entry built under it. With
+    # the default 300s it could expire, reset to 1 and revive stale v1 pages;
+    # without a TTL Redis's volatile-lru eviction also never drops it.
+    return cache.get_or_set("catalog:cache_version", 1, timeout=None)
 
 
 def _has_purchased(user, product) -> bool:

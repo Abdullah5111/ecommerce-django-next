@@ -56,7 +56,11 @@ def _bump_catalog_cache():
     try:
         cache.incr("catalog:cache_version")
     except ValueError:  # key not initialized yet
-        cache.set("catalog:cache_version", (cache.get("catalog:cache_version") or 1) + 1)
+        cache.set(
+            "catalog:cache_version",
+            (cache.get("catalog:cache_version") or 1) + 1,
+            timeout=None,  # never expires; see products.views._catalog_cache_version
+        )
 
 
 @receiver(post_save, sender=Product)

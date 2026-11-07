@@ -950,3 +950,25 @@ class ProductVariantAPITests(APITestCase):
                 ProductVariant.objects.create(
                     product=self.tshirt, options={"Size": "S"}, sku="TEE-S2", stock=1
                 )
+
+
+class CatalogCacheVersionTests(APITestCase):
+    """The version folded into catalog cache keys must never expire: if it
+    did, it would reset to 1 and revive pages cached under the old v1."""
+
+    def test_version_is_stored_without_a_ttl(self):
+        from products.views import _catalog_cache_version
+
+        with patch("products.views.cache") as cache_mock:
+            cache_mock.get_or_set.return_value = 1
+            _catalog_cache_version()
+        cache_mock.get_or_set.assert_called_once_with("catalog:cache_version", 1, timeout=None)
+
+    def test_bump_initialises_without_a_ttl(self):
+        from products.signals import _bump_catalog_cache
+
+        with patch("products.signals.cache") as cache_mock:
+            cache_mock.incr.side_effect = ValueError  # not initialised yet
+            cache_mock.get.return_value = None
+            _bump_catalog_cache()
+        cache_mock.set.assert_called_once_with("catalog:cache_version", 2, timeout=None)
