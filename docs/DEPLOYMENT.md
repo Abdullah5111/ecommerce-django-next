@@ -116,6 +116,13 @@ Running with `DEBUG` off and no `REDIS_URL` raises system-check warning
 the same warning when the server starts. For a deliberate single-instance
 deploy, silence it with `SILENCED_SYSTEM_CHECKS = ["core.W001"]`.
 
+If Redis goes down after deploy, the site keeps serving: cached pages come
+from the database and **rate limits switch off** until Redis recovers (a
+"Redis cache unavailable" warning is logged once a minute). Phone
+verification returns 503, live WebSocket updates stop, and `/api/ready/`
+reports `cache: unavailable`, so alert on that probe. See ARCHITECTURE.md,
+"When Redis is down".
+
 **Media bucket (required for uploads).** Unlike the options above, this one is not
 safe to skip: user uploads (profile avatars, review photos) go to local disk
 without it, and **Cloud Run's filesystem is ephemeral and per-instance** — so

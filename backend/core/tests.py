@@ -253,3 +253,81 @@ class CacheAliasWiringTests(SimpleTestCase):
 
         self.assertIsInstance(caches["default"], TolerantRedisCache)
         self.assertNotIsInstance(caches["otp"], TolerantRedisCache)
+
+
+@skipUnless(settings.REDIS_URL, "needs Redis (runs in the Redis CI job)")
+class RedisOutageTests(TestCase):
+    """End to end with Redis down: the site keeps working, rate limits switch
+    off, and only phone verification (strict, fail-closed) refuses."""
+
+    def setUp(self):
+        from decimal import Decimal
+        from unittest.mock import patch
+
+        from django.contrib.auth import get_user_model
+        from django.core.cache import cache
+        from redis.exceptions import ConnectionError as RedisConnectionError
+        from rest_framework.test import APIClient
+
+        from products.models import Category, Product
+
+        cache.clear()
+        self.user = get_user_model().objects.create_user(
+            username="down", email="down@example.com", password="pw-123456"
+        )
+        category = Category.objects.create(name="Gear")
+        Product.objects.create(
+            name="Widget", price=Decimal("10.00"), stock=5, category=category, is_featured=True
+        )
+        self.api = APIClient()
+        # Every cache call (both aliases) goes through get_client.
+        outage = patch(
+            "django.core.cache.backends.redis.RedisCacheClient.get_client",
+            side_effect=RedisConnectionError("Redis is down"),
+        )
+        outage.start()
+        self.addCleanup(outage.stop)
+
+    def _login(self):
+        return self.api.post(
+            "/api/auth/token/", {"username": "down", "password": "pw-123456"}, format="json"
+        )
+
+    def test_login_still_works(self):
+        self.assertEqual(self._login().status_code, 200)
+
+    def test_sign_up_still_works(self):
+        res = self.api.post(
+            "/api/auth/register/",
+            {"username": "newbie", "email": "newbie@example.com", "password": "s7rong-p4ss-x9"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+
+    def test_rate_limits_switch_off_rather_than_lock_everyone_out(self):
+        from unittest.mock import patch
+
+        from rest_framework.throttling import ScopedRateThrottle
+
+        with patch.dict(ScopedRateThrottle.THROTTLE_RATES, {"auth-login": "1/min"}):
+            codes = [self._login().status_code for _ in range(3)]
+        self.assertEqual(codes, [200, 200, 200])
+
+    def test_catalog_pages_fall_back_to_the_database(self):
+        res = self.api.get("/api/products/featured/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual([p["name"] for p in res.json()], ["Widget"])
+        self.assertEqual(self.api.get("/api/categories/tree/").status_code, 200)
+
+    def test_phone_verification_still_fails_closed(self):
+        self.api.force_authenticate(self.user)
+        with self.settings(SMS_BACKEND="console"):
+            res = self.api.post(
+                "/api/auth/phone/send-code/", {"phone": "+15551234567"}, format="json"
+            )
+        self.assertEqual(res.status_code, 503)
+
+    def test_readiness_reports_the_cache_down(self):
+        res = self.api.get("/api/ready/")
+        self.assertEqual(res.status_code, 503)
+        self.assertEqual(res.json()["checks"]["cache"], "unavailable")

@@ -289,6 +289,17 @@ The legacy free-text `shipping_address` path on `POST /api/orders/` still works 
 
 `CACHES` is configured in `core/settings.py`: `django.core.cache.backends.redis.RedisCache` at `REDIS_URL` when that is set (docker-compose sets it; use a Memorystore URL in production), else per-process LocMem. `CACHE_BACKEND` / `CACHE_LOCATION` still override both. The cache and the Channels layer share that Redis on separate logical databases — cache on `REDIS_CACHE_DB` (default 1), channel layer on `REDIS_CHANNELS_DB` (default 0), derived from the one `REDIS_URL` by `core/redis_urls.py` — because Django's `cache.clear()` is a FLUSHDB and would otherwise drop every live WebSocket group. A Redis with a single database (e.g. Redis Cluster) needs both set to 0. Connections time out fast (`REDIS_CONNECT_TIMEOUT` 0.5s for both; `REDIS_SOCKET_TIMEOUT` 1s for the cache only, since the channel layer's receive blocks for up to 5s by design), so an unreachable Redis fails a request rather than hanging it for the OS TCP timeout. Phone verification codes use their own `otp` cache alias (same storage and keys, `accounts/otp_store.py`) and **fail closed**: if Redis can't be reached, send-code and verify — including their rate limiter — return 503, and a code is stored before it is texted, so no SMS ever carries a code that can't be checked. Besides page data, the cache holds throttle counters and phone OTPs, so any deploy with more than one worker needs Redis — otherwise limits apply per process and an OTP can be checked by a process that never stored it.
 
+**When Redis is down** (each call bounded by the timeouts above):
+
+| What | Behaviour | Why |
+|------|-----------|-----|
+| Catalog pages, other cached reads | Served uncached from the database | Default cache is `core.cache.TolerantRedisCache`: reads miss, writes skip, one warning per minute in the logs |
+| Rate limits (login, register, password reset, tokens, reviews, chat) | **Off** until Redis recovers | Their counters live in the tolerant cache; refusing every login was judged worse than a short window without limits |
+| Phone verification (send-code, verify) | 503 | Strict `otp` alias; a skipped write would text a code that can never verify |
+| Chat presence | Shows offline; sockets keep working | `chat/presence.py` degrades quietly |
+| WebSocket fan-out | Live pushes stop (REST still works) | Channel layer needs Redis |
+| `/api/ready/` | 503, `cache: unavailable` | Probes the strict alias |
+
 Caching is used on the category tree, `featured`, `bestsellers`, and per-product `related` (5-minute TTL). Every key embeds a catalog version (`catalog:cache_version`). Saving or deleting a `Product`, `ProductVariant` or `Category` bumps it in `products/signals.py`, so writes show up on the next read, and stale entries just age out.
 
 ## Realtime

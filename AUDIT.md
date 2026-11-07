@@ -50,6 +50,7 @@ meaningful functional or a11y defect · **Low** minor.
 | R-6 | Medium | Refunds | Cancel and return refunds called Stripe inside the DB transaction: a rollback after Stripe refunded left money returned with no record of it until a retry | Outbox: a pending `payments.Refund` row is written in the transaction and sent to Stripe by a Celery task after commit (row lock + idempotency key), with a Beat sweep for retries and a `failed` state after 5 attempts | `payments/tests.py` RefundOutboxTests |
 | R-7 | Medium | Auth / XSS | Access and refresh tokens sat in localStorage, so any XSS bug could read them and carry the session (7-day refresh) away | Refresh token moved to an httpOnly cookie scoped to `/api/auth/`; access token kept in memory only; cookie use requires `X-Requested-With` (CORS preflight), legacy localStorage tokens are deleted | `accounts/tests.py` RefreshCookieTests, `lib/__tests__/session.test.ts` |
 | R-8 | High | Live chat | The browser only ever opened `/ws/notifications/`, which ignores client frames and isn't in the chat groups — live messages, typing, read receipts and presence never reached the chat widget or staff inbox (messages showed only after a reload). Backend tests passed because they dialled `/ws/chat/` directly | The frontend dials `/ws/chat/`, and the chat consumer also joins the user's notification group, so one socket per tab carries both | `chat/tests.py` notification-on-chat-socket tests, `lib/__tests__/realtime.test.ts` |
+| R-9 | Medium | Availability / Redis | A Redis outage made every rate-limited endpoint (login, register, password reset, tokens) return 500, and phone verification could 500 or text an unstored code | Default cache tolerates outages (reads miss, writes skip: rate limits off, pages uncached); phone codes on a strict alias return 503 and are stored before they are texted; Redis calls time out in ~1s | `core/tests.py` RedisOutageTests, TolerantRedisCacheTests; `accounts/tests.py` PhoneOtpOutageTests |
 
 ## Verified correct
 
@@ -62,6 +63,7 @@ meaningful functional or a11y defect · **Low** minor.
 ## Unverified risks
 
 - **Permanently failed refunds**: `refunded_total` and the order/return status are set when a refund is queued. If Stripe rejects it 5 times the `payments.Refund` row is `failed` and the order timeline flags it, but the totals still count it as refunded until staff resolve it by hand.
+- **No rate limits during a Redis outage** (accepted trade-off, R-9): while Redis is down, login and password-reset attempts aren't limited. Phone verification still refuses. Alert on `/api/ready/` so the window stays short.
 
 ## Verification
 
