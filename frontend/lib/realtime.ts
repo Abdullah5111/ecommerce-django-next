@@ -30,7 +30,9 @@ function url(): string | null {
   const base = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api")
     .replace(/\/api\/?$/, "")
     .replace(/^http/, "ws");
-  return `${base}/ws/notifications/?token=${encodeURIComponent(token)}`;
+  // /ws/chat/ carries both chat and notification pushes (one socket per tab);
+  // /ws/notifications/ only pushes, and would drop every chat frame we send.
+  return `${base}/ws/chat/?token=${encodeURIComponent(token)}`;
 }
 
 function emit(msg: RealtimeMessage) {

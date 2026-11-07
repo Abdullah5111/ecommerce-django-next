@@ -13,6 +13,7 @@ from asgiref.sync import async_to_sync
 from django.db import transaction
 
 from . import push, tasks
+from .consumers import user_group
 from .models import Notification
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ def _broadcast(notification):
         if layer is None:
             return
         async_to_sync(layer.group_send)(
-            f"user_{notification.user_id}",
+            user_group(notification.user_id),
             {
                 "type": "notification",
                 "json": {

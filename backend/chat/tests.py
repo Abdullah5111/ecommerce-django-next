@@ -191,6 +191,34 @@ class ChatSocketTests(TransactionTestCase):
         self.assertFalse(connected)
         self.assertEqual(code, 4001)
 
+    async def test_notifications_arrive_on_the_chat_socket(self):
+        # The frontend opens only this socket, so it must carry notification
+        # pushes too — sent through the real notify() path.
+        from notifications.models import Notification
+        from notifications.service import notify
+
+        comm = self._comm(self.buyer)
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        await sync_to_async(notify)(
+            self.buyer, Notification.Kind.ORDER_PAID, "Order #1 confirmed", "Thanks!"
+        )
+        event = await self._recv_until(comm, lambda e: e["type"] == "notification")
+        self.assertEqual(event["notification"]["title"], "Order #1 confirmed")
+        self.assertEqual(event["unread_count"], 1)
+        await comm.disconnect()
+
+    async def test_notifications_stay_with_their_user(self):
+        from notifications.models import Notification
+        from notifications.service import notify
+
+        comm = self._comm(self.other)
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        await sync_to_async(notify)(self.buyer, Notification.Kind.ORDER_PAID, "Not yours")
+        self.assertTrue(await comm.receive_nothing(timeout=0.3))
+        await comm.disconnect()
+
     async def test_token_revoked_by_password_reset_is_rejected(self):
         from django.utils import timezone
 

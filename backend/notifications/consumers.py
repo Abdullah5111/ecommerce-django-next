@@ -3,13 +3,19 @@ from asgiref.sync import async_to_sync
 from channels.generic.websocket import JsonWebsocketConsumer
 
 
+def user_group(user_id):
+    """Per-user notification group. Joined by this consumer and by the chat
+    consumer, which is the socket the frontend actually opens."""
+    return f"user_{user_id}"
+
+
 class NotificationConsumer(JsonWebsocketConsumer):
     def connect(self):
         user = self.scope["user"]
         if not user.is_authenticated:
             self.close(code=4001)  # unauthenticated — reject the handshake
             return
-        async_to_sync(self.channel_layer.group_add)(f"user_{user.id}", self.channel_name)
+        async_to_sync(self.channel_layer.group_add)(user_group(user.id), self.channel_name)
         self.accept()
 
     def receive(self, text_data=None, bytes_data=None):
@@ -19,7 +25,7 @@ class NotificationConsumer(JsonWebsocketConsumer):
         user = self.scope["user"]
         if user.is_authenticated:
             async_to_sync(self.channel_layer.group_discard)(
-                f"user_{user.id}", self.channel_name
+                user_group(user.id), self.channel_name
             )
 
     def notification(self, event):  # dispatched by the group message's "type"

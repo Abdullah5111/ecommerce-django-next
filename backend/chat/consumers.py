@@ -1,8 +1,10 @@
 """Customer ↔ store support chat over a WebSocket.
 
-Groups: ``chat_u_<customer_id>`` (buyers join their own at connect; staff
-join by watching — membership is the authorization) and a shared
-``chat_staff`` inbox feed. Messages are created over REST; the socket
+This is the one WebSocket each browser tab opens (frontend/lib/realtime.ts):
+it carries chat and the user's notification pushes. Groups: ``chat_u_<customer_id>``
+(buyers join their own at connect; staff join by watching — membership is the
+authorization), a shared ``chat_staff`` inbox feed, and ``user_<id>`` for
+notifications. Messages are created over REST; the socket
 carries message broadcasts plus ephemeral typing / read receipts / presence.
 
 Presence (who is online) is tracked by chat/presence.py, which is per-process
@@ -17,6 +19,8 @@ from asgiref.sync import async_to_sync
 from channels.generic.websocket import JsonWebsocketConsumer
 from django.db.models import Q
 from django.utils import timezone
+
+from notifications.consumers import user_group
 
 from .models import ChatThread
 from .presence import presence
@@ -56,6 +60,9 @@ class ChatConsumer(JsonWebsocketConsumer):
         first_connection = presence.connect(user.id, self.channel_name)
         layer = self.channel_layer
         async_to_sync(layer.group_add)(thread_group(user.id), self.channel_name)
+        # The frontend opens this one socket per tab, so it also carries the
+        # user's notification pushes (same group NotificationConsumer joins).
+        async_to_sync(layer.group_add)(user_group(user.id), self.channel_name)
         if user.is_staff:  # staff only — buyers must never see other threads
             async_to_sync(layer.group_add)(STAFF_GROUP, self.channel_name)
         self.accept()
@@ -75,7 +82,7 @@ class ChatConsumer(JsonWebsocketConsumer):
                 )
         elif last_connection:  # last tab closed — offline fires once, not per tab
             self._staff_feed("chat.presence", {"user_id": user.id, "online": False})
-        groups = [thread_group(user.id)]
+        groups = [thread_group(user.id), user_group(user.id)]
         if user.is_staff:
             groups.append(STAFF_GROUP)
         for group in groups:
@@ -182,3 +189,6 @@ class ChatConsumer(JsonWebsocketConsumer):
 
     def chat_presence(self, event):
         self.send_json(event)
+
+    def notification(self, event):  # pushed by notifications.service
+        self.send_json(event["json"])
