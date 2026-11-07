@@ -331,3 +331,34 @@ class RedisOutageTests(TestCase):
         res = self.api.get("/api/ready/")
         self.assertEqual(res.status_code, 503)
         self.assertEqual(res.json()["checks"]["cache"], "unavailable")
+
+
+class ChannelLayerLimitsTests(SimpleTestCase):
+    """group_send silently drops messages beyond a socket's queue capacity.
+    The default (100) is reachable by a busy staff inbox; ours isn't."""
+
+    def test_a_burst_beyond_the_old_default_is_delivered_in_full(self):
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        layer = get_channel_layer()  # InMemory here, Redis in the Redis job
+        burst = 150
+
+        async def run():
+            channel = await layer.new_channel()
+            await layer.group_add("limits-test", channel)
+            try:
+                for i in range(burst):
+                    await layer.group_send("limits-test", {"type": "chat.typing", "n": i})
+                return [(await layer.receive(channel))["n"] for _ in range(burst)]
+            finally:
+                await layer.group_discard("limits-test", channel)
+
+        self.assertEqual(async_to_sync(run)(), list(range(burst)))
+
+    def test_group_membership_outlives_the_longest_socket(self):
+        # daphne closes sockets after websocket_timeout (default 86400s); a
+        # shorter group_expiry would drop a still-open tab from its groups.
+        from channels.layers import get_channel_layer
+
+        self.assertGreaterEqual(get_channel_layer().group_expiry, 86400)

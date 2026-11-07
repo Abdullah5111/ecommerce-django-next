@@ -201,6 +201,21 @@ if CACHES["otp"]["BACKEND"] == "core.cache.TolerantRedisCache":
 
 ASGI_APPLICATION = "core.asgi.application"
 
+# Channel layer limits, shared by both backends:
+# - capacity: messages queued per socket before group_send *silently drops*
+#   the overflow (channels-redis only logs it at INFO, surfaced below). The
+#   default 100 is reachable by a staff inbox socket, which receives every
+#   thread's messages, typing and presence while its tab is busy.
+# - expiry: seconds an undelivered message lives.
+# - group_expiry: group memberships expire after this; it must not be shorter
+#   than the longest socket (daphne's websocket_timeout, default 86400s), or
+#   a long-lived tab silently stops receiving its groups' messages.
+CHANNEL_LAYER_LIMITS = {
+    "capacity": config("CHANNEL_LAYER_CAPACITY", default=1000, cast=int),
+    "expiry": 60,
+    "group_expiry": 86400,
+}
+
 # Realtime fan-out: Redis when REDIS_URL is set (multi-process safe), else the
 # per-process InMemory layer (dev, tests, and single-process deploys).
 CHANNEL_LAYERS = {
@@ -215,11 +230,23 @@ CHANNEL_LAYERS = {
                     # timeout would break every receive.
                     "socket_connect_timeout": REDIS_CONNECT_TIMEOUT,
                 }],
+                **CHANNEL_LAYER_LIMITS,
             },
         }
         if REDIS_URL
-        else {"BACKEND": "channels.layers.InMemoryChannelLayer"}
+        else {"BACKEND": "channels.layers.InMemoryChannelLayer", "CONFIG": CHANNEL_LAYER_LIMITS}
     )
+}
+
+# channels-redis reports dropped (over-capacity) group messages at INFO, which
+# Django's default logging hides; show them.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "loggers": {
+        "channels_redis": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
 }
 
 # Background jobs: Celery on RabbitMQ. Without a broker URL tasks run inline
