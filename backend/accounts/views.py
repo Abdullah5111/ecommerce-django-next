@@ -23,7 +23,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView, TokenRefreshView
 
-from . import cookies, sms
+from . import cookies, sms, ws_tickets
 from .models import Address
 from .otp_store import OtpStoreUnavailable, PhoneRateThrottle, otp_cache
 from .serializers import (
@@ -478,6 +478,26 @@ class PhoneVerifyView(APIView):
         otp_cache.delete(key)
         otp_cache.delete(_otp_cooldown_key(user.id))
         return Response(UserSerializer(user, context={"request": request}).data)
+
+
+class WsTicketView(APIView):
+    """Trade the access token for a one-time WebSocket ticket
+    (``accounts/ws_tickets.py``), so the token never appears in a socket URL."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "ws-ticket"
+
+    def post(self, request):
+        try:
+            ticket = ws_tickets.issue(request.user)
+        except RedisError as exc:
+            logger.warning("WebSocket ticket store unavailable: %s", exc)
+            return Response(
+                {"detail": "Live updates are temporarily unavailable."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response({"ticket": ticket, "expires_in": ws_tickets.TICKET_TTL_SECONDS})
 
 
 class AddressViewSet(viewsets.ModelViewSet):

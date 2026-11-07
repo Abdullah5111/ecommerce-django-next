@@ -193,6 +193,41 @@ class ChatSocketTests(TransactionTestCase):
         self.assertFalse(connected)
         self.assertEqual(code, 4001)
 
+    async def _ticket_comm(self, user):
+        from accounts import ws_tickets
+
+        ticket = await sync_to_async(ws_tickets.issue)(user)
+        return ticket, WebsocketCommunicator(application, f"/ws/chat/?ticket={ticket}")
+
+    async def test_ticket_opens_the_socket(self):
+        _, comm = await self._ticket_comm(self.buyer)
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+        await comm.disconnect()
+
+    async def test_a_used_ticket_cannot_open_a_second_socket(self):
+        ticket, first = await self._ticket_comm(self.buyer)
+        connected, _ = await first.connect()
+        self.assertTrue(connected)
+        replay = WebsocketCommunicator(application, f"/ws/chat/?ticket={ticket}")
+        connected, code = await replay.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4001)
+        await first.disconnect()
+
+    async def test_unknown_ticket_is_refused(self):
+        comm = WebsocketCommunicator(application, "/ws/chat/?ticket=forged")
+        connected, code = await comm.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4001)
+
+    async def test_ticket_of_a_deactivated_user_is_refused(self):
+        _, comm = await self._ticket_comm(self.buyer)
+        await sync_to_async(User.objects.filter(pk=self.buyer.pk).update)(is_active=False)
+        connected, code = await comm.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4001)
+
     async def test_notifications_arrive_on_the_chat_socket(self):
         # The frontend opens only this socket, so it must carry notification
         # pushes too — sent through the real notify() path.

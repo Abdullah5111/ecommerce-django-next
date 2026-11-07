@@ -14,6 +14,7 @@ from .views import (
     ResetPasswordView,
     ThrottledLogoutView,
     VerifyEmailView,
+    WsTicketView,
 )
 
 router = DefaultRouter()
@@ -29,6 +30,7 @@ urlpatterns = [
     path("reset-password/", ResetPasswordView.as_view(), name="reset_password"),
     path("phone/send-code/", PhoneSendCodeView.as_view(), name="phone_send_code"),
     path("phone/verify/", PhoneVerifyView.as_view(), name="phone_verify"),
+    path("ws-ticket/", WsTicketView.as_view(), name="ws_ticket"),
     path("google/config/", GoogleConfigView.as_view(), name="google_config"),
     path("google/", GoogleLoginView.as_view(), name="google_login"),
     path("", include(router.urls)),

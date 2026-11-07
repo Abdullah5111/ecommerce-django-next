@@ -304,6 +304,9 @@ REST_FRAMEWORK = {
         # of wrong guesses per hour.
         "auth-phone-send": "5/hour",
         "auth-phone-verify": "10/hour",
+        # WebSocket tickets: one per (re)connect; reconnects back off, so this
+        # only stops a client stuck in a loop.
+        "ws-ticket": "60/min",
         "chat-send": "30/min",
     },
 }

@@ -729,3 +729,51 @@ class PhoneOtpOutageTests(APITestCase):
         self.assertEqual(res.status_code, 503)
         self.user.refresh_from_db()
         self.assertFalse(self.user.phone_verified)
+
+
+class WsTicketTests(APITestCase):
+    """POST /api/auth/ws-ticket/: a single-use, 30-second ticket for opening
+    the WebSocket, so the access token never appears in a socket URL."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            username="ticket", email="ticket@example.com", password="pw-123456"
+        )
+
+    def test_requires_sign_in(self):
+        self.assertEqual(self.client.post("/api/auth/ws-ticket/").status_code, 401)
+
+    def test_issues_a_ticket_for_the_caller(self):
+        from accounts import ws_tickets
+
+        self.client.force_authenticate(self.user)
+        res = self.client.post("/api/auth/ws-ticket/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["expires_in"], 30)
+        self.assertEqual(ws_tickets.consume(res.data["ticket"]), self.user.pk)
+
+    def test_a_ticket_works_once(self):
+        from accounts import ws_tickets
+
+        ticket = ws_tickets.issue(self.user)
+        self.assertEqual(ws_tickets.consume(ticket), self.user.pk)
+        self.assertIsNone(ws_tickets.consume(ticket))
+
+    def test_unknown_and_junk_tickets_are_refused(self):
+        from accounts import ws_tickets
+
+        self.assertIsNone(ws_tickets.consume("never-issued"))
+        self.assertIsNone(ws_tickets.consume(""))
+        self.assertIsNone(ws_tickets.consume("x" * 500))
+
+    def test_store_outage_is_a_503(self):
+        from django.core.cache import caches
+        from redis.exceptions import ConnectionError as RedisConnectionError
+
+        self.client.force_authenticate(self.user)
+        with patch.object(
+            type(caches["otp"]), "set", side_effect=RedisConnectionError("down")
+        ):
+            res = self.client.post("/api/auth/ws-ticket/")
+        self.assertEqual(res.status_code, 503)

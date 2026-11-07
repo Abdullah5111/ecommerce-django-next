@@ -160,6 +160,7 @@ Interactive, generated from the live code:
 | POST/DELETE | /api/auth/me/avatar/                    | JWT  | Upload (multipart `avatar`) or remove profile photo |
 | POST     | /api/auth/phone/send-code/                 | JWT  | `{phone}` → issue a one-time verification code     |
 | POST     | /api/auth/phone/verify/                    | JWT  | `{code}` → set phone + mark verified               |
+| POST     | /api/auth/ws-ticket/                       | JWT  | One-time, 30s ticket for opening the WebSocket (`/ws/chat/?ticket=`) |
 | POST     | /api/auth/verify-email/                    | —    | `{uid, token}` → mark email verified              |
 | POST     | /api/auth/forgot-password/                 | —    | `{email}` → always 200 (no email-existence leak)  |
 | POST     | /api/auth/reset-password/                  | —    | `{uid, token, new_password}` (revokes all sessions) |
