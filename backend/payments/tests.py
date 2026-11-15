@@ -921,6 +921,12 @@ class SavedCardsWithoutStripeTests(APITestCase):
         self.assertEqual(self.client.delete("/api/payments/methods/pm_1/").status_code, 503)
 
 
+# Admin pages render static links; the manifest storage needs collectstatic,
+# which tests don't run, so use plain storage here.
+@override_settings(STORAGES={
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+})
 class PaymentsAdminTests(TestCase):
     """Staff can see the refund queue and retry refunds that failed every
     attempt — before this, a failed refund was only a timeline note."""
