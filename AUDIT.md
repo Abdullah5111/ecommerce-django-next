@@ -63,7 +63,7 @@ meaningful functional or a11y defect · **Low** minor.
 
 ## Unverified risks
 
-- **Permanently failed refunds**: `refunded_total` and the order/return status are set when a refund is queued. If Stripe rejects it 5 times the `payments.Refund` row is `failed` and the order timeline flags it, but the totals still count it as refunded until staff resolve it by hand.
+- **Permanently failed refunds**: `refunded_total` and the order/return status are set when a refund is queued. If Stripe rejects it 5 times the `payments.Refund` row is `failed` and the order timeline flags it, but the totals still count it as refunded until staff resolve it. Staff find these at Admin → Payments → Refunds (filter status = failed) and can "Retry selected failed refunds" (same idempotency key, so no double refund) once the cause is fixed.
 - **No rate limits during a Redis outage** (accepted trade-off, R-9): while Redis is down, login and password-reset attempts aren't limited. Phone verification still refuses. Alert on `/api/ready/` so the window stays short.
 
 ## Verification

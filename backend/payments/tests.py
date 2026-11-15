@@ -919,3 +919,70 @@ class SavedCardsWithoutStripeTests(APITestCase):
     def test_saving_a_card_is_unavailable(self):
         self.assertEqual(self.client.post("/api/payments/methods/setup-intent/").status_code, 503)
         self.assertEqual(self.client.delete("/api/payments/methods/pm_1/").status_code, 503)
+
+
+class PaymentsAdminTests(TestCase):
+    """Staff can see the refund queue and retry refunds that failed every
+    attempt — before this, a failed refund was only a timeline note."""
+
+    def setUp(self):
+        from django.utils import timezone
+
+        self.admin = User.objects.create_superuser(
+            username="boss", email="boss@example.com", password="pw-123456"
+        )
+        self.client.force_login(self.admin)
+        buyer = User.objects.create_user(
+            username="refundee", email="refundee@example.com", password="pw-123456"
+        )
+        self.order = Order.objects.create(
+            user=buyer, shipping_address="123 Test St", total=Decimal("80.00"),
+            status=Order.Status.CANCELLED, paid_at=timezone.now(), payment_intent_id="pi_1",
+        )
+
+    def _refund(self, key, status, attempts=5):
+        from payments.models import Refund
+
+        return Refund.objects.create(
+            order=self.order, amount=Decimal("80.00"), idempotency_key=key,
+            status=status, attempts=attempts, last_error="Stripe is down",
+        )
+
+    def test_pages_load(self):
+        from payments.models import StripeEvent
+
+        self._refund("cancel-1", "failed")
+        StripeEvent.objects.create(event_id="evt_1", type="charge.refunded")
+        self.assertEqual(self.client.get("/admin/payments/refund/").status_code, 200)
+        self.assertEqual(
+            self.client.get("/admin/payments/refund/?status__exact=failed").status_code, 200
+        )
+        self.assertEqual(self.client.get("/admin/payments/stripeevent/").status_code, 200)
+
+    def test_retry_requeues_only_failed_refunds(self):
+        from payments.models import Refund
+
+        failed = self._refund("cancel-1", Refund.Status.FAILED)
+        done = self._refund("return-9", Refund.Status.SUCCEEDED, attempts=1)
+        with patch.object(gateway, "_enqueue_refund") as enqueue, \
+                self.captureOnCommitCallbacks(execute=True):
+            res = self.client.post(
+                "/admin/payments/refund/",
+                {"action": "retry_failed", "_selected_action": [failed.pk, done.pk]},
+            )
+        self.assertEqual(res.status_code, 302)
+        enqueue.assert_called_once_with(failed.pk)
+        failed.refresh_from_db()
+        self.assertEqual(failed.status, Refund.Status.PENDING)
+        self.assertEqual((failed.attempts, failed.last_error), (0, ""))
+        self.assertEqual(failed.idempotency_key, "cancel-1")  # same key: no double refund
+        done.refresh_from_db()
+        self.assertEqual(done.status, Refund.Status.SUCCEEDED)
+        self.assertTrue(self.order.events.filter(message__contains="retry requested").exists())
+
+    def test_refunds_cannot_be_added_or_deleted_by_hand(self):
+        refund = self._refund("cancel-1", "failed")
+        self.assertEqual(self.client.get("/admin/payments/refund/add/").status_code, 403)
+        self.assertEqual(
+            self.client.get(f"/admin/payments/refund/{refund.pk}/delete/").status_code, 403
+        )
