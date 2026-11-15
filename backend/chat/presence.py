@@ -76,11 +76,14 @@ class RedisPresence:
     """
 
     def __init__(self, url, *, prefix="presence:", stale_after=STALE_AFTER_SECONDS,
-                 clock=time.time, connect_timeout=0.5, socket_timeout=1.0):
+                 clock=time.time, connect_timeout=0.5, socket_timeout=1.0,
+                 **connection_options):
         import redis
 
+        # connection_options: extra redis-py keywords, e.g. TLS verification.
         self._redis = redis.Redis.from_url(
-            url, socket_connect_timeout=connect_timeout, socket_timeout=socket_timeout
+            url, socket_connect_timeout=connect_timeout, socket_timeout=socket_timeout,
+            **connection_options,
         )
         self._prefix = prefix
         self._stale_after = stale_after
@@ -155,7 +158,7 @@ class RedisPresence:
 def _build_store():
     from django.conf import settings
 
-    from core.redis_urls import with_db
+    from core.redis_urls import tls_options, with_db
 
     if not settings.REDIS_URL:
         return InMemoryPresence()
@@ -165,6 +168,7 @@ def _build_store():
         with_db(settings.REDIS_URL, settings.REDIS_CHANNELS_DB),
         connect_timeout=settings.REDIS_CONNECT_TIMEOUT,
         socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+        **tls_options(settings.REDIS_URL, settings.REDIS_SSL_CA_CERTS),
     )
 
 

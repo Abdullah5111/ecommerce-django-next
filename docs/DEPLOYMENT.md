@@ -228,11 +228,32 @@ revive stale catalog pages — and is never evicted under this policy. Evicting
 a rate-limit window or a phone code is harmless (a limit restarts; the user
 requests a new code). Don't pick an `allkeys-*` policy.
 
-**TLS.** Memorystore's in-transit encryption (`--transit-encryption-mode`) needs
-`rediss://` and the instance's own CA certificate on the client; this repo
-doesn't install that CA, so the setup above relies on the private VPC plus AUTH.
-Adding TLS means shipping the CA (`gcloud redis instances describe … --format='value(serverCaCerts[0].cert)'`)
-into the image and pointing redis-py at it.
+**TLS (optional).** To also encrypt traffic inside the VPC, create the
+instance with in-transit encryption. Clients then connect with `rediss://` on
+port 6378 and must trust the instance's own CA, which isn't in the system trust
+store. The app passes `REDIS_SSL_CA_CERTS` (a PEM path) to all three Redis
+clients — cache, channel layer and chat presence:
+
+```bash
+gcloud redis instances create ecommerce-redis … --enable-auth \
+  --transit-encryption-mode=SERVER_AUTHENTICATION
+
+# The CA, stored as a secret and mounted into the container as a file.
+gcloud redis instances describe ecommerce-redis --region=$REGION \
+  --format='value(serverCaCerts[0].cert)' \
+  | gcloud secrets create redis-ca --data-file=-
+
+echo -n "rediss://:${REDIS_AUTH}@${REDIS_HOST}:6378/0" \
+  | gcloud secrets create redis-url --data-file=-
+```
+
+Then deploy with, in addition to step 4's flags,
+`_EXTRA_SECRETS=/secrets/redis-ca/ca.pem=redis-ca:latest` (a file mount, used by
+the service and the jobs) and `REDIS_SSL_CA_CERTS=/secrets/redis-ca/ca.pem` in
+`_EXTRA_ENV`. Without the CA the TLS handshake fails verification and
+`/api/ready/` reports the cache and channel layer unavailable. Memorystore
+rotates its CA; when it does, add the new certificate as a new version of
+`redis-ca` and redeploy.
 
 **Cost (rough, us-central1 — check current pricing):** a 1 GB Basic instance
 is on the order of $35/month; the VPC connector runs at least two small

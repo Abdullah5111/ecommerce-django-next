@@ -362,3 +362,38 @@ class ChannelLayerLimitsTests(SimpleTestCase):
         from channels.layers import get_channel_layer
 
         self.assertGreaterEqual(get_channel_layer().group_expiry, 86400)
+
+
+class RedisTlsOptionsTests(SimpleTestCase):
+    """REDIS_SSL_CA_CERTS reaches redis-py only for rediss:// URLs — the plain
+    connection class rejects SSL keywords."""
+
+    def test_tls_url_with_a_ca_gets_it(self):
+        from core.redis_urls import tls_options
+
+        self.assertEqual(
+            tls_options("rediss://:pw@10.0.0.3:6378/0", "/secrets/redis-ca.pem"),
+            {"ssl_ca_certs": "/secrets/redis-ca.pem"},
+        )
+
+    def test_plain_url_or_no_ca_gets_nothing(self):
+        from core.redis_urls import tls_options
+
+        self.assertEqual(tls_options("redis://10.0.0.3:6379/0", "/secrets/redis-ca.pem"), {})
+        self.assertEqual(tls_options("rediss://10.0.0.3:6378/0", ""), {})
+
+    def test_presence_store_is_built_with_the_ca(self):
+        # Building the client doesn't connect, so no TLS server is needed.
+        from django.test import override_settings
+        from redis.connection import SSLConnection
+
+        from chat.presence import RedisPresence, _build_store
+
+        with override_settings(
+            REDIS_URL="rediss://:pw@10.0.0.3:6378/0", REDIS_SSL_CA_CERTS="/secrets/redis-ca.pem"
+        ):
+            store = _build_store()
+        self.assertIsInstance(store, RedisPresence)
+        pool = store._redis.connection_pool
+        self.assertIs(pool.connection_class, SSLConnection)
+        self.assertEqual(pool.connection_kwargs["ssl_ca_certs"], "/secrets/redis-ca.pem")

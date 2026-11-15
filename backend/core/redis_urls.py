@@ -11,3 +11,16 @@ def with_db(url: str, db: int) -> str:
     """``url`` pointed at logical database ``db`` (replacing any in its path)."""
     parts = urlsplit(url)
     return urlunsplit(parts._replace(path=f"/{db}"))
+
+
+def tls_options(url: str, ca_certs: str) -> dict:
+    """redis-py connection options for verifying a TLS server.
+
+    Only for ``rediss://`` URLs: redis-py's plain connection rejects the SSL
+    keywords outright. Memorystore's in-transit encryption uses its own CA,
+    which isn't in the system trust store, so ``ca_certs`` (a PEM path) must
+    point at it — without it the TLS handshake fails verification.
+    """
+    if ca_certs and urlsplit(url).scheme == "rediss":
+        return {"ssl_ca_certs": ca_certs}
+    return {}

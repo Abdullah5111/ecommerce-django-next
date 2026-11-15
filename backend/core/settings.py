@@ -5,6 +5,7 @@ from pathlib import Path
 from corsheaders.defaults import default_headers
 from decouple import Csv, config
 
+from core.redis_urls import tls_options as redis_tls_options
 from core.redis_urls import with_db as redis_with_db
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -160,6 +161,10 @@ REDIS_CHANNELS_DB = config("REDIS_CHANNELS_DB", default=0, cast=int)
 # timeout (minutes) instead of failing. Seconds.
 REDIS_CONNECT_TIMEOUT = config("REDIS_CONNECT_TIMEOUT", default=0.5, cast=float)
 REDIS_SOCKET_TIMEOUT = config("REDIS_SOCKET_TIMEOUT", default=1.0, cast=float)
+# PEM file of the CA that signed Redis's TLS certificate, for rediss:// URLs
+# (Memorystore in-transit encryption uses its own CA). Applied to the cache,
+# the channel layer and chat presence; ignored for plain redis://.
+REDIS_SSL_CA_CERTS = config("REDIS_SSL_CA_CERTS", default="")
 
 # Throttle counters and phone OTPs live in the cache, so with more than one
 # worker it must be shared: Redis whenever REDIS_URL is set. LocMem (per
@@ -192,6 +197,7 @@ if CACHES["default"]["BACKEND"] in REDIS_CACHE_BACKENDS:
     CACHES["default"]["OPTIONS"] = {
         "socket_connect_timeout": REDIS_CONNECT_TIMEOUT,
         "socket_timeout": REDIS_SOCKET_TIMEOUT,
+        **redis_tls_options(CACHES["default"]["LOCATION"], REDIS_SSL_CA_CERTS),
     }
 # Phone verification codes (accounts/otp_store.py): same storage and keys as
 # the default cache, but always the strict backend, so they fail closed.
@@ -229,6 +235,7 @@ CHANNEL_LAYERS = {
                     # to 5s (channels-redis brpop_timeout), so a short read
                     # timeout would break every receive.
                     "socket_connect_timeout": REDIS_CONNECT_TIMEOUT,
+                    **redis_tls_options(REDIS_URL, REDIS_SSL_CA_CERTS),
                 }],
                 **CHANNEL_LAYER_LIMITS,
             },
