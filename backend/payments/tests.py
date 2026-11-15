@@ -39,6 +39,20 @@ class GatewayUnitTests(TestCase):
         # ¥8000 must bill as 8000, not 800000.
         self.assertEqual(gateway.to_cents(Decimal("8000.00")), 8000)
 
+    @override_settings(STRIPE_CURRENCY="kwd")
+    def test_to_cents_uses_thousandths_for_three_decimal_currency(self):
+        # 12.50 KWD is 12500 fils; the old ×100 path billed 1250 (a tenth).
+        self.assertEqual(gateway.to_cents(Decimal("12.50")), 12500)
+        # Stripe requires the last digit to be 0.
+        self.assertEqual(gateway.to_cents(Decimal("0.07")) % 10, 0)
+
+    def test_from_cents_round_trips_in_every_currency_class(self):
+        for currency, amount in (("usd", "19.99"), ("jpy", "8000.00"), ("bhd", "7.35")):
+            with self.subTest(currency=currency), override_settings(STRIPE_CURRENCY=currency):
+                self.assertEqual(
+                    gateway.from_cents(gateway.to_cents(Decimal(amount))), Decimal(amount)
+                )
+
     def test_mock_mode_is_not_live_by_default(self):
         self.assertFalse(gateway.is_live())
 

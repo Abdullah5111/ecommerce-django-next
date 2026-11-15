@@ -56,7 +56,7 @@ The parts that took real thought — each is backed by tests and, where it's sub
 - **No-oversell inventory** — checkout decrements stock with an atomic conditional `UPDATE … WHERE stock >= qty` (products *and* variants); the whole order is one transaction, so a later line failing rolls back every earlier decrement.
 - **Reserve-then-release** — stock is reserved at order creation and returned by a **Celery Beat** task (`release_expired_orders`, every 5 min) that skips orders which raced out of `PENDING` instead of aborting the batch.
 - **Proportional refunds** — a return refunds the line's share of the order discount **plus the tax actually charged** on those items (shipping excluded), and the *final* return pays the exact remaining cent so rounding never strands money.
-- **Stripe hardening** — the webhook *and* the interactive pay path both verify the PaymentIntent **amount matches the order total** (not just `status == succeeded`); zero-decimal currencies (JPY/KRW) are billed as whole units, not ×100; the webhook persists the intent id so later refunds actually reach Stripe.
+- **Stripe hardening** — the webhook *and* the interactive pay path both verify the PaymentIntent **amount matches the order total** (not just `status == succeeded`); zero-decimal currencies (JPY/KRW) are billed as whole units and three-decimal ones (BHD/KWD/…) as thousandths, not ×100; the webhook persists the intent id so later refunds actually reach Stripe.
 - **Coupons** — redemption caps (`max_redemptions`, `per_user_limit`) enforced under a `SELECT … FOR UPDATE` row lock at checkout; percent discounts capped at the eligible subtotal; kind-aware validation on save.
 
 **Concurrency**

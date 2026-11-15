@@ -19,6 +19,11 @@ ZERO_DECIMAL_CURRENCIES = frozenset({
     "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
 })
 
+# Three-decimal currencies: Stripe wants ×1000, and the last digit must be 0
+# (amounts are charged to the nearest 10 minor units).
+# https://docs.stripe.com/currencies#three-decimal
+THREE_DECIMAL_CURRENCIES = frozenset({"bhd", "jod", "kwd", "omr", "tnd"})
+
 # PaymentIntent statuses that are still open and safe to hand back to the client
 # rather than creating (and orphaning) a fresh intent.
 REUSABLE_INTENT_STATUSES = frozenset(
@@ -50,25 +55,33 @@ def _stripe():
     return stripe
 
 
+def _currency():
+    return getattr(settings, "STRIPE_CURRENCY", "usd").lower()
+
+
 def to_cents(amount) -> int:
     """Convert a decimal money amount to Stripe's integer minor unit.
 
-    Zero-decimal currencies (JPY, KRW, …) are charged as whole units — using the
-    ×100 path there would bill the customer 100× the intended amount.
+    Zero-decimal currencies (JPY, KRW, …) are charged as whole units, and
+    three-decimal ones (BHD, KWD, …) as thousandths rounded to the nearest 10.
+    The ×100 path would bill the former 100× and the latter a tenth.
     """
-    # ponytail: three-decimal currencies (BHD/KWD/…) want ×1000 rounded to 10s —
-    # add that mapping if you ever configure one; ×100 is wrong for them too.
-    currency = getattr(settings, "STRIPE_CURRENCY", "usd").lower()
+    currency = _currency()
     if currency in ZERO_DECIMAL_CURRENCIES:
         return int(Decimal(amount).quantize(Decimal("1")))
+    if currency in THREE_DECIMAL_CURRENCIES:
+        # Round in hundredths, then scale: the result always ends in 0.
+        return int((Decimal(amount) * 100).quantize(Decimal("1"))) * 10
     return int((Decimal(amount) * 100).quantize(Decimal("1")))
 
 
 def from_cents(cents) -> Decimal:
     """Inverse of ``to_cents``: Stripe's integer minor unit back to a decimal amount."""
-    currency = getattr(settings, "STRIPE_CURRENCY", "usd").lower()
+    currency = _currency()
     if currency in ZERO_DECIMAL_CURRENCIES:
         return Decimal(int(cents)).quantize(Decimal("0.01"))
+    if currency in THREE_DECIMAL_CURRENCIES:
+        return (Decimal(int(cents)) / 1000).quantize(Decimal("0.01"))
     return (Decimal(int(cents)) / 100).quantize(Decimal("0.01"))
 
 
