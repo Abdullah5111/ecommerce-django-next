@@ -19,7 +19,7 @@ from channels.generic.websocket import JsonWebsocketConsumer
 from django.db.models import Q
 from django.utils import timezone
 
-from notifications.consumers import user_group
+from notifications.groups import user_group
 
 from .models import ChatThread
 from .presence import presence
@@ -60,7 +60,7 @@ class ChatConsumer(JsonWebsocketConsumer):
         layer = self.channel_layer
         async_to_sync(layer.group_add)(thread_group(user.id), self.channel_name)
         # The frontend opens this one socket per tab, so it also carries the
-        # user's notification pushes (same group NotificationConsumer joins).
+        # user's notification pushes (notifications.groups.user_group).
         async_to_sync(layer.group_add)(user_group(user.id), self.channel_name)
         if user.is_staff:  # staff only — buyers must never see other threads
             async_to_sync(layer.group_add)(STAFF_GROUP, self.channel_name)

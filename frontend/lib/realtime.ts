@@ -40,8 +40,7 @@ function url(ticket: string): string {
   const base = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api")
     .replace(/\/api\/?$/, "")
     .replace(/^http/, "ws");
-  // /ws/chat/ carries both chat and notification pushes (one socket per tab);
-  // /ws/notifications/ only pushes, and would drop every chat frame we send.
+  // /ws/chat/ is the one socket per tab: chat and notification pushes.
   // A one-time ticket, not the access token: URLs end up in access logs.
   return `${base}/ws/chat/?ticket=${encodeURIComponent(ticket)}`;
 }

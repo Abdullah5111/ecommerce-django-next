@@ -329,7 +329,8 @@ class PushApiTests(APITestCase):
 
 
 class WebSocketPushTests(TransactionTestCase):
-    """The /ws/notifications/ socket: token auth, live push, group isolation.
+    """Notification pushes over the browser's socket (/ws/chat/): ticket auth,
+    live push, group isolation.
 
     TransactionTestCase, not TestCase: the socket handshake hits the DB from
     the middleware's database_sync_to_async path, which needs a real
@@ -347,7 +348,7 @@ class WebSocketPushTests(TransactionTestCase):
     def _comm(self, user):
         # The communicator parses the query out of the path into scope["query_string"].
         ticket = ws_tickets.issue(user)
-        return WebsocketCommunicator(application, f"/ws/notifications/?ticket={ticket}")
+        return WebsocketCommunicator(application, f"/ws/chat/?ticket={ticket}")
 
     async def test_connects_with_a_ticket_and_receives_broadcast(self):
         comm = self._comm(self.user)
@@ -364,13 +365,13 @@ class WebSocketPushTests(TransactionTestCase):
         await comm.disconnect()
 
     async def test_missing_ticket_rejected(self):
-        comm = WebsocketCommunicator(application, "/ws/notifications/")
+        comm = WebsocketCommunicator(application, "/ws/chat/")
         connected, code = await comm.connect()
         self.assertFalse(connected)
         self.assertEqual(code, 4001)
 
     async def test_unknown_ticket_rejected(self):
-        comm = WebsocketCommunicator(application, "/ws/notifications/?ticket=not-issued")
+        comm = WebsocketCommunicator(application, "/ws/chat/?ticket=not-issued")
         connected, code = await comm.connect()
         self.assertFalse(connected)
         self.assertEqual(code, 4001)
@@ -378,7 +379,7 @@ class WebSocketPushTests(TransactionTestCase):
     async def test_access_token_in_the_url_is_refused(self):
         # Even a valid JWT: tokens in socket URLs end up in access logs.
         token = AccessToken.for_user(self.user)
-        comm = WebsocketCommunicator(application, f"/ws/notifications/?token={token}")
+        comm = WebsocketCommunicator(application, f"/ws/chat/?token={token}")
         connected, code = await comm.connect()
         self.assertFalse(connected)
         self.assertEqual(code, 4001)

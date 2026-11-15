@@ -1,6 +1,8 @@
-"""Aggregated websocket routes — served under the shared JWT auth middleware
-by core.asgi."""
-from chat.routing import websocket_urlpatterns as chat_routes
-from notifications.routing import websocket_urlpatterns as notification_routes
+"""Websocket routes — served under the ticket auth middleware by core.asgi.
 
-websocket_urlpatterns = notification_routes + chat_routes
+There is one: ``ws/chat/``, the socket each browser tab opens. It carries chat
+and the user's notification pushes (chat/consumers.py).
+"""
+from chat.routing import websocket_urlpatterns
+
+__all__ = ["websocket_urlpatterns"]

@@ -52,7 +52,6 @@ describe("realtime socket", () => {
     expect(mocks.createWsTicket).toHaveBeenCalledWith("access-jwt");
     expect(FakeSocket.instances).toHaveLength(1);
     const { url } = FakeSocket.instances[0];
-    // /ws/notifications/ drops every client frame — chat would be dead there.
     expect(url).toMatch(/\/ws\/chat\/\?ticket=t1$/);
     expect(url).not.toContain("access-jwt");
   });

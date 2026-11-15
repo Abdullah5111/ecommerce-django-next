@@ -267,7 +267,7 @@ Customer↔store messaging with a shared staff inbox.
 | POST   | /api/chat/messages/           | JWT      | Send (`{body}`; staff add `thread`) — throttled 30/min                  |
 | GET    | /api/chat/threads/            | Staff    | Inbox: all threads + unread + last-message preview                      |
 
-Realtime push: **`/ws/notifications/?token=<access>`** (WebSocket). Browsers can't send an `Authorization` header on a WS handshake, so the access token goes as a query param and is validated by `notifications/middleware.py` (anonymous → close 4001). On every `notify()` the server pushes `{"type": "notification", "notification": {...}, "unread_count": N}`; on reconnect clients re-fetch `unread_count` over REST as catch-up.
+Realtime push: **`/ws/chat/?ticket=<one-time ticket>`** (WebSocket), the one socket each tab opens for chat and notifications. Browsers can't send an `Authorization` header on a WS handshake, so the client first gets a single-use, 30-second ticket from `POST /api/auth/ws-ticket/` and `notifications/middleware.py` redeems it (anything else → close 4001). On every `notify()` the server pushes `{"type": "notification", "notification": {...}, "unread_count": N}`; on reconnect clients re-fetch `unread_count` over REST as catch-up.
 
 </details>
 

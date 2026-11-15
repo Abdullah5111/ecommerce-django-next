@@ -13,7 +13,7 @@ from asgiref.sync import async_to_sync
 from django.db import transaction
 
 from . import push, tasks
-from .consumers import user_group
+from .groups import user_group
 from .models import Notification
 
 logger = logging.getLogger(__name__)
