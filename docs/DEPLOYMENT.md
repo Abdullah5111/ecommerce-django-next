@@ -115,7 +115,7 @@ is set. Setup: step 6, "Redis (Memorystore)".
 Running with `DEBUG` off and no `REDIS_URL` raises system-check warning
 `core.W001` (in `migrate`, `check --deploy`, the migration job's logs) and logs
 the same warning when the server starts. For a deliberate single-instance
-deploy, silence it with `SILENCED_SYSTEM_CHECKS = ["core.W001"]`.
+deploy, silence it with `SILENCED_SYSTEM_CHECKS_EXTRA=core.W001` in `_EXTRA_ENV`.
 
 If Redis goes down after deploy, the site keeps serving: cached pages come
 from the database and **rate limits switch off** until Redis recovers (a

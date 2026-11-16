@@ -81,6 +81,19 @@ jobs:
         working-directory: backend
         run: pip install ruff==0.7.4 && ruff check .
 
+      - name: Production settings checklist (check --deploy)
+        if: matrix.cache == 'in-memory'
+        working-directory: backend
+        # Django's own deploy checklist against production-shaped settings;
+        # any warning fails, so the HTTPS/cookie/HSTS settings can't regress.
+        env:
+          DEBUG: "false"
+          SECURE_SSL_REDIRECT: "true"
+          REDIS_URL: redis://localhost:6379/0  # only read, never dialled here
+        run: >-
+          SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
+          python manage.py check --deploy --fail-level WARNING
+
       - name: Check models and migrations agree
         if: matrix.cache == 'in-memory'
         working-directory: backend

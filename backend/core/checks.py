@@ -7,7 +7,7 @@ twice: as system check core.W001 (runserver, migrate, check --deploy) and as a
 log line when the ASGI app starts, because daphne never runs system checks.
 
 An intentional single-process deploy can silence it with
-``SILENCED_SYSTEM_CHECKS = ["core.W001"]``.
+``SILENCED_SYSTEM_CHECKS_EXTRA=core.W001`` in the environment.
 """
 import logging
 

@@ -39,6 +39,11 @@ CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=not DEBUG, cast=bool)
 SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=0 if DEBUG else 3600, cast=int)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = config("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False, cast=bool)
 SECURE_HSTS_PRELOAD = config("SECURE_HSTS_PRELOAD", default=False, cast=bool)
+# `check --deploy` (run in CI) warns while subdomains/preload are off; that is
+# a deliberate default here (see HSTS above), not an oversight.
+SILENCED_SYSTEM_CHECKS = ["security.W005", "security.W021"] + config(
+    "SILENCED_SYSTEM_CHECKS_EXTRA", default="", cast=Csv()
+)  # e.g. core.W001 for a deliberate single-instance deploy without Redis
 
 INSTALLED_APPS = [
     # daphne must be first so its runserver (ASGI) wins over staticfiles'.
