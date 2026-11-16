@@ -9,6 +9,7 @@ import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
 import Avatar from "@/components/Avatar";
 import AccountCard from "@/components/AccountCard";
+import ResendVerificationButton from "@/components/ResendVerificationButton";
 
 export default function AccountHubPage() {
   const { user, loading } = useAuth();
@@ -51,9 +52,12 @@ export default function AccountHubPage() {
                 Verified
               </span>
             ) : (
-              <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
-                Not verified
-              </span>
+              <>
+                <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                  Not verified
+                </span>
+                <ResendVerificationButton />
+              </>
             )}
           </div>
         </div>

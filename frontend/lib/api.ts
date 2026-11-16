@@ -834,6 +834,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ uid, token, new_password }),
     }),
+  resendVerification: (token: string) =>
+    request<{ detail: string }>(`/auth/resend-verification/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
   verifyEmail: (uid: string, token: string) =>
     request<{ detail: string }>(`/auth/verify-email/`, {
       method: "POST",

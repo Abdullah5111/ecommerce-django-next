@@ -10,6 +10,7 @@ import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/lib/useToast";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
+import ResendVerificationButton from "@/components/ResendVerificationButton";
 
 function Badge({ ok, okText, badText }: { ok: boolean; okText: string; badText: string }) {
   return ok ? (
@@ -48,7 +49,10 @@ export default function SecurityPage() {
 
       <div className="border rounded-lg divide-y">
         <Row label="Email" value={me.email}>
-          <Badge ok={me.email_verified} okText="Verified" badText="Not verified" />
+          <span className="flex items-center gap-2">
+            <Badge ok={me.email_verified} okText="Verified" badText="Not verified" />
+            {!me.email_verified && <ResendVerificationButton />}
+          </span>
         </Row>
         <Row label="Phone" value={me.phone || "Not added"}>
           {me.phone ? (
