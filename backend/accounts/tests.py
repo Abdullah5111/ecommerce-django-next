@@ -787,3 +787,79 @@ class WsTicketTests(APITestCase):
         User.objects.filter(pk=self.user.pk).update(tokens_valid_after=timezone.now())
         res = self.client.post("/api/auth/ws-ticket/", HTTP_AUTHORIZATION=f"Bearer {token}")
         self.assertEqual(res.status_code, 401)
+
+
+class ChangePasswordTests(APITestCase):
+    """POST /api/auth/change-password/: signed in, current password required,
+    every other session ends, and this browser gets a fresh one."""
+
+    URL = "/api/auth/change-password/"
+    OLD, NEW = "old-pw-12345", "n3w-pass-phrase-77"
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            username="changer", email="changer@example.com", password=self.OLD
+        )
+
+    def _old_session(self):
+        """An access + refresh pair issued a while ago (another device)."""
+        import time
+
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        refresh = RefreshToken.for_user(self.user)
+        access = refresh.access_token
+        access["iat"] = int(time.time()) - 10
+        return str(access), str(refresh)
+
+    def _change(self, access, current=OLD, new=NEW):
+        return self.client.post(
+            self.URL,
+            {"current_password": current, "new_password": new},
+            format="json",
+            HTTP_AUTHORIZATION=f"Bearer {access}",
+        )
+
+    def test_requires_sign_in(self):
+        self.assertEqual(self.client.post(self.URL, {}, format="json").status_code, 401)
+
+    def test_wrong_current_password_is_refused(self):
+        access, _ = self._old_session()
+        res = self._change(access, current="not-it")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("current_password", res.data)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.OLD))
+
+    def test_new_password_must_pass_the_rules_and_differ(self):
+        access, _ = self._old_session()
+        self.assertIn("new_password", self._change(access, new="password").data)  # too common
+        self.assertIn("new_password", self._change(access, new=self.OLD).data)
+
+    def test_change_ends_other_sessions_and_keeps_this_one(self):
+        old_access, old_refresh = self._old_session()
+        res = self._change(old_access)
+        self.assertEqual(res.status_code, 200)
+        self.assertNotIn("refresh", res.data)  # the fresh one is in the cookie
+        self.assertTrue(res.cookies["refresh_token"]["httponly"])
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.NEW))
+        # Other sessions are over...
+        me = self.client.get("/api/auth/me/", HTTP_AUTHORIZATION=f"Bearer {old_access}")
+        self.assertEqual(me.status_code, 401)
+        self.client.cookies.clear()
+        reuse = self.client.post("/api/auth/token/refresh/", {"refresh": old_refresh})
+        self.assertEqual(reuse.status_code, 401)
+        # ...but the access token handed back works.
+        fresh = self.client.get(
+            "/api/auth/me/", HTTP_AUTHORIZATION=f"Bearer {res.data['access']}"
+        )
+        self.assertEqual(fresh.status_code, 200)
+
+    def test_google_only_account_must_use_forgot_password(self):
+        self.user.set_unusable_password()
+        self.user.save()
+        access, _ = self._old_session()
+        self.assertEqual(self._change(access, current="").status_code, 400)

@@ -2,6 +2,7 @@ import hmac
 import logging
 import re
 import secrets
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -331,19 +332,65 @@ class ResetPasswordView(APIView):
             )
         user.set_password(new_password)
         # A reset is often triggered because the account is compromised, so kill
-        # every existing session: access tokens issued so far stop working
-        # (RevocableJWTAuthentication), and outstanding refresh tokens are
-        # blacklisted so none can mint a new one.
-        user.tokens_valid_after = timezone.now()
-        user.save()
-        from rest_framework_simplejwt.token_blacklist.models import (
-            BlacklistedToken,
-            OutstandingToken,
-        )
-
-        for token in OutstandingToken.objects.filter(user=user):
-            BlacklistedToken.objects.get_or_create(token=token)
+        # every existing session.
+        _end_all_sessions(user, timezone.now())
         return Response({"detail": "Password reset"})
+
+
+def _end_all_sessions(user, cutoff):
+    """Sign ``user`` out everywhere and save them: access tokens issued at or
+    before ``cutoff`` stop working (RevocableJWTAuthentication), and every
+    outstanding refresh token is blacklisted so none can mint a new one."""
+    from rest_framework_simplejwt.token_blacklist.models import (
+        BlacklistedToken,
+        OutstandingToken,
+    )
+
+    user.tokens_valid_after = cutoff
+    user.save()
+    for token in OutstandingToken.objects.filter(user=user):
+        BlacklistedToken.objects.get_or_create(token=token)
+
+
+class ChangePasswordView(APIView):
+    """Change the password while signed in. Signs out every other session and
+    hands this browser a fresh one, so the user stays signed in here."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-password"
+
+    def post(self, request):
+        user = request.user
+        current = request.data.get("current_password") or ""
+        new_password = request.data.get("new_password") or ""
+        if not user.has_usable_password() or not user.check_password(current):
+            # Google-only accounts have no usable password: they set one via
+            # forgot-password, which proves control of the email.
+            return Response(
+                {"current_password": ["Your current password is incorrect."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if new_password == current:
+            return Response(
+                {"new_password": ["Choose a password different from the current one."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            validate_password(new_password, user)
+        except ValidationError as e:
+            return Response(
+                {"new_password": list(e.messages)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        user.set_password(new_password)
+        # One second back: token iat has one-second resolution and anything
+        # issued at or before the cutoff is refused, so a cutoff of "now"
+        # would also refuse the fresh token minted just below.
+        _end_all_sessions(user, timezone.now() - timedelta(seconds=1))
+        refresh = RefreshToken.for_user(user)
+        return cookies.move_refresh_to_cookie(
+            Response({"access": str(refresh.access_token), "refresh": str(refresh)})
+        )
 
 
 OTP_TTL = 600  # code is valid for 10 minutes

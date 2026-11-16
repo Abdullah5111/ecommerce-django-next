@@ -164,6 +164,7 @@ Interactive, generated from the live code:
 | POST     | /api/auth/verify-email/                    | —    | `{uid, token}` → mark email verified              |
 | POST     | /api/auth/forgot-password/                 | —    | `{email}` → always 200 (no email-existence leak)  |
 | POST     | /api/auth/reset-password/                  | —    | `{uid, token, new_password}` (revokes all sessions) |
+| POST     | /api/auth/change-password/                 | JWT  | `{current_password, new_password}` → signs out every other session, returns a fresh one for this browser |
 | GET/POST | /api/auth/addresses/                       | JWT  | List my addresses / create a new one              |
 | GET/PUT/PATCH/DELETE | /api/auth/addresses/{id}/      | JWT  | Address detail / update / delete                  |
 | POST     | /api/auth/addresses/{id}/set-default/      | JWT  | Mark address as default shipping                  |
