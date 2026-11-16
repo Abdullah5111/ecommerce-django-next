@@ -397,3 +397,34 @@ class RedisTlsOptionsTests(SimpleTestCase):
         pool = store._redis.connection_pool
         self.assertIs(pool.connection_class, SSLConnection)
         self.assertEqual(pool.connection_kwargs["ssl_ca_certs"], "/secrets/redis-ca.pem")
+
+
+class HttpsHardeningTests(SimpleTestCase):
+    """Production HTTPS behaviour (CI turns the redirect off globally because
+    the test client speaks plain HTTP; these tests turn it back on)."""
+
+    PROXY = ("HTTP_X_FORWARDED_PROTO", "https")
+
+    def test_plain_http_is_redirected_to_https(self):
+        from django.test import override_settings
+
+        with override_settings(SECURE_SSL_REDIRECT=True, SECURE_PROXY_SSL_HEADER=self.PROXY):
+            res = self.client.get("/api/products/")
+        self.assertEqual(res.status_code, 301)
+        self.assertTrue(res["Location"].startswith("https://"))
+
+    def test_requests_the_proxy_marks_https_are_served(self):
+        from django.test import override_settings
+
+        with override_settings(
+            SECURE_SSL_REDIRECT=True, SECURE_PROXY_SSL_HEADER=self.PROXY, SECURE_HSTS_SECONDS=3600
+        ):
+            res = self.client.get("/api/health/", HTTP_X_FORWARDED_PROTO="https")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res["Strict-Transport-Security"], "max-age=3600")
+
+    def test_probes_are_exempt_from_the_redirect(self):
+        from django.test import override_settings
+
+        with override_settings(SECURE_SSL_REDIRECT=True, SECURE_PROXY_SSL_HEADER=self.PROXY):
+            self.assertEqual(self.client.get("/api/health/").status_code, 200)

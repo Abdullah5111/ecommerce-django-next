@@ -315,6 +315,21 @@ the storefront, so the two must be able to share it:
   `_EXTRA_ENV`; browsers that block third-party cookies (Safari by default)
   will still drop it, and those users are signed out on every page load.
 
+## HTTPS
+
+With `DEBUG` off the backend redirects plain HTTP to HTTPS, marks its session
+and CSRF cookies Secure, and sends HSTS. It trusts Cloud Run's
+`X-Forwarded-Proto` to tell which requests arrived over HTTPS
+(`SECURE_TRUST_FORWARDED_PROTO`; turn it off if nothing in front of daphne
+sets that header). `/api/health/` and `/api/ready/` are exempt from the
+redirect for internal probes.
+
+HSTS starts at **1 hour** (`SECURE_HSTS_SECONDS=3600`). Once every part of the
+domain is served over HTTPS, raise it to a year via `_EXTRA_ENV`
+(`SECURE_HSTS_SECONDS=31536000`, and `SECURE_HSTS_INCLUDE_SUBDOMAINS=true` if
+all subdomains are HTTPS too). Browsers remember the max-age, so a long value
+is hard to take back.
+
 ## Health and readiness
 
 - `GET /api/health/` — liveness: the process is up. Touches nothing, so a

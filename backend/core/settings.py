@@ -23,6 +23,23 @@ if not DEBUG and SECRET_KEY == "dev-insecure-change-me":
         "before running with DEBUG=False."
     )
 
+# HTTPS hardening, on whenever DEBUG is off; each one can be overridden.
+# Behind Cloud Run (or any TLS-terminating proxy) the app sees plain HTTP plus
+# X-Forwarded-Proto, so trust that header — only safe when the proxy sets it
+# (disable SECURE_TRUST_FORWARDED_PROTO if daphne is exposed directly).
+if config("SECURE_TRUST_FORWARDED_PROTO", default=not DEBUG, cast=bool):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool)
+# Platform probes often call these over plain HTTP inside the network.
+SECURE_REDIRECT_EXEMPT = [r"^api/health/$", r"^api/ready/$"]
+SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=not DEBUG, cast=bool)
+CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=not DEBUG, cast=bool)
+# HSTS starts short (1h): a long max-age is hard to take back if some part of
+# the domain isn't on HTTPS yet. Raise to 31536000 (1 year) once it is.
+SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=0 if DEBUG else 3600, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False, cast=bool)
+SECURE_HSTS_PRELOAD = config("SECURE_HSTS_PRELOAD", default=False, cast=bool)
+
 INSTALLED_APPS = [
     # daphne must be first so its runserver (ASGI) wins over staticfiles'.
     "daphne",

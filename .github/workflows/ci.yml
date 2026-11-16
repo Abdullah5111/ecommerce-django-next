@@ -52,6 +52,8 @@ jobs:
     env:
       SECRET_KEY: ci-only-not-a-real-secret
       PAYMENTS_MOCK: "true"
+      # The test client speaks plain HTTP; the HTTPS redirect is tested on its own.
+      SECURE_SSL_REDIRECT: "false"
       DB_ENGINE: postgres
       DB_NAME: ecommerce
       DB_USER: ecommerce
