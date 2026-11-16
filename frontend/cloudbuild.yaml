@@ -30,12 +30,14 @@ steps:
       - --platform=managed
       - --allow-unauthenticated
       # Server-side rendering calls the API from inside Cloud Run.
-      - --set-env-vars=INTERNAL_API_URL=${_API_URL}
+      # SITE_URL: the public origin used in robots.txt and sitemap.xml.
+      - --set-env-vars=INTERNAL_API_URL=${_API_URL},SITE_URL=${_SITE_URL}
 
 substitutions:
   _REGION: us-central1
   _REPO: ecommerce
   _API_URL: https://ecommerce-backend-XXXX.us-central1.run.app/api
+  _SITE_URL: https://ecommerce-frontend-XXXX.us-central1.run.app
 
 options:
   logging: CLOUD_LOGGING_ONLY

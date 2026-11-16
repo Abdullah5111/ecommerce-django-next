@@ -295,7 +295,7 @@ Docker build and also sets `INTERNAL_API_URL` for server-side rendering:
 ```bash
 gcloud builds submit \
   --config frontend/cloudbuild.yaml \
-  --substitutions=_REGION=$REGION,_REPO=$REPO,_API_URL=https://<backend-host>/api
+  --substitutions=_REGION=$REGION,_REPO=$REPO,_API_URL=https://<backend-host>/api,_SITE_URL=https://<frontend-host>
 ```
 
 ## 8. Wire CORS
