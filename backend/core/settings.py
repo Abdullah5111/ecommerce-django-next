@@ -328,6 +328,7 @@ REST_FRAMEWORK = {
         "auth-password": "10/hour",
         # Resending the verification email: each one is a real email out.
         "auth-verify-resend": "3/hour",
+        "avatar-upload": "20/hour",
         # Token refresh + logout. Generous: access tokens last 2h, so a real
         # client refreshes rarely; this only stops scripted hammering.
         "auth-token": "30/min",

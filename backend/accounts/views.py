@@ -86,6 +86,9 @@ class MeView(generics.RetrieveUpdateAPIView):
 
 class AvatarView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    # Each upload is decoded by Pillow and written to storage: cap it.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "avatar-upload"
     parser_classes = [MultiPartParser, FormParser]
 
     MAX_BYTES = 2 * 1024 * 1024  # 2 MB

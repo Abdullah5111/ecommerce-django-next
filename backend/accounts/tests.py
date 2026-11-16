@@ -911,3 +911,35 @@ class ResendVerificationTests(APITestCase):
             self.client.force_authenticate(self.user)
             self.assertEqual(self.client.post(self.URL).status_code, 200)
             self.assertEqual(self.client.post(self.URL).status_code, 429)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class AvatarUploadThrottleTests(APITestCase):
+    """Each avatar upload is decoded by Pillow and stored, so it's rate-limited."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            username="selfie", email="selfie@example.com", password="pw-123456"
+        )
+        self.client.force_authenticate(self.user)
+
+    def _upload(self):
+        return self.client.post(
+            "/api/auth/me/avatar/", {"avatar": make_image()}, format="multipart"
+        )
+
+    def test_uploads_are_capped(self):
+        with patch.dict(ScopedRateThrottle.THROTTLE_RATES, {"avatar-upload": "2/hour"}):
+            self.assertEqual(self._upload().status_code, 200)
+            self.assertEqual(self._upload().status_code, 200)
+            self.assertEqual(self._upload().status_code, 429)
+
+    def test_limits_are_per_user(self):
+        with patch.dict(ScopedRateThrottle.THROTTLE_RATES, {"avatar-upload": "1/hour"}):
+            self.assertEqual(self._upload().status_code, 200)
+            other = User.objects.create_user(
+                username="selfie2", email="selfie2@example.com", password="pw-123456"
+            )
+            self.client.force_authenticate(other)
+            self.assertEqual(self._upload().status_code, 200)
