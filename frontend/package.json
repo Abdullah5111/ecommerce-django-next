@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@stripe/react-stripe-js": "2.7.1",
+    "@stripe/react-stripe-js": "7.0.1",
     "@stripe/stripe-js": "3.5.0",
     "next": "14.2.3",
     "react": "18.3.1",
