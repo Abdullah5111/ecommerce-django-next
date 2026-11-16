@@ -8,6 +8,8 @@ import { useRouter } from "next/navigation";
 import { api, type Me } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
+import { useToast } from "@/lib/useToast";
+import ChangePasswordForm from "@/components/ChangePasswordForm";
 
 function Badge({ ok, okText, badText }: { ok: boolean; okText: string; badText: string }) {
   return ok ? (
@@ -25,6 +27,8 @@ export default function SecurityPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
   const [me, setMe] = useState<Me | null>(null);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!loading && !user) router.push("/login?next=/account/security");
@@ -56,11 +60,28 @@ export default function SecurityPage() {
           )}
         </Row>
         <Row label="Password" value="••••••••">
-          <Link href="/forgot-password" className="text-sm underline text-zinc-600">
-            Change
-          </Link>
+          {!changingPassword && (
+            <button
+              onClick={() => setChangingPassword(true)}
+              className="text-sm underline text-zinc-600"
+            >
+              Change
+            </button>
+          )}
         </Row>
       </div>
+
+      {changingPassword && (
+        <div className="border rounded-lg p-4 mt-4">
+          <ChangePasswordForm
+            onDone={() => {
+              setChangingPassword(false);
+              toast("Password changed. Other devices have been signed out.", "success");
+            }}
+            onCancel={() => setChangingPassword(false)}
+          />
+        </div>
+      )}
 
       <p className="text-sm text-zinc-500 mt-4">
         Manage your profile photo and personal details on the{" "}

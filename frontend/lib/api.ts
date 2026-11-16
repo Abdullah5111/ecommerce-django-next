@@ -820,6 +820,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email }),
     }),
+  // Signs out every other session; the fresh refresh token for this browser
+  // arrives as the httpOnly cookie (hence credentials), the access in the body.
+  changePassword: (token: string, current_password: string, new_password: string) =>
+    request<{ access: string }>(`/auth/change-password/`, {
+      method: "POST",
+      credentials: "include",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ current_password, new_password }),
+    }),
   resetPassword: (uid: string, token: string, new_password: string) =>
     request<{ detail: string }>(`/auth/reset-password/`, {
       method: "POST",
