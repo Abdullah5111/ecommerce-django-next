@@ -79,7 +79,7 @@ jobs:
       - name: Lint (ruff)
         if: matrix.cache == 'in-memory'  # same code either way; lint once
         working-directory: backend
-        run: pip install ruff==0.7.4 && ruff check .
+        run: pip install ruff==0.17.3 && ruff check .
 
       - name: Production settings checklist (check --deploy)
         if: matrix.cache == 'in-memory'
