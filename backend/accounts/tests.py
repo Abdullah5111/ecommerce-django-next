@@ -863,3 +863,51 @@ class ChangePasswordTests(APITestCase):
         self.user.save()
         access, _ = self._old_session()
         self.assertEqual(self._change(access, current="").status_code, 400)
+
+
+@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+class ResendVerificationTests(APITestCase):
+    URL = "/api/auth/resend-verification/"
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            username="unverified", email="unverified@example.com", password="pw-123456"
+        )
+
+    def test_requires_sign_in(self):
+        self.assertEqual(self.client.post(self.URL).status_code, 401)
+
+    def test_sends_a_working_link(self):
+        from urllib.parse import parse_qs, urlsplit
+
+        from django.core import mail
+
+        self.client.force_authenticate(self.user)
+        res = self.client.post(self.URL)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["unverified@example.com"])
+        link = mail.outbox[0].body.split("Click to verify: ", 1)[1].strip()
+        params = parse_qs(urlsplit(link).query)
+        verify = self.client.post(
+            "/api/auth/verify-email/", {"uid": params["uid"][0], "token": params["token"][0]}
+        )
+        self.assertEqual(verify.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.email_verified)
+
+    def test_already_verified_sends_nothing(self):
+        from django.core import mail
+
+        self.user.email_verified = True
+        self.user.save()
+        self.client.force_authenticate(self.user)
+        self.assertEqual(self.client.post(self.URL).status_code, 200)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_is_rate_limited(self):
+        with patch.dict(ScopedRateThrottle.THROTTLE_RATES, {"auth-verify-resend": "1/hour"}):
+            self.client.force_authenticate(self.user)
+            self.assertEqual(self.client.post(self.URL).status_code, 200)
+            self.assertEqual(self.client.post(self.URL).status_code, 429)

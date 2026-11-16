@@ -162,6 +162,7 @@ Interactive, generated from the live code:
 | POST     | /api/auth/phone/verify/                    | JWT  | `{code}` → set phone + mark verified               |
 | POST     | /api/auth/ws-ticket/                       | JWT  | One-time, 30s ticket for opening the WebSocket (`/ws/chat/?ticket=`) |
 | POST     | /api/auth/verify-email/                    | —    | `{uid, token}` → mark email verified              |
+| POST     | /api/auth/resend-verification/            | JWT  | Email a fresh verification link (3/hour; no-op once verified) |
 | POST     | /api/auth/forgot-password/                 | —    | `{email}` → always 200 (no email-existence leak)  |
 | POST     | /api/auth/reset-password/                  | —    | `{uid, token, new_password}` (revokes all sessions) |
 | POST     | /api/auth/change-password/                 | JWT  | `{current_password, new_password}` → signs out every other session, returns a fresh one for this browser |

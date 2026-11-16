@@ -45,17 +45,35 @@ class RegisterView(generics.CreateAPIView):
     throttle_scope = "auth-register"
 
     def perform_create(self, serializer):
-        user = serializer.save()
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        token = default_token_generator.make_token(user)
-        link = f"{settings.FRONTEND_URL}/verify-email?uid={uid}&token={token}"
-        send_mail(
-            "Verify your email",
-            f"Click to verify: {link}",
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email],
-            fail_silently=True,
-        )
+        _send_verification_email(serializer.save())
+
+
+def _send_verification_email(user):
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    link = f"{settings.FRONTEND_URL}/verify-email?uid={uid}&token={token}"
+    send_mail(
+        "Verify your email",
+        f"Click to verify: {link}",
+        settings.DEFAULT_FROM_EMAIL,
+        [user.email],
+        fail_silently=True,
+    )
+
+
+class ResendVerificationView(APIView):
+    """Send a fresh verification link — the first one can get lost or expire.
+    A no-op once the email is verified."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth-verify-resend"
+
+    def post(self, request):
+        if request.user.email_verified:
+            return Response({"detail": "Your email is already verified."})
+        _send_verification_email(request.user)
+        return Response({"detail": f"We've sent a new link to {request.user.email}."})
 
 
 class MeView(generics.RetrieveUpdateAPIView):

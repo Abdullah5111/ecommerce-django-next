@@ -12,6 +12,7 @@ from .views import (
     PhoneSendCodeView,
     PhoneVerifyView,
     RegisterView,
+    ResendVerificationView,
     ResetPasswordView,
     ThrottledLogoutView,
     VerifyEmailView,
@@ -27,6 +28,9 @@ urlpatterns = [
     path("me/avatar/", AvatarView.as_view(), name="avatar"),
     path("logout/", ThrottledLogoutView.as_view(), name="logout"),
     path("verify-email/", VerifyEmailView.as_view(), name="verify_email"),
+    path(
+        "resend-verification/", ResendVerificationView.as_view(), name="resend_verification"
+    ),
     path("forgot-password/", ForgotPasswordView.as_view(), name="forgot_password"),
     path("reset-password/", ResetPasswordView.as_view(), name="reset_password"),
     path("change-password/", ChangePasswordView.as_view(), name="change_password"),
