@@ -1000,6 +1000,16 @@ class PaymentsAdminTests(TestCase):
         self.assertEqual(done.status, Refund.Status.SUCCEEDED)
         self.assertTrue(self.order.events.filter(message__contains="retry requested").exists())
 
+    def test_order_page_lists_its_refunds(self):
+        refund = self._refund("cancel-1", "failed")
+        res = self.client.get(f"/admin/orders/order/{self.order.pk}/change/")
+        self.assertEqual(res.status_code, 200)
+        page = res.content.decode()
+        # The refund row, linking to its own page (where it can be retried).
+        self.assertIn(f"/admin/payments/refund/{refund.pk}/change/", page)
+        self.assertIn("cancel-1", page)
+        self.assertIn("Stripe is down", page)
+
     def test_refunds_cannot_be_added_or_deleted_by_hand(self):
         refund = self._refund("cancel-1", "failed")
         self.assertEqual(self.client.get("/admin/payments/refund/add/").status_code, 403)
