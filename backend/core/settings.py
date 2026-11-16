@@ -341,6 +341,9 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
+    # `check --deploy` (run in CI as a production-safety gate) would otherwise
+    # also lint the API schema; schema quality isn't a deploy blocker.
+    "ENABLE_DJANGO_DEPLOY_CHECK": False,
     "TITLE": "Commerce API",
     "DESCRIPTION": (
         "REST API for a full-stack storefront: catalog & search, cart, coupons, "

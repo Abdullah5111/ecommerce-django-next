@@ -17,6 +17,15 @@ class ApiDocsTests(TestCase):
         res = self.client.get("/api/schema/")
         self.assertEqual(res.status_code, 200)
 
+    def test_schema_declares_the_jwt_bearer_scheme(self):
+        # Swagger's "Authorize" button needs this; it vanished when DRF's
+        # auth class became RevocableJWTAuthentication (accounts/schema.py).
+        schema = self.client.get("/api/schema/?format=json").json()
+        scheme = schema["components"]["securitySchemes"]["jwtAuth"]
+        self.assertEqual((scheme["type"], scheme["scheme"]), ("http", "bearer"))
+        me = schema["paths"]["/api/auth/me/"]["get"]
+        self.assertIn({"jwtAuth": []}, me["security"])
+
     def test_swagger_ui_is_served(self):
         self.assertEqual(self.client.get("/api/docs/").status_code, 200)
 
