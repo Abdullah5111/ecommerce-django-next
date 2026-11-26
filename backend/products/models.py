@@ -194,7 +194,7 @@ class Review(models.Model):
                 condition=Q(user__isnull=False),
             ),
             models.CheckConstraint(
-                check=Q(rating__gte=1) & Q(rating__lte=5),
+                condition=Q(rating__gte=1) & Q(rating__lte=5),
                 name="review_rating_1_to_5",
             ),
         ]

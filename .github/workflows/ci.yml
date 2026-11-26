@@ -67,7 +67,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          # Django 5.0 does not support 3.13+.
+          # Matches the Docker image (python:3.12-slim); Django 5.2 also supports 3.13.
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements.txt
