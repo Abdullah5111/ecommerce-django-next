@@ -21,6 +21,7 @@ class CartItemSerializer(serializers.ModelSerializer):
         model = CartItem
         fields = ("id", "product", "variant", "quantity", "unit_price")
 
+    @extend_schema_field(serializers.DecimalField(max_digits=10, decimal_places=2))
     def get_unit_price(self, obj):
         return str(_line_unit_price(obj))
 

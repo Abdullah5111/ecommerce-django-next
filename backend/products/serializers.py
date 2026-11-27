@@ -62,7 +62,7 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         model = ProductVariant
         fields = ("id", "options", "sku", "stock", "price", "effective_price", "in_stock")
 
-    def get_in_stock(self, obj):
+    def get_in_stock(self, obj) -> bool:
         return obj.stock > 0
 
 
