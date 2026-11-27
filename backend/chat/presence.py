@@ -158,7 +158,7 @@ class RedisPresence:
 def _build_store():
     from django.conf import settings
 
-    from core.redis_urls import tls_options, with_db
+    from core.redis_urls import fail_fast_retry, tls_options, with_db
 
     if not settings.REDIS_URL:
         return InMemoryPresence()
@@ -168,6 +168,7 @@ def _build_store():
         with_db(settings.REDIS_URL, settings.REDIS_CHANNELS_DB),
         connect_timeout=settings.REDIS_CONNECT_TIMEOUT,
         socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+        retry=fail_fast_retry(),
         **tls_options(settings.REDIS_URL, settings.REDIS_SSL_CA_CERTS),
     )
 

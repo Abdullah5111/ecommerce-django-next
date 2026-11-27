@@ -13,6 +13,20 @@ def with_db(url: str, db: int) -> str:
     return urlunsplit(parts._replace(path=f"/{db}"))
 
 
+def fail_fast_retry():
+    """One immediate retry for a dropped connection, then give up.
+
+    redis-py 8 defaults to 10 retries with exponential backoff, which during an
+    outage would stall each cache call far past the connect/read timeouts. The
+    cache, phone codes and presence would rather fail in about a second and
+    degrade (core/cache.py) or refuse (accounts/otp_store.py).
+    """
+    from redis.backoff import NoBackoff
+    from redis.retry import Retry
+
+    return Retry(NoBackoff(), 1)
+
+
 def tls_options(url: str, ca_certs: str) -> dict:
     """redis-py connection options for verifying a TLS server.
 

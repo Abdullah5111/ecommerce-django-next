@@ -68,11 +68,14 @@ class RedisTimeoutTests(SimpleTestCase):
         from django.core.cache.backends.redis import RedisCache
         from redis.exceptions import RedisError
 
+        from core.redis_urls import fail_fast_retry
+
         cache = RedisCache(
             UNREACHABLE_REDIS,
             {"OPTIONS": {
                 "socket_connect_timeout": settings.REDIS_CONNECT_TIMEOUT,
                 "socket_timeout": settings.REDIS_SOCKET_TIMEOUT,
+                "retry": fail_fast_retry(),  # as in settings: no long backoff
             }},
         )
         started = time.monotonic()
@@ -437,3 +440,53 @@ class HttpsHardeningTests(SimpleTestCase):
 
         with override_settings(SECURE_SSL_REDIRECT=True, SECURE_PROXY_SSL_HEADER=self.PROXY):
             self.assertEqual(self.client.get("/api/health/").status_code, 200)
+
+
+class RedisClientDefaultsTests(SimpleTestCase):
+    """redis-py 8 changed client defaults (5s read timeout, 10 retries with
+    backoff); the settings must override both where they would hurt."""
+
+    def test_fail_fast_retry_is_one_immediate_retry(self):
+        from redis.backoff import NoBackoff
+
+        from core.redis_urls import fail_fast_retry
+
+        retry = fail_fast_retry()
+        self.assertEqual(retry._retries, 1)
+        self.assertIsInstance(retry._backoff, NoBackoff)
+
+    def test_channel_layer_read_timeout_outlasts_its_blocking_wait(self):
+        from channels_redis.core import RedisChannelLayer
+
+        self.assertGreater(settings.REDIS_CHANNELS_SOCKET_TIMEOUT, RedisChannelLayer.brpop_timeout)
+
+
+@skipUnless(settings.REDIS_URL, "needs Redis (runs in the Redis CI job)")
+class RedisClientWiringTests(SimpleTestCase):
+    def test_cache_uses_the_fail_fast_retry(self):
+        retry = settings.CACHES["default"]["OPTIONS"]["retry"]
+        self.assertEqual(retry._retries, 1)
+
+    def test_channel_layer_host_sets_an_explicit_read_timeout(self):
+        host = settings.CHANNEL_LAYERS["default"]["CONFIG"]["hosts"][0]
+        self.assertEqual(host["socket_timeout"], settings.REDIS_CHANNELS_SOCKET_TIMEOUT)
+
+    def test_an_idle_receive_is_not_cut_off_by_the_client(self):
+        # A WebSocket with nothing to say sits in receive() for a long time. A
+        # client read timeout at or below the 5s blocking wait (redis-py 8's
+        # default) raises redis TimeoutError here instead of just waiting.
+        import asyncio
+
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        layer = get_channel_layer()
+
+        async def idle_receive():
+            channel = await layer.new_channel()
+            try:
+                await asyncio.wait_for(layer.receive(channel), timeout=7)
+            except asyncio.TimeoutError:
+                return "still waiting"  # our deadline, not the client's
+
+        self.assertEqual(async_to_sync(idle_receive)(), "still waiting")

@@ -5,6 +5,7 @@ from pathlib import Path
 from corsheaders.defaults import default_headers
 from decouple import Csv, config
 
+from core.redis_urls import fail_fast_retry as redis_fail_fast_retry
 from core.redis_urls import tls_options as redis_tls_options
 from core.redis_urls import with_db as redis_with_db
 
@@ -183,6 +184,8 @@ REDIS_CHANNELS_DB = config("REDIS_CHANNELS_DB", default=0, cast=int)
 # timeout (minutes) instead of failing. Seconds.
 REDIS_CONNECT_TIMEOUT = config("REDIS_CONNECT_TIMEOUT", default=0.5, cast=float)
 REDIS_SOCKET_TIMEOUT = config("REDIS_SOCKET_TIMEOUT", default=1.0, cast=float)
+# The channel layer's read timeout: above its 5s blocking wait for messages.
+REDIS_CHANNELS_SOCKET_TIMEOUT = config("REDIS_CHANNELS_SOCKET_TIMEOUT", default=10.0, cast=float)
 # PEM file of the CA that signed Redis's TLS certificate, for rediss:// URLs
 # (Memorystore in-transit encryption uses its own CA). Applied to the cache,
 # the channel layer and chat presence; ignored for plain redis://.
@@ -219,6 +222,7 @@ if CACHES["default"]["BACKEND"] in REDIS_CACHE_BACKENDS:
     CACHES["default"]["OPTIONS"] = {
         "socket_connect_timeout": REDIS_CONNECT_TIMEOUT,
         "socket_timeout": REDIS_SOCKET_TIMEOUT,
+        "retry": redis_fail_fast_retry(),
         **redis_tls_options(CACHES["default"]["LOCATION"], REDIS_SSL_CA_CERTS),
     }
 # Phone verification codes (accounts/otp_store.py): same storage and keys as
@@ -253,10 +257,12 @@ CHANNEL_LAYERS = {
             "CONFIG": {
                 "hosts": [{
                     "address": redis_with_db(REDIS_URL, REDIS_CHANNELS_DB),
-                    # Connect timeout only: receive() blocks in BZPOPMIN for up
-                    # to 5s (channels-redis brpop_timeout), so a short read
-                    # timeout would break every receive.
+                    # receive() blocks in BZPOPMIN for up to 5s (channels-redis
+                    # brpop_timeout), so the read timeout must be comfortably
+                    # longer. It has to be explicit: redis-py 8 defaults it to
+                    # 5s, which would cut those blocking reads off.
                     "socket_connect_timeout": REDIS_CONNECT_TIMEOUT,
+                    "socket_timeout": REDIS_CHANNELS_SOCKET_TIMEOUT,
                     **redis_tls_options(REDIS_URL, REDIS_SSL_CA_CERTS),
                 }],
                 **CHANNEL_LAYER_LIMITS,
