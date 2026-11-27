@@ -26,6 +26,22 @@ class ApiDocsTests(TestCase):
         me = schema["paths"]["/api/auth/me/"]["get"]
         self.assertIn({"jwtAuth": []}, me["security"])
 
+    def test_serializer_method_fields_have_real_types(self):
+        # Without hints drf-spectacular documents every SerializerMethodField
+        # as a plain string.
+        schemas = self.client.get("/api/schema/?format=json").json()["components"]["schemas"]
+        product = schemas["Product"]["properties"]
+        self.assertEqual(product["has_variants"]["type"], "boolean")
+        self.assertEqual(product["price_from"]["format"], "decimal")
+        variants = schemas["ProductDetail"]["properties"]["variants"]
+        self.assertEqual(variants["type"], "array")
+        self.assertIn("ProductVariant", variants["items"]["$ref"])
+        self.assertEqual(schemas["ChatThread"]["properties"]["unread"]["type"], "integer")
+        self.assertEqual(
+            schemas["ChatThread"]["properties"]["last_message_at"]["format"], "date-time"
+        )
+        self.assertEqual(schemas["Review"]["properties"]["is_mine"]["type"], "boolean")
+
     def test_swagger_ui_is_served(self):
         self.assertEqual(self.client.get("/api/docs/").status_code, 200)
 

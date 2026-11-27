@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from rest_framework import serializers
 
 from .models import ChatMessage, ChatThread
@@ -41,11 +43,11 @@ class ChatThreadSerializer(serializers.ModelSerializer):
             "created_at",
         )
 
-    def get_unread(self, obj):
+    def get_unread(self, obj) -> int:
         return getattr(obj, "unread", 0)
 
-    def get_last_message_at(self, obj):
+    def get_last_message_at(self, obj) -> datetime | None:
         return getattr(obj, "last_message_at", None)
 
-    def get_last_message_body(self, obj):
+    def get_last_message_body(self, obj) -> str | None:
         return getattr(obj, "last_message_body", None)

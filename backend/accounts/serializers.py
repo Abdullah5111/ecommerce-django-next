@@ -43,7 +43,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_staff",
         )
 
-    def get_avatar(self, obj):
+    def get_avatar(self, obj) -> str | None:
         if not obj.avatar:
             return None
         url = obj.avatar.url

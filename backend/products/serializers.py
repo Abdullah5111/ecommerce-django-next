@@ -1,4 +1,6 @@
 from django.core.validators import FileExtensionValidator
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .models import Category, Product, ProductImage, ProductVariant, Review, ReviewImage
@@ -103,9 +105,10 @@ class ProductSerializer(serializers.ModelSerializer):
             "rating_avg", "rating_count", "sold_count", "specifications",
         )
 
-    def get_has_variants(self, obj):
+    def get_has_variants(self, obj) -> bool:
         return len(_active_variants(obj)) > 0
 
+    @extend_schema_field(OpenApiTypes.DECIMAL)  # a decimal string, like price
     def get_price_from(self, obj):
         # Cheapest active variant, or the product's own price when there are none.
         variants = _active_variants(obj)
@@ -122,6 +125,7 @@ class ProductDetailSerializer(ProductSerializer):
     class Meta(ProductSerializer.Meta):
         fields = ProductSerializer.Meta.fields + ("variants",)
 
+    @extend_schema_field(ProductVariantSerializer(many=True))
     def get_variants(self, obj):
         return ProductVariantSerializer(_active_variants(obj), many=True).data
 
@@ -133,7 +137,7 @@ class ReviewImageSerializer(serializers.ModelSerializer):
         model = ReviewImage
         fields = ("id", "image", "sort_order")
 
-    def get_image(self, obj):
+    def get_image(self, obj) -> str | None:
         if not obj.image:
             return None
         request = self.context.get("request")
@@ -179,7 +183,7 @@ class ReviewSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Rating must be 1-5.")
         return value
 
-    def get_helpful_by_me(self, obj):
+    def get_helpful_by_me(self, obj) -> bool:
         # Anonymous callers get False, not null.
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
@@ -189,7 +193,7 @@ class ReviewSerializer(serializers.ModelSerializer):
             return bool(voted)  # annotated by the list view; no extra query
         return obj.votes.filter(user=request.user).exists()
 
-    def get_is_mine(self, obj):
+    def get_is_mine(self, obj) -> bool:
         # Lets the UI hide the helpful control on your own review.
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
