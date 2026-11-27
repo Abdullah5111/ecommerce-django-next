@@ -42,6 +42,22 @@ class ApiDocsTests(TestCase):
         )
         self.assertEqual(schemas["Review"]["properties"]["is_mine"]["type"], "boolean")
 
+    def test_user_scoped_viewsets_document_typed_ids(self):
+        # Their get_queryset needs a signed-in user; during schema generation
+        # (swagger_fake_view) it returns none() so the model, and with it the
+        # integer id path parameter, can be derived.
+        paths = self.client.get("/api/schema/?format=json").json()["paths"]
+        for path in (
+            "/api/auth/addresses/{id}/",
+            "/api/notifications/{id}/read/",
+            "/api/orders/{id}/",
+            "/api/returns/{id}/",
+        ):
+            with self.subTest(path=path):
+                op = next(iter(paths[path].values()))
+                id_param = next(p for p in op["parameters"] if p["name"] == "id")
+                self.assertEqual(id_param["schema"]["type"], "integer")
+
     def test_swagger_ui_is_served(self):
         self.assertEqual(self.client.get("/api/docs/").status_code, 200)
 

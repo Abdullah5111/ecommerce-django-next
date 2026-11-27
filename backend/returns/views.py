@@ -16,6 +16,8 @@ class ReturnViewSet(
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):  # schema generation: no user
+            return Return.objects.none()
         qs = Return.objects.prefetch_related("lines__order_item__product").select_related("order")
         if not self.request.user.is_staff:
             qs = qs.filter(order__user=self.request.user)

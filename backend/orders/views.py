@@ -59,6 +59,8 @@ class OrderViewSet(
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):  # schema generation: no user
+            return Order.objects.none()
         qs = Order.objects.prefetch_related("items__product", "events")
         if self.request.user.is_staff:
             return qs
