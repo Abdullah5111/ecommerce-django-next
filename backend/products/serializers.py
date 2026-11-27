@@ -1,5 +1,4 @@
 from django.core.validators import FileExtensionValidator
-from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -108,7 +107,8 @@ class ProductSerializer(serializers.ModelSerializer):
     def get_has_variants(self, obj) -> bool:
         return len(_active_variants(obj)) > 0
 
-    @extend_schema_field(OpenApiTypes.DECIMAL)  # a decimal string, like price
+    # A decimal string, exactly like `price` (DRF renders decimals as strings).
+    @extend_schema_field(serializers.DecimalField(max_digits=10, decimal_places=2))
     def get_price_from(self, obj):
         # Cheapest active variant, or the product's own price when there are none.
         variants = _active_variants(obj)
