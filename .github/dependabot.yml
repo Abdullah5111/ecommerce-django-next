@@ -12,6 +12,11 @@ updates:
     groups:
       python-minor-and-patch:
         update-types: [minor, patch]
+    # Stay on the Django 5.2 LTS line (security support to April 2028): 6.x
+    # releases aren't LTS. 5.2.x security/patch releases still come through.
+    ignore:
+      - dependency-name: django
+        versions: [">=6.0"]
     commit-message:
       prefix: deps(backend)
 
