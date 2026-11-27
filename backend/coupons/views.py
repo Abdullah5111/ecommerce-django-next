@@ -1,12 +1,27 @@
+from drf_spectacular.utils import OpenApiResponse, extend_schema
+from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.schema import body
 from orders.pricing import quote
 
 from .models import Coupon
 from .serializers import CouponQuoteSerializer
+
+_MONEY = {"max_digits": 10, "decimal_places": 2}
+QUOTE = body(
+    "Quote",
+    subtotal=serializers.DecimalField(**_MONEY),
+    discount_total=serializers.DecimalField(**_MONEY),
+    tax_total=serializers.DecimalField(**_MONEY),
+    shipping_total=serializers.DecimalField(**_MONEY),
+    grand_total=serializers.DecimalField(**_MONEY),
+    coupon_code=serializers.CharField(allow_blank=True),
+    coupon_error=serializers.CharField(allow_null=True, allow_blank=True),
+)
 
 
 def quote_to_dict(q):
@@ -24,6 +39,7 @@ def quote_to_dict(q):
 class CouponQuoteView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=CouponQuoteSerializer, responses={200: QUOTE, 400: OpenApiResponse(description="Invalid items.")})
     def post(self, request):
         serializer = CouponQuoteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

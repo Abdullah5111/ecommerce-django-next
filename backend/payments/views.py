@@ -3,15 +3,40 @@ from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.schema import ERROR, body
 from orders import transitions
 from orders.models import Order
 
 from . import gateway
 from .models import StripeEvent
+
+SAVED_CARDS = body(
+    "SavedCards",
+    enabled=serializers.BooleanField(),
+    publishable_key=serializers.CharField(allow_blank=True),
+    cards=inline_serializer(
+        name="SavedCard",
+        fields={
+            "id": serializers.CharField(),
+            "brand": serializers.CharField(),
+            "last4": serializers.CharField(),
+            "exp_month": serializers.IntegerField(),
+            "exp_year": serializers.IntegerField(),
+        },
+        many=True,
+    ),
+)
+SETUP_INTENT = body(
+    "SetupIntent",
+    client_secret=serializers.CharField(),
+    publishable_key=serializers.CharField(),
+)
 
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -24,6 +49,8 @@ class StripeWebhookView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
+    # Stripe-only (signed raw body), not a client API: keep it out of the docs.
+    @extend_schema(exclude=True)
     def post(self, request):
         try:
             event = gateway.construct_event(
@@ -170,6 +197,7 @@ class PaymentMethodsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={200: SAVED_CARDS})
     def get(self, request):
         if not gateway.is_live():
             return Response({"enabled": False, "publishable_key": "", "cards": []})
@@ -185,6 +213,7 @@ class SetupIntentView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=None, responses={200: SETUP_INTENT, 503: ERROR})
     def post(self, request):
         try:
             client_secret = gateway.create_setup_intent(request.user)
@@ -199,6 +228,7 @@ class SetupIntentView(APIView):
 class PaymentMethodDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={204: None, 404: ERROR, 503: ERROR})
     def delete(self, request, payment_method_id):
         try:
             gateway.detach_card(request.user, payment_method_id)

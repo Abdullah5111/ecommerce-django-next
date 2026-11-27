@@ -1,12 +1,20 @@
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.schema import ERROR, body
 from products.models import Product
 
 from .models import WishlistItem
 from .serializers import WishlistItemSerializer
+
+WISHLIST_ADD = body("WishlistAdd", product=serializers.IntegerField())
+WISHLIST_MERGE = body(
+    "WishlistMerge", product_ids=serializers.ListField(child=serializers.IntegerField())
+)
 
 
 def _wishlist_data(user):
@@ -21,6 +29,7 @@ def _wishlist_data(user):
 class WishlistView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={200: WishlistItemSerializer(many=True)})
     def get(self, request):
         return Response(_wishlist_data(request.user))
 
@@ -28,6 +37,7 @@ class WishlistView(APIView):
 class WishlistItemsView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=WISHLIST_ADD, responses={201: WishlistItemSerializer(many=True), 400: ERROR})
     def post(self, request):
         pid = request.data.get("product")
         if not isinstance(pid, int):  # a non-numeric id would ValueError the lookup
@@ -40,6 +50,7 @@ class WishlistItemsView(APIView):
 class WishlistItemDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={200: WishlistItemSerializer(many=True)})
     def delete(self, request, product_id):
         WishlistItem.objects.filter(user=request.user, product_id=product_id).delete()
         return Response(_wishlist_data(request.user))
@@ -48,6 +59,7 @@ class WishlistItemDetailView(APIView):
 class WishlistMergeView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=WISHLIST_MERGE, responses={200: WishlistItemSerializer(many=True), 400: ERROR})
     def post(self, request):
         ids = request.data.get("product_ids", [])
         if not isinstance(ids, list):

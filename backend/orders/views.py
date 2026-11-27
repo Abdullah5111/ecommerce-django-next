@@ -1,17 +1,39 @@
 from django.conf import settings
 from django.db import IntegrityError
 from django.db.models import Count, Sum
-from rest_framework import mixins, permissions, viewsets
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import mixins, permissions, serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.schema import body
 from payments import gateway
 from products.models import Product
 
 from . import transitions
 from .models import Order
 from .serializers import OrderSerializer, ShipInputSerializer
+
+STAFF_STATS = body(
+    "StaffStats",
+    # A raw Sum, which DRF's JSON encoder writes as a number (not a string).
+    revenue=serializers.FloatField(),
+    paid_orders=serializers.IntegerField(),
+    orders_by_status=serializers.DictField(child=serializers.IntegerField()),
+    total_orders=serializers.IntegerField(),
+    low_stock=inline_serializer(
+        name="LowStockProduct",
+        fields={
+            "id": serializers.IntegerField(),
+            "slug": serializers.CharField(),
+            "name": serializers.CharField(),
+            "stock": serializers.IntegerField(),
+        },
+        many=True,
+    ),
+    open_chats=serializers.IntegerField(),
+)
 
 IDEMPOTENCY_KEY_MAX = Order._meta.get_field("idempotency_key").max_length
 
@@ -21,6 +43,7 @@ class StaffStatsView(APIView):
 
     permission_classes = [permissions.IsAdminUser]
 
+    @extend_schema(responses={200: STAFF_STATS})
     def get(self, request):
         # Money actually captured: paid, in-flight, and delivered orders.
         revenue = Order.objects.filter(

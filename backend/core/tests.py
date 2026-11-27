@@ -80,6 +80,18 @@ class ApiDocsTests(TestCase):
             set(schema["components"]["schemas"][ref]["properties"]), {"ticket", "expires_in"}
         )
 
+    def test_other_api_views_document_their_bodies(self):
+        schema = self._schema()
+        self.assertEqual(
+            self._body_fields(schema, "/api/cart/items/"), {"product", "variant", "quantity"}
+        )
+        self.assertEqual(self._body_fields(schema, "/api/wishlist/merge/"), {"product_ids"})
+        quote = schema["paths"]["/api/coupons/quote/"]["post"]["responses"]["200"]
+        ref = quote["content"]["application/json"]["schema"]["$ref"].rsplit("/", 1)[1]
+        self.assertIn("grand_total", schema["components"]["schemas"][ref]["properties"])
+        # The Stripe webhook takes a signed raw body from Stripe only.
+        self.assertNotIn("/api/payments/webhook/", schema["paths"])
+
     def test_swagger_ui_is_served(self):
         self.assertEqual(self.client.get("/api/docs/").status_code, 200)
 

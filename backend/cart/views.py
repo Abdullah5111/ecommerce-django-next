@@ -1,13 +1,35 @@
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.schema import ERROR, body
 from products.models import Product, ProductVariant
 
 from .models import Cart, CartItem
 from .serializers import CartSerializer
+
+_ITEM_FIELDS = {
+    "product": serializers.IntegerField(),
+    "variant": serializers.IntegerField(required=False, allow_null=True),
+    "quantity": serializers.IntegerField(required=False, default=1),
+}
+CART_ITEM_INPUT = inline_serializer(name="CartItemInput", fields=_ITEM_FIELDS)
+CART_ITEM_UPDATE = body(
+    "CartItemUpdate",
+    variant=serializers.IntegerField(required=False, allow_null=True),
+    quantity=serializers.IntegerField(),
+)
+CART_MERGE = body(
+    "CartMerge",
+    items=inline_serializer(name="CartMergeItem", fields=_ITEM_FIELDS, many=True),
+)
+VARIANT_PARAM = OpenApiParameter(
+    "variant", int, description="Which variant line; omit for the no-variant line."
+)
 
 
 def get_cart(user):
@@ -102,9 +124,11 @@ def _add_quantity(cart, product, variant, qty):
 class CartView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses={200: CartSerializer})
     def get(self, request):
         return Response(CartSerializer(get_cart(request.user)).data)
 
+    @extend_schema(responses={200: CartSerializer})
     def delete(self, request):
         cart = get_cart(request.user)
         cart.items.all().delete()
@@ -114,6 +138,7 @@ class CartView(APIView):
 class CartItemsView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=CART_ITEM_INPUT, responses={201: CartSerializer, 400: ERROR})
     def post(self, request):
         product = get_object_or_404(Product, pk=_as_id(request.data.get("product")))
         variant, error = _resolve_variant(product, request.data.get("variant"))
@@ -135,6 +160,7 @@ class CartItemsView(APIView):
 class CartItemDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=CART_ITEM_UPDATE, responses={200: CartSerializer, 400: ERROR})
     def patch(self, request, product_id):
         cart = get_cart(request.user)
         product = get_object_or_404(Product, pk=product_id)
@@ -148,6 +174,7 @@ class CartItemDetailView(APIView):
         _set_quantity(cart, product, variant, _cap(product, variant, qty))
         return Response(CartSerializer(cart).data)
 
+    @extend_schema(parameters=[VARIANT_PARAM], responses={200: CartSerializer, 400: ERROR})
     def delete(self, request, product_id):
         cart = get_cart(request.user)
         # variant disambiguates the same product under multiple variants;
@@ -170,6 +197,7 @@ class CartItemDetailView(APIView):
 class CartMergeView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=CART_MERGE, responses={200: CartSerializer})
     def post(self, request):
         cart = get_cart(request.user)
         items = request.data.get("items", [])

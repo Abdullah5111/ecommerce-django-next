@@ -1,14 +1,29 @@
 import hmac
 
 from django.db import transaction
-from rest_framework import mixins, permissions, status, viewsets
+from drf_spectacular.utils import extend_schema
+from rest_framework import mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.schema import ERROR, body
+
 from . import push
 from .models import Notification, PushSubscription
 from .serializers import NotificationSerializer, PushSubscriptionSerializer
+
+PUSH_CONFIG = body(
+    "PushConfig",
+    enabled=serializers.BooleanField(),
+    public_key=serializers.CharField(allow_blank=True),
+)
+# The browser's PushSubscription.toJSON() shape.
+PUSH_SUBSCRIPTION = body(
+    "PushSubscriptionInput",
+    endpoint=serializers.URLField(),
+    keys=body("PushKeys", p256dh=serializers.CharField(), auth=serializers.CharField()),
+)
 
 
 class NotificationViewSet(
@@ -49,6 +64,7 @@ class PushConfigView(APIView):
 
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(responses={200: PUSH_CONFIG})
     def get(self, request):
         return Response({"enabled": push.is_enabled(), "public_key": push.public_key()})
 
@@ -56,6 +72,7 @@ class PushConfigView(APIView):
 class PushSubscribeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(request=PUSH_SUBSCRIPTION, responses={201: body("PushSubscribed", subscribed=serializers.BooleanField()), 400: ERROR, 409: ERROR})
     def post(self, request):
         serializer = PushSubscriptionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -85,6 +102,7 @@ class PushSubscribeView(APIView):
             )
         return Response({"subscribed": True}, status=201)
 
+    @extend_schema(request=body("PushUnsubscribe", endpoint=serializers.URLField()), responses={204: None})
     def delete(self, request):
         endpoint = request.data.get("endpoint")
         if endpoint:

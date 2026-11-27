@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from products.serializers import ProductSerializer, ProductVariantSerializer
@@ -32,6 +33,8 @@ class CartSerializer(serializers.ModelSerializer):
         model = Cart
         fields = ("id", "items", "total")
 
+    # A decimal string, like every price.
+    @extend_schema_field(serializers.DecimalField(max_digits=10, decimal_places=2))
     def get_total(self, obj):
         total = sum(
             (_line_unit_price(i) * i.quantity for i in obj.items.all()), Decimal("0")
