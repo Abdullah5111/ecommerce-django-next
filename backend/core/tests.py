@@ -486,7 +486,9 @@ class RedisClientWiringTests(SimpleTestCase):
             channel = await layer.new_channel()
             try:
                 await asyncio.wait_for(layer.receive(channel), timeout=7)
-            except asyncio.TimeoutError:
+            # Built-in TimeoutError: redis-py's own TimeoutError doesn't
+            # derive from it, so a client-side cut-off still fails the test.
+            except TimeoutError:
                 return "still waiting"  # our deadline, not the client's
 
         self.assertEqual(async_to_sync(idle_receive)(), "still waiting")
