@@ -58,6 +58,28 @@ class ApiDocsTests(TestCase):
                 id_param = next(p for p in op["parameters"] if p["name"] == "id")
                 self.assertEqual(id_param["schema"]["type"], "integer")
 
+    def _schema(self):
+        return self.client.get("/api/schema/?format=json").json()
+
+    def _body_fields(self, schema, path, method="post"):
+        ref = schema["paths"][path][method]["requestBody"]["content"]["application/json"][
+            "schema"
+        ]["$ref"]
+        return set(schema["components"]["schemas"][ref.rsplit("/", 1)[1]]["properties"])
+
+    def test_accounts_api_views_document_their_bodies(self):
+        schema = self._schema()
+        self.assertEqual(
+            self._body_fields(schema, "/api/auth/change-password/"),
+            {"current_password", "new_password"},
+        )
+        self.assertEqual(self._body_fields(schema, "/api/auth/phone/send-code/"), {"phone"})
+        ticket = schema["paths"]["/api/auth/ws-ticket/"]["post"]["responses"]["200"]
+        ref = ticket["content"]["application/json"]["schema"]["$ref"].rsplit("/", 1)[1]
+        self.assertEqual(
+            set(schema["components"]["schemas"][ref]["properties"]), {"ticket", "expires_in"}
+        )
+
     def test_swagger_ui_is_served(self):
         self.assertEqual(self.client.get("/api/docs/").status_code, 200)
 

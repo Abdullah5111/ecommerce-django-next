@@ -13,8 +13,9 @@ from django.core.mail import send_mail
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from redis.exceptions import RedisError
-from rest_framework import generics, permissions, status, viewsets
+from rest_framework import generics, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -27,6 +28,7 @@ from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairVi
 from . import cookies, sms, ws_tickets
 from .models import Address
 from .otp_store import OtpStoreUnavailable, PhoneRateThrottle, otp_cache
+from .schema import ACCESS, DETAIL, ERROR, body
 from .serializers import (
     AddressSerializer,
     EmailOrUsernameTokenObtainPairSerializer,
@@ -69,6 +71,7 @@ class ResendVerificationView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth-verify-resend"
 
+    @extend_schema(request=None, responses={200: DETAIL})
     def post(self, request):
         if request.user.email_verified:
             return Response({"detail": "Your email is already verified."})
@@ -93,6 +96,7 @@ class AvatarView(APIView):
 
     MAX_BYTES = 2 * 1024 * 1024  # 2 MB
 
+    @extend_schema(request={"multipart/form-data": body("AvatarUpload", avatar=serializers.ImageField())}, responses={200: UserSerializer, 400: ERROR})
     def post(self, request):
         upload = request.FILES.get("avatar")
         if upload is None:
@@ -121,6 +125,7 @@ class AvatarView(APIView):
         user.save(update_fields=["avatar"])
         return Response(UserSerializer(user, context={"request": request}).data)
 
+    @extend_schema(responses={204: None})
     def delete(self, request):
         user = request.user
         if user.avatar:
@@ -202,6 +207,7 @@ class GoogleConfigView(APIView):
 
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(responses={200: body("GoogleConfig", enabled=serializers.BooleanField(), client_id=serializers.CharField(allow_null=True))})
     def get(self, request):
         from . import google
 
@@ -252,6 +258,7 @@ class GoogleLoginView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth-login"
 
+    @extend_schema(request=body("GoogleLogin", credential=serializers.CharField()), responses={200: ACCESS, 400: ERROR, 503: ERROR})
     def post(self, request):
         from . import google
 
@@ -286,6 +293,7 @@ class VerifyEmailView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth-password"
 
+    @extend_schema(request=body("VerifyEmail", uid=serializers.CharField(), token=serializers.CharField()), responses={200: DETAIL, 400: ERROR})
     def post(self, request):
         uid = request.data.get("uid", "")
         token = request.data.get("token", "")
@@ -305,6 +313,7 @@ class ForgotPasswordView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth-password"
 
+    @extend_schema(request=body("ForgotPassword", email=serializers.EmailField()), responses={200: DETAIL})
     def post(self, request):
         email = request.data.get("email", "")
         generic_response = Response(
@@ -334,6 +343,7 @@ class ResetPasswordView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth-password"
 
+    @extend_schema(request=body("ResetPassword", uid=serializers.CharField(), token=serializers.CharField(), new_password=serializers.CharField()), responses={200: DETAIL, 400: ERROR})
     def post(self, request):
         uid = request.data.get("uid", "")
         token = request.data.get("token", "")
@@ -381,6 +391,7 @@ class ChangePasswordView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth-password"
 
+    @extend_schema(request=body("ChangePassword", current_password=serializers.CharField(), new_password=serializers.CharField()), responses={200: ACCESS, 400: OpenApiResponse(description="Field errors: current_password or new_password.")})
     def post(self, request):
         user = request.user
         current = request.data.get("current_password") or ""
@@ -438,6 +449,7 @@ class PhoneSendCodeView(APIView):
     throttle_classes = [PhoneRateThrottle]
     throttle_scope = "auth-phone-send"
 
+    @extend_schema(request=body("PhoneSendCode", phone=serializers.CharField(help_text="E.164, e.g. +15551234567")), responses={200: DETAIL, 400: ERROR, 429: ERROR, 502: ERROR, 503: ERROR})
     def post(self, request):
         phone = re.sub(r"[\s\-().]", "", str(request.data.get("phone") or ""))
         if not phone:
@@ -497,6 +509,7 @@ class PhoneVerifyView(APIView):
     throttle_classes = [PhoneRateThrottle]
     throttle_scope = "auth-phone-verify"
 
+    @extend_schema(request=body("PhoneVerify", code=serializers.CharField()), responses={200: UserSerializer, 400: ERROR, 503: ERROR})
     def post(self, request):
         try:
             return self._verify(request)
@@ -556,6 +569,7 @@ class WsTicketView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "ws-ticket"
 
+    @extend_schema(request=None, responses={200: body("WsTicket", ticket=serializers.CharField(), expires_in=serializers.IntegerField()), 503: ERROR})
     def post(self, request):
         try:
             ticket = ws_tickets.issue(request.user)
